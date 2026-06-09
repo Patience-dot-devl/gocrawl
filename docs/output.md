@@ -1,7 +1,7 @@
 # Output / report reference
 
-A crawl produces a single **report**, written as JSON (default) or CSV. The report is the
-same object whether it's written to a file (`--out`), stdout, or returned by the
+A crawl produces a single **report**, written as JSON (default), CSV, or HTML. The report is
+the same object whether it's written to a file (`--out`), stdout, or returned by the
 [MCP `crawl` tool](mcp.md#crawl). Source:
 [`internal/report/report.go`](../internal/report/report.go).
 
@@ -12,6 +12,7 @@ human-readable summary is always printed to **stderr** so it doesn't pollute pip
 ```sh
 gocrawl crawl https://example.com --format json --out report.json
 gocrawl crawl https://example.com --format csv  --out issues.csv
+gocrawl crawl https://example.com --format html --out report.html
 ```
 
 ## JSON schema
@@ -105,6 +106,30 @@ need the aggregated counts.
 analyzer,severity,code,url,message,data
 redirects,info,redirect,https://example.com/old,Page redirects,"{""status"":301,""to"":""https://example.com/new""}"
 seo,warning,long-title,https://example.com/about,Title may be truncated in SERPs,"{""length"":73,""title"":""About our company — …""}"
+```
+
+## HTML report
+
+The HTML form ([`HTMLReporter`](../internal/report/report.go)) renders the same `Report`
+struct as a **self-contained HTML page** — inline CSS, no external assets, no JavaScript.
+That makes it easy to share as an artifact, attach to a ticket, or host as a static file.
+
+The page has three blocks:
+
+- **Header** — seed URL, start/finish timestamps, pages crawled.
+- **Summary cards** — issue counts by severity, by analyzer, and pages by HTTP status (the
+  same fields as the JSON [`summary`](#summary)).
+- **Issues table** — one row per issue with a severity badge, analyzer, code, clickable URL,
+  and message. When an issue has a `data` map, a `<details>` toggle reveals it as
+  pretty-printed JSON.
+
+Untrusted strings from crawled pages (URLs, titles, analyzer messages) are escaped through
+Go's `html/template`, so HTML in a crawled page can't break the report layout. Open the file
+directly in any browser:
+
+```sh
+gocrawl crawl https://example.com --format html --out report.html
+open report.html
 ```
 
 ## What is (and isn't) in the report

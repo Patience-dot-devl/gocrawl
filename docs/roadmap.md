@@ -24,7 +24,8 @@ The current baseline. Everything here works today.
   detection (`tracking`), and landing-page relevance (`landing`). Each was added as a new
   `analyze.Analyzer` with **no changes to the crawl engine** — the worked example for the
   analyzer architecture (see [Architecture](architecture.md#adding-an-analyzer)).
-- **JSON & CSV reports** — with severity/analyzer/status summaries. See the
+- **JSON, CSV & HTML reports** — JSON (default) and CSV for tooling, plus a self-contained
+  HTML page (inline CSS, no JS, no external assets) for sharing as an artifact. See the
   [Output reference](output.md).
 - **MCP server** — drive crawls from agentic tools via the `crawl` and `list_analyzers`
   tools. See the [MCP guide](mcp.md).
@@ -46,7 +47,6 @@ Wired into the codebase but not yet active. The seams already exist.
 
 Broader capabilities beyond individual checks.
 
-- **HTML report output** — a browsable report alongside JSON and CSV.
 - **Resumable crawls** — checkpoint and continue large crawls.
 - **Export integrations** — push results to external sinks/tools.
 
