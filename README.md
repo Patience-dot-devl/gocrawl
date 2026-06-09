@@ -164,10 +164,10 @@ checks cheap to add. See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-analyzer
 
 ## Roadmap
 
-Recently shipped: **headless rendering** via chromedp and **lab-mode Core Web Vitals**
-(LCP, FCP, CLS, TBT, TTFB) in the `perf` analyzer. Next up: HTML report output, resumable
-crawls, and export integrations. See the full [feature roadmap](docs/roadmap.md) for
-status on each.
+Recently shipped: **headless rendering** via chromedp, **lab-mode Core Web Vitals**
+(LCP, FCP, CLS, TBT, TTFB) in the `perf` analyzer, and the **HTML report** format. Next up:
+resumable crawls and export integrations. See the full [feature roadmap](docs/roadmap.md)
+for status on each.
 
 ## License
 
