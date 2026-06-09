@@ -5,7 +5,7 @@ A highly-customizable, free and open-source (FOSS) website crawler for **SEO** a
 
 `gocrawl` walks a website concurrently and runs a pipeline of pluggable **analyzers**
 over every page — checking technical SEO, redirects, broken links, `robots.txt`,
-`sitemap.xml` coverage, structured data, and more — then writes a JSON or CSV report.
+`sitemap.xml` coverage, structured data, and more — then writes a JSON, CSV, or HTML report.
 
 > **Status:** early, working vertical slice. Raw-HTML crawling, the core SEO analyzers, the
 > SEA analyzers (UTM auditing, tracking-pixel detection, landing-page relevance), and
@@ -22,7 +22,8 @@ over every page — checking technical SEO, redirects, broken links, `robots.txt
 - **SEO and SEA.** Ships with both SEO/technical analyzers and SEA analyzers (UTM auditing,
   tracking-pixel detection, landing-page relevance) — each an independent check on the same
   interface.
-- **Reports you can pipe.** JSON for tooling, CSV for spreadsheets.
+- **Reports you can pipe or share.** JSON for tooling, CSV for spreadsheets, and a
+  self-contained HTML page (inline CSS, no JS) for handing to stakeholders.
 
 ## Install
 
@@ -48,6 +49,9 @@ gocrawl crawl https://example.com --depth 1 --out report.json
 gocrawl crawl https://example.com --max-pages 200 --concurrency 8 \
   --format csv --out report.csv
 
+# Self-contained HTML report to open in a browser
+gocrawl crawl https://example.com --format html --out report.html
+
 # Only run specific analyzers
 gocrawl crawl https://example.com --analyzers seo,links,redirects
 
@@ -65,7 +69,7 @@ Full reference docs live in [`docs/`](docs/README.md):
 
 - [Configuration](docs/configuration.md) — every option, flag, env var, and default.
 - [Analyzers](docs/analyzers.md) — what each analyzer checks, with every issue code.
-- [Output / report](docs/output.md) — the JSON and CSV report schema.
+- [Output / report](docs/output.md) — the JSON, CSV, and HTML report formats.
 - [MCP server](docs/mcp.md) — running as an MCP server and the tool schemas.
 - [Architecture](docs/architecture.md) — how the engine and analyzer pipeline fit together.
 - [Roadmap](docs/roadmap.md) — what's shipped, stubbed, and planned.
@@ -125,7 +129,7 @@ Key crawl options:
 | Scope | `--include` / `--exclude` | URL regex filters |
 | Robots | `--respect-robots` | Obey `robots.txt` while crawling |
 | Subdomains | `--subdomains` | Follow links to subdomains of the seed |
-| Output | `--out` / `--format` | File path and `json`/`csv` |
+| Output | `--out` / `--format` | File path and `json` / `csv` / `html` |
 | Analyzers | `--analyzers` | Comma-separated allow-list |
 
 ## Analyzers (v1)
@@ -148,7 +152,7 @@ See [docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and t
 ## How it works
 
 ```
-seed URL ──▶ crawler engine ──▶ Result (pages, redirects, robots) ──▶ analyzer pipeline ──▶ report (json/csv)
+seed URL ──▶ crawler engine ──▶ Result (pages, redirects, robots) ──▶ analyzer pipeline ──▶ report (json/csv/html)
               (concurrent,                                              (seo, links,
                scope + robots,                                          sitemap, …)
                redirect capture)
@@ -160,10 +164,10 @@ checks cheap to add. See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-analyzer
 
 ## Roadmap
 
-Recently shipped: **headless rendering** via chromedp and **lab-mode Core Web Vitals**
-(LCP, FCP, CLS, TBT, TTFB) in the `perf` analyzer. Next up: HTML report output, resumable
-crawls, and export integrations. See the full [feature roadmap](docs/roadmap.md) for
-status on each.
+Recently shipped: **headless rendering** via chromedp, **lab-mode Core Web Vitals**
+(LCP, FCP, CLS, TBT, TTFB) in the `perf` analyzer, and the **HTML report** format. Next up:
+resumable crawls and export integrations. See the full [feature roadmap](docs/roadmap.md)
+for status on each.
 
 ## License
 

@@ -27,7 +27,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Float64("rate", 0, "max requests per second (0 = unlimited)")
 	f.String("render", "", "rendering mode: raw or headless")
 	f.StringP("out", "o", "", "output file (default: stdout)")
-	f.StringP("format", "f", "", "output format: json or csv")
+	f.StringP("format", "f", "", "output format: json, csv, or html")
 	f.StringSlice("include", nil, "only crawl URLs matching these regexes")
 	f.StringSlice("exclude", nil, "skip URLs matching these regexes")
 	f.String("user-agent", "", "User-Agent header")

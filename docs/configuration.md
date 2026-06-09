@@ -37,7 +37,7 @@ default** (the value used when you set nothing).
 | `crawl.follow_nofollow` | — | bool | `false` | Follow links marked `rel="nofollow"`. |
 | `crawl.include` | `--include` | list of regex | *(none)* | Only crawl URLs matching at least one pattern. |
 | `crawl.exclude` | `--exclude` | list of regex | *(none)* | Skip URLs matching any pattern. |
-| `output.format` | `--format` / `-f` | string | `json` | `json` or `csv`. |
+| `output.format` | `--format` / `-f` | string | `json` | `json`, `csv`, or `html`. |
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
@@ -139,7 +139,7 @@ crawl:
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
 
 output:
-  format: "json"         # "json" or "csv"
+  format: "json"         # "json", "csv", or "html"
   path: ""               # file to write to; empty = stdout
 
 analyzers:
