@@ -23,7 +23,7 @@ default** (the value used when you set nothing).
 | YAML key | CLI flag | Type | Default | Description |
 | --- | --- | --- | --- | --- |
 | `seed` | *(positional arg)* | string | — | Seed URL to start from. The `crawl <url>` argument overrides it. |
-| `render` | `--render` | string | `raw` | `raw` (HTTP fetch) or `headless` (chromedp — currently stubbed, falls back to raw). |
+| `render` | `--render` | string | `raw` | `raw` (HTTP fetch) or `headless` (chromedp — renders JS and captures Core Web Vitals; requires a Chromium-class browser on PATH). |
 | `crawl.max_depth` | `--depth` / `-d` | int | `2` | Link hops from the seed (`0` = seed page only). |
 | `crawl.max_pages` | `--max-pages` | int | `500` | Hard cap on pages crawled (`0` = unlimited). |
 | `crawl.concurrency` | `--concurrency` | int | `4` | Parallel fetch workers (`<=0` is treated as 1). |

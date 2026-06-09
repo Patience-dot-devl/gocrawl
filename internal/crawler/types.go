@@ -35,11 +35,21 @@ type Link struct {
 	External bool   `json:"external"` // points outside the seed host
 }
 
-// RenderResult holds headless-rendering output. In this release it only records that
-// rendering is not yet implemented; Core Web Vitals fields will be added later.
+// RenderResult holds headless-rendering output, including lab-mode Core Web Vitals.
+// Implemented is true when chromedp produced real measurements; false when rendering
+// fell back to a raw fetch (Note carries the reason). Metric times are milliseconds;
+// CLS is the unitless layout-shift score. Zero means not collected.
+//
+// INP is a field-only metric and is not collected in lab mode. TBT (Total Blocking
+// Time) is reported as a lab-mode proxy for responsiveness, matching Lighthouse.
 type RenderResult struct {
-	Implemented bool   `json:"implemented"`
-	Note        string `json:"note,omitempty"`
+	Implemented bool    `json:"implemented"`
+	Note        string  `json:"note,omitempty"`
+	LCP         float64 `json:"lcp_ms,omitempty"`
+	FCP         float64 `json:"fcp_ms,omitempty"`
+	CLS         float64 `json:"cls,omitempty"`
+	TBT         float64 `json:"tbt_ms,omitempty"`
+	TTFB        float64 `json:"ttfb_ms,omitempty"`
 }
 
 // Page is the unit passed from the engine to analyzers.

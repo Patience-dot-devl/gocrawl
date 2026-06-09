@@ -20,6 +20,16 @@ The current baseline. Everything here works today.
 - **Ten analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
   `sitemap`, `structured`, `perf`, plus the SEA set `utm`, `tracking`, `landing`. See the
   [Analyzer reference](analyzers.md).
+- **Headless rendering (chromedp)** — `--render headless` (or `render: headless` in YAML)
+  renders pages in a real Chromium tab via [chromedp][chromedp], capturing the post-JS DOM
+  for downstream analyzers. Requires a Chromium-class browser on PATH; falls back to a raw
+  HTTP fetch per page on rendering error so a single broken page doesn't stall the crawl.
+- **Lab-mode Core Web Vitals** — the [`perf`](analyzers.md#perf--core-web-vitals) analyzer
+  reports real LCP, FCP, CLS, TBT, and TTFB from the headless renderer against Google's
+  thresholds. INP is field-only and not directly measurable in synthetic crawls; gocrawl
+  follows the Lighthouse convention and reports TBT as a lab-mode responsiveness proxy.
+
+[chromedp]: https://github.com/chromedp/chromedp
 - **SEA analyzers** — UTM-parameter auditing (`utm`), tracking-pixel / GTM / GA4 / Meta-Pixel
   detection (`tracking`), and landing-page relevance (`landing`). Each was added as a new
   `analyze.Analyzer` with **no changes to the crawl engine** — the worked example for the
@@ -34,14 +44,7 @@ The current baseline. Everything here works today.
 
 ## 🚧 In progress / stubbed
 
-Wired into the codebase but not yet active. The seams already exist.
-
-- **Headless rendering (chromedp)** — `render: headless` / `--render headless` is accepted
-  and routes through [`internal/render`](../internal/render), but currently falls back to raw
-  fetching and annotates pages that rendering isn't active yet.
-- **Real Core Web Vitals** — the [`perf`](analyzers.md#perf--performance--core-web-vitals-stub)
-  analyzer is a stub. It reports a response-time (TTFB) proxy and a notice; LCP, CLS, INP, FCP,
-  and full TTFB require headless rendering to land first.
+No tracked items at the moment.
 
 ## 📋 Planned — platform
 
