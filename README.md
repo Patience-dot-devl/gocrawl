@@ -57,6 +57,17 @@ gocrawl init
 gocrawl crawl https://example.com --config gocrawl.yaml
 ```
 
+## Documentation
+
+Full reference docs live in [`docs/`](docs/README.md):
+
+- [Configuration](docs/configuration.md) — every option, flag, env var, and default.
+- [Analyzers](docs/analyzers.md) — what each analyzer checks, with every issue code.
+- [Output / report](docs/output.md) — the JSON and CSV report schema.
+- [MCP server](docs/mcp.md) — running as an MCP server and the tool schemas.
+- [Architecture](docs/architecture.md) — how the engine and analyzer pipeline fit together.
+- [Roadmap](docs/roadmap.md) — what's shipped, stubbed, and planned.
+
 ## Use as an MCP server (Conductor / Claude Code)
 
 gocrawl can run as a [Model Context Protocol](https://modelcontextprotocol.io) server over
@@ -90,13 +101,15 @@ Or in a Conductor / Claude Code `mcp` config block:
 ```
 
 The agent can then call `crawl` with `{"url": "https://example.com", "depth": 2}` and reason
-over the returned issues.
+over the returned issues. See the full [MCP server guide](docs/mcp.md) for tool schemas and
+examples.
 
 ## Configuration
 
 Configuration is layered, in increasing precedence: **defaults → YAML config file →
 environment variables (`GOCRAWL_*`) → command-line flags**. Generate a starting file with
-`gocrawl init` (see [`configs/example.yaml`](configs/example.yaml)).
+`gocrawl init` (see [`configs/example.yaml`](configs/example.yaml)). The full option,
+env-var, and default reference is in [docs/configuration.md](docs/configuration.md).
 
 Key crawl options:
 
@@ -125,6 +138,8 @@ Key crawl options:
 | `structured` | JSON-LD extraction and schema.org `@type` reporting |
 | `perf` | Core Web Vitals — **stubbed**; requires headless rendering (roadmap) |
 
+See [docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and threshold.
+
 ## How it works
 
 ```
@@ -140,10 +155,10 @@ checks cheap to add. See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-analyzer
 
 ## Roadmap
 
-- Headless rendering via chromedp + real Core Web Vitals (LCP, CLS, INP, FCP, TTFB).
-- **SEA analyzers:** UTM-parameter auditing, tracking-pixel / GTM / GA4 / Meta Pixel
-  detection, landing-page keyword relevance.
-- HTML report output; resumable crawls; export integrations.
+Next up: headless rendering (chromedp) + real Core Web Vitals, the **SEA analyzers**
+(UTM auditing, tracking-pixel / GTM / GA4 / Meta Pixel detection, landing-page relevance),
+and platform features like HTML reports and resumable crawls. See the full
+[feature roadmap](docs/roadmap.md) for status on each.
 
 ## License
 
