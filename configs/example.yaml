@@ -34,6 +34,7 @@ output:
 
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those
-  # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf
+  # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf,
+  # and the SEA analyzers utm, tracking, landing.
   enabled: []
   disabled: []

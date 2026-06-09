@@ -4,9 +4,10 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships seven analyzers, run in this registration order
+gocrawl ships ten analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
-`seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`, `perf`.
+`seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`, `perf`, and the SEA
+analyzers `utm`, `tracking`, `landing`.
 
 List them at any time:
 
@@ -154,10 +155,78 @@ Source: [`internal/analyze/perf/perf.go`](../internal/analyze/perf/perf.go).
 
 ---
 
+## `utm` — UTM campaign-tag auditing (SEA)
+
+Source: [`internal/analyze/utm/utm.go`](../internal/analyze/utm/utm.go). Audits each page's
+**outbound links** for UTM tagging. Links with no UTM parameters are skipped (only counted in
+the summary). The "required" trio is `utm_source`, `utm_medium`, `utm_campaign`. The issue
+`url` is the page carrying the link; the link target is in `data.target`.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `utm-partial-tagging` | warning | A tagged link has some but not all of the required trio | `target`, `present`, `missing`, `anchor` |
+| `utm-empty-value` | warning | A present UTM parameter has an empty value | `target`, `keys` |
+| `utm-duplicate-param` | warning | A UTM parameter appears more than once | `target`, `keys` |
+| `utm-inconsistent-casing` | info | A UTM key is not lowercase (analytics tools are case-sensitive) | `target`, `keys` |
+| `utm-internal-tagged` | info | A UTM-tagged link points to the same site (starts a new analytics session) | `target` |
+| `utm-summary` | info | Per-page rollup, emitted for every page that has links | `total_links`, `tagged_links`, `external_tagged`, `internal_tagged` |
+
+> Auditing is link-based. Tagging is validated on the links a page points to, not on the
+> landing page itself — that's the `landing` analyzer's job.
+
+---
+
+## `tracking` — marketing/analytics tag detection (SEA)
+
+Source: [`internal/analyze/tracking/tracking.go`](../internal/analyze/tracking/tracking.go).
+Runs on every HTML page that returned `200`. Scans `<script src>`, inline `<script>` bodies,
+`<img>` pixels, and `<noscript>` contents for known tags: Google Tag Manager, GA4, Universal
+Analytics, Google Ads, Meta (Facebook) Pixel, LinkedIn Insight, Microsoft/Bing UET, and
+TikTok Pixel.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `tracking-tags` | info | One or more tags detected; lists each tag and its IDs | `tags` |
+| `no-tracking-tags` | info | HTML page with no detectable tags | — |
+| `duplicate-tracking-tag` | warning | The same tag family is installed with two or more distinct IDs (double-counting risk) | `tag`, `ids`, `count` |
+| `mixed-ga-versions` | info | Both Universal Analytics and GA4 are present | `ua_ids`, `ga4_ids` |
+
+> **Static detection.** Tags injected at runtime by a tag manager are only visible via their
+> container (e.g. a `GTM-…` ID), so `no-tracking-tags` is informational rather than a warning.
+> A pixel installed via both a `<script>` and its standard `<noscript>` fallback with the same
+> ID counts as one install, not a duplicate.
+
+---
+
+## `landing` — landing-page relevance (SEA)
+
+Source: [`internal/analyze/landing/landing.go`](../internal/analyze/landing/landing.go). A
+crawled HTML `200` page is treated as a **landing page** when its own URL carries campaign UTM
+parameters (`utm_term` / `utm_campaign` / `utm_content`), or when another crawled page links
+to it with such parameters. Campaign keywords are derived entirely from the crawl's own link
+data — no external campaign feed is needed.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `landing-keyword-mismatch` | warning | Campaign keyword coverage of the title/H1/H2 is below 20% | `campaign_terms`, `matched`, `missing`, `coverage` |
+| `landing-keyword-weak` | info | Coverage is 20–50% | `campaign_terms`, `matched`, `missing`, `coverage` |
+| `landing-keyword-aligned` | info | Coverage is 50% or higher | `campaign_terms`, `matched`, `missing`, `coverage` |
+| `landing-noindex` | error | The paid landing page is marked `noindex` | `robots` |
+| `landing-not-https` | warning | The landing page is not served over HTTPS | — |
+| `landing-missing-title` | warning | The landing page has no `<title>` | — |
+| `landing-missing-h1` | warning | The landing page has no `<h1>` | — |
+| `landing-missing-description` | info | The landing page has no meta description | — |
+
+> Issues fire only for pages identified as landing pages, so this analyzer deliberately
+> re-checks a few `seo` signals (title, H1, description) at a stricter, ad-quality bar with
+> distinct codes. Because external destinations are usually not crawled, coverage is best for
+> internally-reachable and self-tagged landing pages.
+
+---
+
 ## Adding your own analyzer
 
 Every check implements the `analyze.Analyzer` interface, and new analyzers slot in without
 touching the crawl engine. See [Architecture](architecture.md#adding-an-analyzer) and
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-analyzer). This is the same seam through
-which the planned [SEA analyzers](roadmap.md) (UTM auditing, tracking-pixel detection,
-landing-page relevance) will be added.
+which the [SEA analyzers](roadmap.md) (`utm`, `tracking`, `landing`) were added.

@@ -46,7 +46,7 @@ analyzers over the result, and hands everything to the report builder.
 | [`internal/crawler`](../internal/crawler) | Concurrent crawl engine, HTTP fetcher, robots.txt, URL normalization, scope rules, link extraction. Defines `Page`, `Link`, `Redirect`, `Result`, `Options`. |
 | [`internal/render`](../internal/render) | Render-mode fetcher selection; headless (chromedp) is stubbed. |
 | [`internal/analyze`](../internal/analyze) | The `Analyzer` interface, `Issue`/`Severity` types, and the `Registry`. |
-| `internal/analyze/<name>` | One package per analyzer: `seo`, `httpx` (name `redirects`), `links`, `robotscheck` (name `robots`), `sitemap`, `structured`, `perf`. |
+| `internal/analyze/<name>` | One package per analyzer: `seo`, `httpx` (name `redirects`), `links`, `robotscheck` (name `robots`), `sitemap`, `structured`, `perf`, and the SEA analyzers `utm`, `tracking`, `landing`. `seaurl` is a shared UTM-parsing helper (not an analyzer). |
 | [`internal/runner`](../internal/runner) | Wires engine + registry + report into `Run`; also `BuildRegistry` and `ListAnalyzers`. |
 | [`internal/report`](../internal/report) | Builds the `Report` and serializes it (JSON/CSV). |
 | [`internal/mcpserver`](../internal/mcpserver) | Exposes `crawl` and `list_analyzers` over MCP. |
@@ -96,8 +96,8 @@ order, and `Select(enabled, disabled)` decides which run for a given crawl (see
 3. Register it in [`runner.BuildRegistry`](../internal/runner/runner.go).
 4. Add a unit test with an HTML fixture under `testdata/`.
 
-No engine changes are needed — this is exactly how the planned
-[SEA analyzers](roadmap.md#-planned--sea-analyzers) will be added.
+No engine changes are needed — this is exactly how the
+[SEA analyzers](roadmap.md) (`utm`, `tracking`, `landing`) were added.
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-analyzer) is the canonical guide for
 contribution mechanics, coding guidelines, and the PR checklist.
 

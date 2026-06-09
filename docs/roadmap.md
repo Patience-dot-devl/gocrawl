@@ -17,8 +17,13 @@ The current baseline. Everything here works today.
 - **Scope & politeness controls** — `robots.txt` compliance, rate limiting,
   include/exclude URL regexes, subdomain and external-link toggles, custom User-Agent.
 - **Redirect capture** — full redirect chains recorded per page, with loop detection.
-- **Seven analyzers** — `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
-  `perf`. See the [Analyzer reference](analyzers.md).
+- **Ten analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
+  `sitemap`, `structured`, `perf`, plus the SEA set `utm`, `tracking`, `landing`. See the
+  [Analyzer reference](analyzers.md).
+- **SEA analyzers** — UTM-parameter auditing (`utm`), tracking-pixel / GTM / GA4 / Meta-Pixel
+  detection (`tracking`), and landing-page relevance (`landing`). Each was added as a new
+  `analyze.Analyzer` with **no changes to the crawl engine** — the worked example for the
+  analyzer architecture (see [Architecture](architecture.md#adding-an-analyzer)).
 - **JSON & CSV reports** — with severity/analyzer/status summaries. See the
   [Output reference](output.md).
 - **MCP server** — drive crawls from agentic tools via the `crawl` and `list_analyzers`
@@ -36,19 +41,6 @@ Wired into the codebase but not yet active. The seams already exist.
 - **Real Core Web Vitals** — the [`perf`](analyzers.md#perf--performance--core-web-vitals-stub)
   analyzer is a stub. It reports a response-time (TTFB) proxy and a notice; LCP, CLS, INP, FCP,
   and full TTFB require headless rendering to land first.
-
-## 📋 Planned — SEA analyzers
-
-Search Engine Advertising checks. These are the motivating example for the analyzer
-architecture: each drops in as a new `analyze.Analyzer` with **no changes to the crawl
-engine** (see [Architecture](architecture.md#adding-an-analyzer)).
-
-- **UTM-parameter auditing** — validate `utm_source` / `utm_medium` / `utm_campaign` and
-  related tagging on outbound and landing-page URLs.
-- **Tracking-pixel detection** — detect Google Tag Manager, GA4, Meta Pixel, and similar
-  tags, and flag missing or duplicated installs.
-- **Landing-page relevance** — assess keyword/content alignment between landing pages and
-  campaign intent.
 
 ## 📋 Planned — platform
 

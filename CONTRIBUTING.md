@@ -35,9 +35,10 @@ To add a check:
 3. Register it in `internal/runner/runner.go` (`BuildRegistry`).
 4. Add a unit test with an HTML fixture under `testdata/`.
 
-That's it — no changes to the crawl engine are needed. This is exactly how the planned
-SEA analyzers (UTM auditing, tracking-pixel/GTM/GA4/Meta-Pixel detection, landing-page
-relevance) will be added.
+That's it — no changes to the crawl engine are needed. This is exactly how the SEA analyzers
+(`utm` for UTM auditing, `tracking` for GTM/GA4/Meta-Pixel detection, `landing` for
+landing-page relevance) were added: each a new package under `internal/analyze/` registered in
+`BuildRegistry`, no engine changes.
 
 ## Guidelines
 

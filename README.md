@@ -7,10 +7,11 @@ A highly-customizable, free and open-source (FOSS) website crawler for **SEO** a
 over every page — checking technical SEO, redirects, broken links, `robots.txt`,
 `sitemap.xml` coverage, structured data, and more — then writes a JSON or CSV report.
 
-> **Status:** early, working vertical slice. Raw-HTML crawling and the core analyzers
-> are implemented. Headless rendering + Core Web Vitals are wired behind a flag but
-> stubbed, and the SEA analyzers are on the roadmap (see [Roadmap](#roadmap)). The
-> design's whole point is that these slot in as new analyzers without touching the engine.
+> **Status:** early, working vertical slice. Raw-HTML crawling, the core SEO analyzers, and
+> the SEA analyzers (UTM auditing, tracking-pixel detection, landing-page relevance) are
+> implemented. Headless rendering + Core Web Vitals are wired behind a flag but stubbed (see
+> [Roadmap](#roadmap)). The design's whole point is that checks slot in as new analyzers
+> without touching the engine.
 
 ## Why gocrawl
 
@@ -18,8 +19,9 @@ over every page — checking technical SEO, redirects, broken links, `robots.txt
   disable, or configure. Crawl scope (depth, page cap, include/exclude patterns,
   subdomains, rate limiting, robots compliance) is fully configurable.
 - **Fast & portable.** Concurrent Go engine, single static binary, no runtime deps.
-- **SEO and SEA.** Ships with SEO/technical analyzers; the analyzer interface is built so
-  SEA checks (UTM auditing, tracking-pixel detection, landing-page relevance) drop in.
+- **SEO and SEA.** Ships with both SEO/technical analyzers and SEA analyzers (UTM auditing,
+  tracking-pixel detection, landing-page relevance) — each an independent check on the same
+  interface.
 - **Reports you can pipe.** JSON for tooling, CSV for spreadsheets.
 
 ## Install
@@ -137,6 +139,9 @@ Key crawl options:
 | `sitemap` | `sitemap.xml` discovery/parsing and crawl-coverage cross-check |
 | `structured` | JSON-LD extraction and schema.org `@type` reporting |
 | `perf` | Core Web Vitals — **stubbed**; requires headless rendering (roadmap) |
+| `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
+| `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
+| `landing` | **SEA** — landing-page relevance: campaign-keyword alignment + indexability/HTTPS/title/H1 |
 
 See [docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and threshold.
 
@@ -155,9 +160,9 @@ checks cheap to add. See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-analyzer
 
 ## Roadmap
 
-Next up: headless rendering (chromedp) + real Core Web Vitals, the **SEA analyzers**
-(UTM auditing, tracking-pixel / GTM / GA4 / Meta Pixel detection, landing-page relevance),
-and platform features like HTML reports and resumable crawls. See the full
+Recently shipped: the **SEA analyzers** — UTM auditing, tracking-pixel / GTM / GA4 / Meta
+Pixel detection, and landing-page relevance. Next up: headless rendering (chromedp) + real
+Core Web Vitals, and platform features like HTML reports and resumable crawls. See the full
 [feature roadmap](docs/roadmap.md) for status on each.
 
 ## License
