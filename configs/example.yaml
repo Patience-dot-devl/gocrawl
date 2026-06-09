@@ -29,7 +29,7 @@ crawl:
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
 
 output:
-  format: "json"        # "json" or "csv"
+  format: "json"        # "json", "csv", or "html"
   path: ""              # file to write to; empty = stdout
 
 analyzers:

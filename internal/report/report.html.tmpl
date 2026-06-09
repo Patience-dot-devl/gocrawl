@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>gocrawl report — {{.Seed}}</title>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #59636e;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --border: #d0d7de;
+    --error: #cf222e;
+    --warning: #9a6700;
+    --info: #0969da;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.5;
+  }
+  main { max-width: 64rem; margin: 0 auto; }
+  h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+  h2 { margin: 2rem 0 0.75rem; font-size: 1.15rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .meta code { font-size: 0.9rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; }
+  .card h3 { margin: 0 0 0.5rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .card table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .card td { padding: 0.15rem 0; }
+  .card td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  table.issues { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  table.issues th, table.issues td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.issues th { background: var(--panel); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+  table.issues td.url { word-break: break-all; }
+  table.issues td.url a { color: var(--info); text-decoration: none; }
+  table.issues td.url a:hover { text-decoration: underline; }
+  table.issues td code { font-size: 0.85rem; background: var(--panel); padding: 0.1rem 0.35rem; border-radius: 3px; }
+  .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #fff; }
+  .badge.sev-error { background: var(--error); }
+  .badge.sev-warning { background: var(--warning); }
+  .badge.sev-info { background: var(--info); }
+  details { margin-top: 0.35rem; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 0.8rem; }
+  details pre { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.75rem; margin: 0.35rem 0 0; font-size: 0.8rem; overflow-x: auto; }
+  .empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<main>
+  <h1>gocrawl report</h1>
+  <div class="meta">
+    Seed: <code>{{.Seed}}</code><br>
+    Crawled {{.PagesCrawled}} page{{if ne .PagesCrawled 1}}s{{end}}
+    · started {{.StartedAt}} · finished {{.FinishedAt}}
+  </div>
+
+  <h2>Summary</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>By severity</h3>
+      {{if .Summary.BySeverity}}
+      <table>
+        {{range $k, $v := .Summary.BySeverity}}
+        <tr><td><span class="badge {{severityClass $k}}">{{$k}}</span></td><td>{{$v}}</td></tr>
+        {{end}}
+      </table>
+      {{else}}<div class="empty">No issues.</div>{{end}}
+    </div>
+    <div class="card">
+      <h3>By analyzer</h3>
+      {{if .Summary.ByAnalyzer}}
+      <table>
+        {{range $k, $v := .Summary.ByAnalyzer}}
+        <tr><td>{{$k}}</td><td>{{$v}}</td></tr>
+        {{end}}
+      </table>
+      {{else}}<div class="empty">No analyzers reported.</div>{{end}}
+    </div>
+    <div class="card">
+      <h3>Pages by status</h3>
+      {{if .Summary.ByStatus}}
+      <table>
+        {{range $k, $v := .Summary.ByStatus}}
+        <tr><td>{{$k}}</td><td>{{$v}}</td></tr>
+        {{end}}
+      </table>
+      {{else}}<div class="empty">No pages crawled.</div>{{end}}
+    </div>
+  </div>
+
+  <h2>Issues ({{len .Issues}})</h2>
+  {{if .Issues}}
+  <table class="issues">
+    <thead>
+      <tr><th>Severity</th><th>Analyzer</th><th>Code</th><th>URL</th><th>Message</th></tr>
+    </thead>
+    <tbody>
+      {{range .Issues}}
+      <tr>
+        <td><span class="badge {{severityClass (printf "%s" .Severity)}}">{{.Severity}}</span></td>
+        <td>{{.Analyzer}}</td>
+        <td><code>{{.Code}}</code></td>
+        <td class="url"><a href="{{.URL}}">{{.URL}}</a></td>
+        <td>
+          {{.Message}}
+          {{if .Data}}
+          <details><summary>data</summary><pre>{{dataJSON .Data}}</pre></details>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="empty">No issues found.</p>
+  {{end}}
+</main>
+</body>
+</html>

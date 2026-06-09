@@ -38,9 +38,13 @@ func runInteractive(cmd *cobra.Command) error {
 		allowSubdomains = cfg.Crawl.AllowSubdomains
 		followExternal  = cfg.Crawl.FollowExternal
 
+		render     = cfg.Render
 		format     = cfg.Output.Format
 		outputPath = cfg.Output.Path
 	)
+	if render == "" {
+		render = "raw"
+	}
 	if format == "" {
 		format = "json"
 	}
@@ -81,6 +85,11 @@ func runInteractive(cmd *cobra.Command) error {
 			huh.NewConfirm().Title("Respect robots.txt?").Value(&respectRobots),
 			huh.NewConfirm().Title("Follow links to subdomains?").Value(&allowSubdomains),
 			huh.NewConfirm().Title("Crawl links that leave the seed host?").Value(&followExternal),
+			huh.NewSelect[string]().
+				Title("Rendering mode").
+				Description("raw = HTTP fetch (fast); headless = Chrome render (JS + Core Web Vitals).").
+				Options(huh.NewOption("Raw (HTTP)", "raw"), huh.NewOption("Headless (Chrome)", "headless")).
+				Value(&render),
 		),
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
@@ -92,7 +101,7 @@ func runInteractive(cmd *cobra.Command) error {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Output format").
-				Options(huh.NewOption("JSON", "json"), huh.NewOption("CSV", "csv")).
+				Options(huh.NewOption("JSON", "json"), huh.NewOption("CSV", "csv"), huh.NewOption("HTML", "html")).
 				Value(&format),
 			huh.NewInput().
 				Title("Output file").
@@ -116,6 +125,7 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Crawl.RespectRobots = respectRobots
 	cfg.Crawl.AllowSubdomains = allowSubdomains
 	cfg.Crawl.FollowExternal = followExternal
+	cfg.Render = render
 	cfg.Output.Format = format
 	cfg.Output.Path = strings.TrimSpace(outputPath)
 

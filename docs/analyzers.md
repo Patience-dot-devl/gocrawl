@@ -140,18 +140,47 @@ blocks and reports their schema.org `@type` values (descending into `@graph` and
 
 ---
 
-## `perf` — Performance / Core Web Vitals (stub)
+## `perf` — Core Web Vitals
 
 Source: [`internal/analyze/perf/perf.go`](../internal/analyze/perf/perf.go).
 
-> **Stub.** Real Core Web Vitals (LCP, CLS, INP, FCP, TTFB) require headless rendering, which
-> is on the [roadmap](roadmap.md). Today this analyzer emits one notice plus a response-time
-> proxy.
+Runs in two modes depending on how the crawl was fetched:
+
+- **Headless mode (`--render headless`).** Reads lab-mode Core Web Vitals captured by the
+  chromedp renderer (`PerformanceObserver` for LCP / FCP / CLS / long-task TBT, Navigation
+  Timing for TTFB) and emits per-page findings against [Google's CWV thresholds][cwv].
+- **Raw mode.** Falls back to a single `cwv-not-collected` notice and a per-page
+  `response-time` proxy from the raw fetch's TTFB.
+
+> **INP is field-only.** It requires real user interactions and cannot be measured in a
+> synthetic crawl. gocrawl reports **TBT (Total Blocking Time)** as a lab-mode proxy for
+> responsiveness, matching Lighthouse's behavior.
+
+[cwv]: https://web.dev/articles/vitals
+
+### Thresholds
+
+| Metric | Good      | Needs improvement | Poor       |
+| ------ | --------- | ----------------- | ---------- |
+| LCP    | ≤ 2500 ms | ≤ 4000 ms         | > 4000 ms  |
+| FCP    | ≤ 1800 ms | ≤ 3000 ms         | > 3000 ms  |
+| CLS    | ≤ 0.1     | ≤ 0.25            | > 0.25     |
+| TBT    | ≤ 200 ms  | ≤ 600 ms          | > 600 ms   |
+| TTFB   | ≤ 800 ms  | ≤ 1800 ms         | > 1800 ms  |
+
+### Issue codes
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `cwv-not-collected` | info | Always (once per crawl, on the seed) — explains CWV needs headless mode | — |
-| `response-time` | info | Per `200` page with measured duration — server response time (TTFB proxy) | `duration_ms` |
+| `cwv-measured` | info | Per rendered `200` HTML page — all five metrics in one record | `lcp_ms`, `fcp_ms`, `cls`, `tbt_ms`, `ttfb_ms` |
+| `lcp-needs-improvement` / `lcp-poor` | warning / error | LCP above the band | `value_ms`, `threshold_ms` |
+| `fcp-needs-improvement` / `fcp-poor` | warning / error | FCP above the band | `value_ms`, `threshold_ms` |
+| `cls-needs-improvement` / `cls-poor` | warning / error | CLS above the band | `value`, `threshold` |
+| `tbt-needs-improvement` / `tbt-poor` | warning / error | TBT above the band | `value_ms`, `threshold_ms` |
+| `ttfb-needs-improvement` / `ttfb-poor` | warning / error | TTFB above the band | `value_ms`, `threshold_ms` |
+| `cwv-render-failed` | info | Headless rendering errored on a page; CWV unavailable for it | `note` |
+| `cwv-not-collected` | info | Raw-mode fallback (once on the seed) — reminds to enable `--render headless` | — |
+| `response-time` | info | Raw-mode per-page TTFB proxy from raw fetch duration | `duration_ms` |
 
 ---
 

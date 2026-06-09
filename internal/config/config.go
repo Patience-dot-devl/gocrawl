@@ -115,9 +115,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("invalid render mode %q (want raw or headless)", c.Render)
 	}
 	switch c.Output.Format {
-	case "", "json", "csv":
+	case "", "json", "csv", "html":
 	default:
-		return fmt.Errorf("invalid output format %q (want json or csv)", c.Output.Format)
+		return fmt.Errorf("invalid output format %q (want json, csv, or html)", c.Output.Format)
 	}
 	return nil
 }

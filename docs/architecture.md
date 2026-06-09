@@ -29,7 +29,7 @@ seed URL + config
  report.Build(result, issues) ──► Report    (internal/report)
       │
       ▼
- JSON / CSV  (file, stdout, or MCP response)
+ JSON / CSV / HTML  (file, stdout, or MCP response)
 ```
 
 [`runner.Run`](../internal/runner/runner.go) is the single orchestration point used by both
@@ -48,7 +48,7 @@ analyzers over the result, and hands everything to the report builder.
 | [`internal/analyze`](../internal/analyze) | The `Analyzer` interface, `Issue`/`Severity` types, and the `Registry`. |
 | `internal/analyze/<name>` | One package per analyzer: `seo`, `httpx` (name `redirects`), `links`, `robotscheck` (name `robots`), `sitemap`, `structured`, `perf`, and the SEA analyzers `utm`, `tracking`, `landing`. `seaurl` is a shared UTM-parsing helper (not an analyzer). |
 | [`internal/runner`](../internal/runner) | Wires engine + registry + report into `Run`; also `BuildRegistry` and `ListAnalyzers`. |
-| [`internal/report`](../internal/report) | Builds the `Report` and serializes it (JSON/CSV). |
+| [`internal/report`](../internal/report) | Builds the `Report` and serializes it (JSON, CSV, HTML). |
 | [`internal/mcpserver`](../internal/mcpserver) | Exposes `crawl` and `list_analyzers` over MCP. |
 
 ## The crawl engine

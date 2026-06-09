@@ -1,10 +1,12 @@
-// Package report builds and serializes crawl reports (JSON and CSV).
+// Package report builds and serializes crawl reports (JSON, CSV, and HTML).
 package report
 
 import (
+	"embed"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"sort"
 	"strings"
@@ -12,6 +14,9 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
+
+//go:embed report.html.tmpl
+var htmlTemplateFS embed.FS
 
 // Report is the serializable result of a crawl plus analysis.
 type Report struct {
@@ -62,12 +67,16 @@ type Reporter interface {
 	Write(w io.Writer, r *Report) error
 }
 
-// For returns the Reporter for the given format ("json" or "csv"; default json).
+// For returns the Reporter for the given format ("json", "csv", or "html"; default json).
 func For(format string) Reporter {
-	if strings.ToLower(format) == "csv" {
+	switch strings.ToLower(format) {
+	case "csv":
 		return CSVReporter{}
+	case "html":
+		return HTMLReporter{}
+	default:
+		return JSONReporter{}
 	}
-	return JSONReporter{}
 }
 
 // JSONReporter writes an indented JSON report.
@@ -101,6 +110,41 @@ func (CSVReporter) Write(w io.Writer, r *Report) error {
 		}
 	}
 	return cw.Error()
+}
+
+// HTMLReporter writes a self-contained HTML report (inline CSS, no external assets) suitable
+// for opening in a browser or sharing as an artifact.
+type HTMLReporter struct{}
+
+// Write implements Reporter.
+func (HTMLReporter) Write(w io.Writer, r *Report) error {
+	tmpl, err := template.New("report.html.tmpl").Funcs(template.FuncMap{
+		"severityClass": severityClass,
+		"dataJSON":      dataJSON,
+	}).ParseFS(htmlTemplateFS, "report.html.tmpl")
+	if err != nil {
+		return fmt.Errorf("parse html template: %w", err)
+	}
+	return tmpl.Execute(w, r)
+}
+
+func severityClass(s string) string {
+	switch strings.ToLower(s) {
+	case "error":
+		return "sev-error"
+	case "warning":
+		return "sev-warning"
+	default:
+		return "sev-info"
+	}
+}
+
+func dataJSON(d map[string]any) (string, error) {
+	b, err := json.MarshalIndent(d, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // SummaryLines returns a short human-readable summary for stderr.

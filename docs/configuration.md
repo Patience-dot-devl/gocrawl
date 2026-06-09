@@ -23,7 +23,7 @@ default** (the value used when you set nothing).
 | YAML key | CLI flag | Type | Default | Description |
 | --- | --- | --- | --- | --- |
 | `seed` | *(positional arg)* | string | — | Seed URL to start from. The `crawl <url>` argument overrides it. |
-| `render` | `--render` | string | `raw` | `raw` (HTTP fetch) or `headless` (chromedp — currently stubbed, falls back to raw). |
+| `render` | `--render` | string | `raw` | `raw` (HTTP fetch) or `headless` (chromedp — renders JS and captures Core Web Vitals; requires a Chromium-class browser on PATH). |
 | `crawl.max_depth` | `--depth` / `-d` | int | `2` | Link hops from the seed (`0` = seed page only). |
 | `crawl.max_pages` | `--max-pages` | int | `500` | Hard cap on pages crawled (`0` = unlimited). |
 | `crawl.concurrency` | `--concurrency` | int | `4` | Parallel fetch workers (`<=0` is treated as 1). |
@@ -37,7 +37,7 @@ default** (the value used when you set nothing).
 | `crawl.follow_nofollow` | — | bool | `false` | Follow links marked `rel="nofollow"`. |
 | `crawl.include` | `--include` | list of regex | *(none)* | Only crawl URLs matching at least one pattern. |
 | `crawl.exclude` | `--exclude` | list of regex | *(none)* | Skip URLs matching any pattern. |
-| `output.format` | `--format` / `-f` | string | `json` | `json` or `csv`. |
+| `output.format` | `--format` / `-f` | string | `json` | `json`, `csv`, or `html`. |
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
@@ -139,7 +139,7 @@ crawl:
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
 
 output:
-  format: "json"         # "json" or "csv"
+  format: "json"         # "json", "csv", or "html"
   path: ""               # file to write to; empty = stdout
 
 analyzers:
