@@ -19,7 +19,9 @@ func newAnalyzersCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			for _, a := range runner.ListAnalyzers() {
-				fmt.Fprintf(cmd.OutOrStdout(), "%-12s %s\n", a.Name, a.Description)
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%-12s %s\n", a.Name, a.Description); err != nil {
+					return err
+				}
 			}
 			return nil
 		},

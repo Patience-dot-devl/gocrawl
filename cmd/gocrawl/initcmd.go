@@ -21,8 +21,8 @@ func newInitCmd() *cobra.Command {
 			if err := config.WriteExample(path); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Wrote example config to %s\n", path)
-			return nil
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Wrote example config to %s\n", path)
+			return err
 		},
 	}
 }

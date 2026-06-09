@@ -84,7 +84,7 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 
 		if isRedirectStatus(resp.StatusCode) {
 			loc := resp.Header.Get("Location")
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if loc == "" {
 				page.StatusCode = resp.StatusCode
 				page.FinalURL = current
@@ -105,7 +105,7 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 
 		// Final (non-redirect) response.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, f.maxBody))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		page.StatusCode = resp.StatusCode
 		page.FinalURL = current

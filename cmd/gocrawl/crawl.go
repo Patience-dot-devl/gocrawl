@@ -127,9 +127,13 @@ func writeReport(cfg config.Config, rep *report.Report) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	if err := reporter.Write(file, rep); err != nil {
-		return err
+	writeErr := reporter.Write(file, rep)
+	closeErr := file.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
 	}
 	fmt.Fprintf(os.Stderr, "Report written to %s\n", cfg.Output.Path)
 	return nil
