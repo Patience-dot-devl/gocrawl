@@ -4,6 +4,7 @@ package runner
 
 import (
 	"context"
+	"io"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/httpx"
@@ -56,12 +57,13 @@ func ListAnalyzers() []AnalyzerInfo {
 	return out
 }
 
-// newFetcher returns the page fetcher for the configured render mode.
-func newFetcher(cfg config.Config, opts crawler.Options) crawler.Fetcher {
+// newFetcher returns the page fetcher for the configured render mode. Headless mode
+// may fail if no Chromium binary is available.
+func newFetcher(cfg config.Config, opts crawler.Options) (crawler.Fetcher, error) {
 	if cfg.Render == "headless" {
 		return render.NewHeadlessFetcher(opts)
 	}
-	return crawler.NewHTTPFetcher(opts)
+	return crawler.NewHTTPFetcher(opts), nil
 }
 
 // Run performs a full crawl + analysis for the given config and seed, returning a Report.
@@ -78,7 +80,13 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 		return nil, err
 	}
 
-	fetcher := newFetcher(cfg, opts)
+	fetcher, err := newFetcher(cfg, opts)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := fetcher.(io.Closer); ok {
+		defer func() { _ = c.Close() }()
+	}
 	engine := crawler.New(opts, fetcher)
 
 	result, err := engine.Crawl(ctx, seed)
