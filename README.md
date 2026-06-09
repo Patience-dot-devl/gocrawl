@@ -7,11 +7,11 @@ A highly-customizable, free and open-source (FOSS) website crawler for **SEO** a
 over every page — checking technical SEO, redirects, broken links, `robots.txt`,
 `sitemap.xml` coverage, structured data, and more — then writes a JSON or CSV report.
 
-> **Status:** early, working vertical slice. Raw-HTML crawling, the core SEO analyzers, and
-> the SEA analyzers (UTM auditing, tracking-pixel detection, landing-page relevance) are
-> implemented. Headless rendering + Core Web Vitals are wired behind a flag but stubbed (see
-> [Roadmap](#roadmap)). The design's whole point is that checks slot in as new analyzers
-> without touching the engine.
+> **Status:** early, working vertical slice. Raw-HTML crawling, the core SEO analyzers, the
+> SEA analyzers (UTM auditing, tracking-pixel detection, landing-page relevance), and
+> headless rendering with lab-mode Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) are all
+> implemented. The design's whole point is that checks slot in as new analyzers without
+> touching the engine — see the [Roadmap](#roadmap) for what's next.
 
 ## Why gocrawl
 
@@ -121,7 +121,7 @@ Key crawl options:
 | Max pages | `--max-pages` | Hard cap on pages crawled |
 | Concurrency | `--concurrency` | Parallel fetch workers |
 | Rate limit | `--rate` | Max requests/second (0 = unlimited) |
-| Rendering | `--render` | `raw` (default) or `headless` (stubbed) |
+| Rendering | `--render` | `raw` (default) or `headless` (chromedp — JS rendering + Core Web Vitals) |
 | Scope | `--include` / `--exclude` | URL regex filters |
 | Robots | `--respect-robots` | Obey `robots.txt` while crawling |
 | Subdomains | `--subdomains` | Follow links to subdomains of the seed |
@@ -138,7 +138,7 @@ Key crawl options:
 | `robots` | `robots.txt` discovery/parsing, declared sitemaps, disallow violations |
 | `sitemap` | `sitemap.xml` discovery/parsing and crawl-coverage cross-check |
 | `structured` | JSON-LD extraction and schema.org `@type` reporting |
-| `perf` | Core Web Vitals — **stubbed**; requires headless rendering (roadmap) |
+| `perf` | Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) against Google's thresholds — populated with `--render headless` |
 | `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
 | `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
 | `landing` | **SEA** — landing-page relevance: campaign-keyword alignment + indexability/HTTPS/title/H1 |
@@ -160,10 +160,10 @@ checks cheap to add. See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-analyzer
 
 ## Roadmap
 
-Recently shipped: the **SEA analyzers** — UTM auditing, tracking-pixel / GTM / GA4 / Meta
-Pixel detection, and landing-page relevance. Next up: headless rendering (chromedp) + real
-Core Web Vitals, and platform features like HTML reports and resumable crawls. See the full
-[feature roadmap](docs/roadmap.md) for status on each.
+Recently shipped: **headless rendering** via chromedp and **lab-mode Core Web Vitals**
+(LCP, FCP, CLS, TBT, TTFB) in the `perf` analyzer. Next up: HTML report output, resumable
+crawls, and export integrations. See the full [feature roadmap](docs/roadmap.md) for
+status on each.
 
 ## License
 
