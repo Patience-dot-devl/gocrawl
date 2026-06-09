@@ -1,0 +1,19 @@
+# Binaries
+/gocrawl
+/bin/
+/dist/
+
+# Test & coverage output
+*.out
+coverage.*
+
+# Crawl reports produced locally
+report.json
+report.csv
+*.report.json
+*.report.csv
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
