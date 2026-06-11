@@ -8,16 +8,24 @@ import (
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/aeo"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/amp"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/content"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/duplicates"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/geo"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/hreflang"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/httpx"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/images"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/landing"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/links"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/pagination"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/perf"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/robotscheck"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/security"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/seo"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/sitemap"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/structured"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/tracking"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/urls"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/utm"
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
@@ -38,6 +46,15 @@ func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry 
 	r.Register(sitemap.New(fetcher))
 	r.Register(structured.New())
 	r.Register(perf.New())
+	// Content & technical SEO breadth checks (Screaming Frog parity, tier 1).
+	r.Register(images.New())
+	r.Register(urls.New())
+	r.Register(security.New())
+	r.Register(pagination.New())
+	r.Register(hreflang.New())
+	r.Register(amp.New())
+	r.Register(duplicates.New())
+	r.Register(content.New())
 	// SEA (Search Engine Advertising) analyzers.
 	r.Register(utm.New())
 	r.Register(tracking.New())
