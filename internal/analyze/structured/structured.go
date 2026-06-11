@@ -50,6 +50,13 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 			return
 		}
 		types = append(types, collectTypes(v)...)
+		for _, mr := range validateRequired(v) {
+			issues = append(issues, analyze.Issue{
+				Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
+				Code: "structured-missing-required", Message: "Structured-data object is missing required schema.org fields",
+				Data: map[string]any{"type": mr.typ, "missing": mr.missing},
+			})
+		}
 	})
 
 	if blocks == 0 {
@@ -67,6 +74,83 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		})
 	}
 	return issues
+}
+
+// requiredFields lists the minimal required properties for common schema.org types. It is a
+// pragmatic subset, not a full schema.org validator: enough to catch the most common
+// structured-data mistakes (a typed object missing its headline name, etc.).
+var requiredFields = map[string][]string{
+	"Product":        {"name"},
+	"Offer":          {"price"},
+	"Article":        {"headline"},
+	"NewsArticle":    {"headline"},
+	"BlogPosting":    {"headline"},
+	"Recipe":         {"name"},
+	"Event":          {"name", "startDate"},
+	"Organization":   {"name"},
+	"LocalBusiness":  {"name"},
+	"Person":         {"name"},
+	"BreadcrumbList": {"itemListElement"},
+	"FAQPage":        {"mainEntity"},
+	"VideoObject":    {"name", "thumbnailUrl"},
+}
+
+// missingReq records a typed object that is missing one or more required fields.
+type missingReq struct {
+	typ     string
+	missing []string
+}
+
+// validateRequired walks a decoded JSON-LD value and reports typed objects (of a known type)
+// that omit required fields, descending into @graph arrays the same way collectTypes does.
+func validateRequired(v any) []missingReq {
+	var out []missingReq
+	switch t := v.(type) {
+	case map[string]any:
+		for _, ty := range asStrings(t["@type"]) {
+			req, known := requiredFields[ty]
+			if !known {
+				continue
+			}
+			var missing []string
+			for _, f := range req {
+				if !hasField(t, f) {
+					missing = append(missing, f)
+				}
+			}
+			if len(missing) > 0 {
+				out = append(out, missingReq{typ: ty, missing: missing})
+			}
+		}
+		if g, ok := t["@graph"]; ok {
+			out = append(out, validateRequired(g)...)
+		}
+	case []any:
+		for _, item := range t {
+			out = append(out, validateRequired(item)...)
+		}
+	}
+	return out
+}
+
+// hasField reports whether m has a non-empty value for key f.
+func hasField(m map[string]any, f string) bool {
+	v, ok := m[f]
+	if !ok {
+		return false
+	}
+	switch x := v.(type) {
+	case string:
+		return strings.TrimSpace(x) != ""
+	case nil:
+		return false
+	case []any:
+		return len(x) > 0
+	case map[string]any:
+		return len(x) > 0
+	default:
+		return true
+	}
 }
 
 // collectTypes walks a decoded JSON-LD value collecting all @type values, descending into

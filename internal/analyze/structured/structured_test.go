@@ -64,3 +64,34 @@ func TestStructuredGraph(t *testing.T) {
 		t.Errorf("expected 2 types from @graph, got %v", types)
 	}
 }
+
+func TestStructuredMissingRequired(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"Product","image":"x.jpg"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
+	if !ok {
+		t.Fatal("expected structured-missing-required for a Product without name")
+	}
+	if is.Data["type"] != "Product" {
+		t.Errorf("expected type Product in data, got %v", is.Data["type"])
+	}
+}
+
+func TestStructuredValidProductNoViolation(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"Product","name":"Widget"}
+	</script></head><body></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); ok {
+		t.Error("did not expect structured-missing-required for a complete Product")
+	}
+}
+
+func TestStructuredMissingRequiredInGraph(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@graph":[{"@type":"Organization"}]}
+	</script></head><body></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); !ok {
+		t.Error("expected structured-missing-required for an Organization without name inside @graph")
+	}
+}
