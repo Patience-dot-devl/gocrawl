@@ -121,6 +121,7 @@ func (HTMLReporter) Write(w io.Writer, r *Report) error {
 	tmpl, err := template.New("report.html.tmpl").Funcs(template.FuncMap{
 		"severityClass": severityClass,
 		"dataJSON":      dataJSON,
+		"explain":       explain,
 	}).ParseFS(htmlTemplateFS, "report.html.tmpl")
 	if err != nil {
 		return fmt.Errorf("parse html template: %w", err)

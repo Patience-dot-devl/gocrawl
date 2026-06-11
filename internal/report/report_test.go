@@ -126,6 +126,45 @@ func TestHTMLReporter(t *testing.T) {
 	}
 }
 
+func TestHTMLReporterRendersExplanations(t *testing.T) {
+	r := fixtureReport()
+	var buf bytes.Buffer
+	if err := (report.HTMLReporter{}).Write(&buf, r); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"what this means",                   // explanation summary label
+		"How to fix",                        // explanation field label
+		"The page has no &lt;title&gt;",     // missing-title "What it is" text (HTML-escaped)
+		"unique, descriptive &lt;title&gt;", // missing-title "How to fix" text
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("HTML output missing explanation text %q", want)
+		}
+	}
+}
+
+func TestHTMLReporterUnknownCodeHasNoExplanation(t *testing.T) {
+	startedAt := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
+	result := &crawler.Result{
+		Seed:      "https://example.com",
+		StartedAt: startedAt,
+		Finished:  startedAt,
+		Pages:     []*crawler.Page{{FinalURL: "https://example.com/", StatusCode: 200}},
+	}
+	issues := []analyze.Issue{
+		{Analyzer: "seo", URL: "https://example.com/", Severity: analyze.Info, Code: "totally-unknown-code", Message: "msg"},
+	}
+	var buf bytes.Buffer
+	if err := (report.HTMLReporter{}).Write(&buf, report.Build(result, issues)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if strings.Contains(buf.String(), "what this means") {
+		t.Error("unknown issue code should not render an explanation block")
+	}
+}
+
 func TestHTMLReporterEscapesUntrustedContent(t *testing.T) {
 	startedAt := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
 	result := &crawler.Result{
