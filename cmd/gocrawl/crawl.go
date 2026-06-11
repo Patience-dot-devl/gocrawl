@@ -34,6 +34,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Bool("respect-robots", true, "obey robots.txt while crawling")
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
+	f.Bool("strip-query", false, "ignore query strings, treating ?a=1 and ?a=2 as one URL (disables utm/tracking query analysis)")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
 	f.Bool("specialized", false, "enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density)")
 	return cmd
@@ -113,6 +114,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("external") {
 		cfg.Crawl.FollowExternal, _ = f.GetBool("external")
+	}
+	if f.Changed("strip-query") {
+		cfg.Crawl.StripQuery, _ = f.GetBool("strip-query")
 	}
 	if f.Changed("analyzers") {
 		cfg.Analyzers.Enabled, _ = f.GetStringSlice("analyzers")
