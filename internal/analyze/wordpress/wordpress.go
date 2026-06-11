@@ -38,6 +38,15 @@ var pluginRe = regexp.MustCompile(`/wp-content/plugins/([a-zA-Z0-9._-]+)`)
 // readmeVersionRe pulls the WordPress version out of readme.html ("Version 6.4.2").
 var readmeVersionRe = regexp.MustCompile(`(?i)version\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
 
+// authorArchiveRe matches a WordPress author archive path (/author/<nicename>/, plus its
+// pagination). dateArchiveRe matches a year / year-month / year-month-day archive and nothing
+// else, so it never fires on a post served under a date-based permalink (which has a slug after
+// the date segments).
+var (
+	authorArchiveRe = regexp.MustCompile(`^/author/[^/]+/?`)
+	dateArchiveRe   = regexp.MustCompile(`^/\d{4}(/\d{2}(/\d{2})?)?/?$`)
+)
+
 // seoPlugins maps a lowercased body signal to the human name of the SEO plugin it indicates.
 // Checked in order; the first match wins.
 var seoPlugins = []struct{ signal, name string }{
@@ -74,14 +83,14 @@ func New(fetcher crawler.Fetcher, opts ...Option) *Analyzer {
 
 func (Analyzer) Name() string { return "wordpress" }
 func (Analyzer) Description() string {
-	return "WordPress detection plus WP-specific checks: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, and (opt-in) xmlrpc/user-enumeration/directory-listing/readme probes"
+	return "WordPress detection plus WP-specific checks: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, and (opt-in) xmlrpc/user-enumeration/directory-listing/readme probes"
 }
 
 // site holds what the passive pass learned about the WordPress install, aggregated across pages.
 type site struct {
 	detected       bool
 	version        string          // WordPress core version, if disclosed via the generator tag
-	seoPlugin      string          // detected SEO plugin name, if any
+	seoPlugins     map[string]bool // detected SEO plugin names (more than one means a conflict)
 	plugins        map[string]bool // distinct plugin slugs shipping front-end assets
 	emoji          bool            // wp-emoji script loaded
 	jqueryMigrate  bool            // jQuery Migrate shim loaded
@@ -101,12 +110,13 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	}
 
 	plugins := sortedKeys(s.plugins)
+	seoPlugins := sortedKeys(s.seoPlugins)
 	detData := map[string]any{"plugins": plugins, "plugin_count": len(plugins)}
 	if s.version != "" {
 		detData["version"] = s.version
 	}
-	if s.seoPlugin != "" {
-		detData["seo_plugin"] = s.seoPlugin
+	if len(seoPlugins) > 0 {
+		detData["seo_plugin"] = seoPlugins[0]
 	}
 	add(analyze.Info, "wp-detected", "Site is built on WordPress", detData)
 
@@ -129,12 +139,16 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	if s.defaultTagline {
 		add(analyze.Warning, "wp-default-tagline", `Site uses the default "Just another WordPress site" tagline`, nil)
 	}
-	if s.seoPlugin == "" {
+	switch {
+	case len(seoPlugins) == 0:
 		add(analyze.Info, "wp-no-seo-plugin", "No SEO plugin (Yoast, Rank Math, All in One SEO) detected", nil)
+	case len(seoPlugins) > 1:
+		add(analyze.Warning, "wp-multiple-seo-plugins", "More than one SEO plugin is active, which produces conflicting/duplicate meta output",
+			map[string]any{"plugins": seoPlugins})
 	}
 
-	// Ugly permalinks are per page: some URLs may use the plain ?p=N form while others are pretty.
-	issues = append(issues, analyze.EachPage(result, uglyPermalink)...)
+	// Per-page checks: ugly permalinks and indexable low-value pages vary URL by URL.
+	issues = append(issues, analyze.EachPage(result, perPage)...)
 
 	if a.probe && base != "" {
 		issues = append(issues, a.securityProbes(ctx, base)...)
@@ -144,7 +158,7 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 
 // detect scans every crawled HTML page for WordPress fingerprints and aggregates what it finds.
 func detect(result *crawler.Result) site {
-	s := site{plugins: map[string]bool{}}
+	s := site{plugins: map[string]bool{}, seoPlugins: map[string]bool{}}
 	for _, p := range result.Pages {
 		if !p.IsHTML() || p.StatusCode != 200 {
 			continue
@@ -174,21 +188,21 @@ func detect(result *crawler.Result) site {
 		if strings.Contains(body, "just another wordpress site") {
 			s.defaultTagline = true
 		}
-		if s.seoPlugin == "" {
-			for _, sp := range seoPlugins {
-				if strings.Contains(body, sp.signal) {
-					s.seoPlugin = sp.name
-					break
-				}
+		for _, sp := range seoPlugins {
+			if strings.Contains(body, sp.signal) {
+				s.seoPlugins[sp.name] = true
 			}
 		}
 	}
 	return s
 }
 
-// uglyPermalink flags a page served under the default plain permalink structure (?p=N,
-// ?page_id=N, ?cat=N), which is weaker for SEO than pretty permalinks.
-func uglyPermalink(p *crawler.Page) []analyze.Issue {
+// perPage runs the URL-dependent checks against a single page: the ugly-permalink check, and the
+// indexable-low-value-page checks for WordPress's auto-generated thin/duplicate pages (attachment
+// pages, internal search results, author and date archives). The low-value checks fire only when
+// the page is actually indexable — a noindex tag or a canonical pointing elsewhere already
+// handles it, so there is nothing to flag.
+func perPage(p *crawler.Page) []analyze.Issue {
 	if !p.IsHTML() || p.StatusCode != 200 {
 		return nil
 	}
@@ -196,17 +210,68 @@ func uglyPermalink(p *crawler.Page) []analyze.Issue {
 	if err != nil {
 		return nil
 	}
+	var issues []analyze.Issue
+	add := func(sev analyze.Severity, code, msg string, data map[string]any) {
+		issues = append(issues, analyze.Issue{Analyzer: "wordpress", URL: p.FinalURL, Severity: sev, Code: code, Message: msg, Data: data})
+	}
 	q := u.Query()
+
 	for _, key := range []string{"p", "page_id", "cat"} {
 		if q.Get(key) != "" {
-			return []analyze.Issue{{
-				Analyzer: "wordpress", URL: p.FinalURL, Severity: analyze.Info,
-				Code: "wp-ugly-permalink", Message: "Page uses a default plain permalink (e.g. ?p=N) rather than a pretty URL",
-				Data: map[string]any{"param": key},
-			}}
+			add(analyze.Info, "wp-ugly-permalink", "Page uses a default plain permalink (e.g. ?p=N) rather than a pretty URL",
+				map[string]any{"param": key})
+			break
 		}
 	}
-	return nil
+
+	if indexable(p) {
+		switch {
+		case q.Get("attachment_id") != "":
+			add(analyze.Warning, "wp-indexable-attachment", "Attachment page is indexable (thin auto-generated page; noindex or redirect it to the parent)",
+				map[string]any{"id": q.Get("attachment_id")})
+		case q.Get("s") != "":
+			add(analyze.Warning, "wp-indexable-search", "Internal search results page is indexable (it should be noindex)", nil)
+		case authorArchiveRe.MatchString(u.Path):
+			add(analyze.Info, "wp-indexable-author-archive", "Author archive is indexable (often duplicates the blog index on single-author sites)", nil)
+		case dateArchiveRe.MatchString(u.Path):
+			add(analyze.Info, "wp-indexable-date-archive", "Date archive is indexable (thin, duplicate-prone listing)", nil)
+		}
+	}
+	return issues
+}
+
+// indexable reports whether a 200 HTML page is open to indexing: no noindex directive (meta or
+// header) and no canonical pointing to a different URL.
+func indexable(p *crawler.Page) bool {
+	if strings.Contains(strings.ToLower(metaNamed(p.Doc, "robots")), "noindex") {
+		return false
+	}
+	if p.Header != nil && strings.Contains(strings.ToLower(p.Header.Get("X-Robots-Tag")), "noindex") {
+		return false
+	}
+	return !canonicalElsewhere(p)
+}
+
+// canonicalElsewhere reports whether the page's <link rel="canonical"> resolves to a URL other
+// than the page's own (host, path ignoring a trailing slash, and query), meaning it defers
+// indexing to a different URL.
+func canonicalElsewhere(p *crawler.Page) bool {
+	href, ok := p.Doc.Find(`link[rel="canonical"]`).First().Attr("href")
+	if !ok || strings.TrimSpace(href) == "" {
+		return false
+	}
+	base, err := url.Parse(p.FinalURL)
+	if err != nil {
+		return false
+	}
+	ref, err := url.Parse(strings.TrimSpace(href))
+	if err != nil {
+		return false
+	}
+	canon := base.ResolveReference(ref)
+	return !strings.EqualFold(canon.Host, base.Host) ||
+		strings.TrimRight(canon.Path, "/") != strings.TrimRight(base.Path, "/") ||
+		canon.RawQuery != base.RawQuery
 }
 
 // securityProbes fetches well-known WordPress endpoints and reports exposure. Each probe is
@@ -323,11 +388,15 @@ func assetURLs(doc *goquery.Document) string {
 	return strings.Join(parts, "\n")
 }
 
-// generator returns the content of <meta name="generator"> (case-insensitive name), or "".
-func generator(doc *goquery.Document) string {
+// generator returns the content of <meta name="generator">, or "".
+func generator(doc *goquery.Document) string { return metaNamed(doc, "generator") }
+
+// metaNamed returns the trimmed content of the first <meta name="..."> matching name
+// (case-insensitive), or "".
+func metaNamed(doc *goquery.Document, name string) string {
 	var content string
 	doc.Find("meta[name]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
-		if n, ok := s.Attr("name"); ok && strings.EqualFold(n, "generator") {
+		if n, ok := s.Attr("name"); ok && strings.EqualFold(n, name) {
 			content, _ = s.Attr("content")
 			return false
 		}

@@ -348,7 +348,12 @@ permalink check is per page.
 | `wp-many-plugin-assets` | warning | At least 10 distinct plugins ship front-end assets (render-blocking request pile-up) | `plugins`, `plugin_count` |
 | `wp-default-tagline` | warning | The site still uses the default "Just another WordPress site" tagline | — |
 | `wp-no-seo-plugin` | info | No SEO plugin (Yoast, Rank Math, All in One SEO) detected | — |
+| `wp-multiple-seo-plugins` | warning | More than one SEO plugin is active (conflicting/duplicate meta output) | `plugins` |
 | `wp-ugly-permalink` | info | A page is served under a default plain permalink (`?p=N`, `?page_id=N`, `?cat=N`) rather than a pretty URL | `param` |
+| `wp-indexable-attachment` | warning | An indexable attachment page (`?attachment_id=N`) — thin auto-generated content | `id` |
+| `wp-indexable-search` | warning | An indexable internal search results page (`?s=…`), which should be noindex | — |
+| `wp-indexable-author-archive` | info | An indexable author archive (`/author/<login>/`) — often duplicates the blog index | — |
+| `wp-indexable-date-archive` | info | An indexable date archive (`/YYYY/`, `/YYYY/MM/`) — thin, duplicate-prone listing | — |
 | `wp-xmlrpc-enabled` ⚙︎ | warning | `xmlrpc.php` answers (brute-force amplification / pingback-DDoS vector) | — |
 | `wp-user-enumeration-rest` ⚙︎ | warning | `/wp-json/wp/v2/users` returns usernames | `usernames`, `count` |
 | `wp-user-enumeration-author` ⚙︎ | warning | `/?author=1` redirects to `/author/<login>/`, leaking a username | `username` |
@@ -359,6 +364,11 @@ permalink check is per page.
 > so they are **opt-in** and run only with `--specialized` (or `analyzers.specialized: true`).
 > Without it the analyzer is passive — it reads only the already-crawled HTML. SEO-plugin
 > detection covers Yoast SEO, Rank Math, and All in One SEO via their front-end signatures.
+>
+> The `wp-indexable-*` checks fire only when the page is genuinely **indexable** — a `noindex`
+> directive (meta or `X-Robots-Tag`) or a `<link rel="canonical">` pointing elsewhere already
+> handles the page, so it is not flagged. Attachment-page detection relies on the
+> `?attachment_id=N` form; pretty attachment URLs are not detectable from the crawl alone.
 
 ---
 

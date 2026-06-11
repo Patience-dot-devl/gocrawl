@@ -162,6 +162,77 @@ func TestUglyPermalinkPerPage(t *testing.T) {
 	}
 }
 
+func TestMultipleSeoPlugins(t *testing.T) {
+	html := strings.Replace(wpHome, "<p>Hello</p>",
+		`<!-- Yoast SEO plugin --><meta name="x" content="rank-math"><p>Hello</p>`, 1)
+	issues := run(t, result(page(t, "https://example.com/", html)))
+	is, ok := find(issues, "wp-multiple-seo-plugins")
+	if !ok {
+		t.Fatal("expected wp-multiple-seo-plugins when two SEO plugins are present")
+	}
+	if got, _ := is.Data["plugins"].([]string); len(got) != 2 {
+		t.Errorf("expected 2 conflicting plugins, got %v", is.Data["plugins"])
+	}
+	if _, ok := find(issues, "wp-no-seo-plugin"); ok {
+		t.Error("wp-no-seo-plugin must not fire when plugins are present")
+	}
+}
+
+// indexableResult pairs the WordPress home page (so the site is detected) with one extra page.
+func indexableResult(t *testing.T, finalURL, html string) *crawler.Result {
+	return result(page(t, "https://example.com/", wpHome), page(t, finalURL, html))
+}
+
+func TestIndexableAttachment(t *testing.T) {
+	issues := run(t, indexableResult(t, "https://example.com/?attachment_id=12", `<html><body><img></body></html>`))
+	is, ok := find(issues, "wp-indexable-attachment")
+	if !ok {
+		t.Fatal("expected wp-indexable-attachment for an indexable attachment page")
+	}
+	if is.Data["id"] != "12" {
+		t.Errorf("expected attachment id 12, got %v", is.Data["id"])
+	}
+}
+
+func TestNoindexAttachmentNotFlagged(t *testing.T) {
+	html := `<html><head><meta name="robots" content="noindex,follow"></head><body><img></body></html>`
+	if _, ok := find(run(t, indexableResult(t, "https://example.com/?attachment_id=12", html)), "wp-indexable-attachment"); ok {
+		t.Error("a noindex attachment page must not be flagged")
+	}
+}
+
+func TestCanonicalAwaySuppressesAttachment(t *testing.T) {
+	html := `<html><head><link rel="canonical" href="https://example.com/parent-post/"></head><body><img></body></html>`
+	if _, ok := find(run(t, indexableResult(t, "https://example.com/?attachment_id=12", html)), "wp-indexable-attachment"); ok {
+		t.Error("an attachment page canonicalized to its parent must not be flagged")
+	}
+}
+
+func TestIndexableSearch(t *testing.T) {
+	if _, ok := find(run(t, indexableResult(t, "https://example.com/?s=shoes", `<html><body><p>Results</p></body></html>`)), "wp-indexable-search"); !ok {
+		t.Error("expected wp-indexable-search for an indexable search results page")
+	}
+}
+
+func TestIndexableAuthorArchive(t *testing.T) {
+	if _, ok := find(run(t, indexableResult(t, "https://example.com/author/jane/", `<html><body><p>Posts by Jane</p></body></html>`)), "wp-indexable-author-archive"); !ok {
+		t.Error("expected wp-indexable-author-archive for /author/jane/")
+	}
+}
+
+func TestIndexableDateArchive(t *testing.T) {
+	if _, ok := find(run(t, indexableResult(t, "https://example.com/2024/06/", `<html><body><p>June</p></body></html>`)), "wp-indexable-date-archive"); !ok {
+		t.Error("expected wp-indexable-date-archive for /2024/06/")
+	}
+}
+
+func TestDatePermalinkPostNotFlagged(t *testing.T) {
+	// A post served under a date-based permalink has a slug after the date and is not an archive.
+	if _, ok := find(run(t, indexableResult(t, "https://example.com/2024/06/my-post/", `<html><body><p>Post</p></body></html>`)), "wp-indexable-date-archive"); ok {
+		t.Error("a dated post permalink must not be flagged as a date archive")
+	}
+}
+
 // --- security probes (opt-in) ---
 
 func runProbed(ff fakeFetcher, res *crawler.Result) []analyze.Issue {
