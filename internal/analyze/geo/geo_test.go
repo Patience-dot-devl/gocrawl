@@ -73,6 +73,38 @@ func TestLlmsTxtMissing(t *testing.T) {
 	}
 }
 
+// TestLlmsTxtSoft404HTML covers servers that answer 200 with an HTML page for any unknown
+// path: /llms.txt must not be reported as published just because the request returned 200.
+func TestLlmsTxtSoft404HTML(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://example.com/llms.txt": {
+			StatusCode: 200, ContentType: "text/html; charset=utf-8",
+			Body: []byte("<!DOCTYPE html><html><body>Page not found</body></html>"),
+		},
+	}}
+	res := &crawler.Result{Seed: "https://example.com/"}
+	issues := geo.New(ff).Analyze(context.Background(), res)
+	if _, ok := find(issues, "geo-llms-txt"); ok {
+		t.Error("HTML soft-404 should not be reported as a published /llms.txt")
+	}
+	if _, ok := find(issues, "geo-no-llms-txt"); !ok {
+		t.Error("expected geo-no-llms-txt for an HTML soft-404 at /llms.txt")
+	}
+}
+
+// TestLlmsTxtRedirectedAway covers a /llms.txt request that redirects to the homepage.
+func TestLlmsTxtRedirectedAway(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://example.com/llms.txt": {
+			StatusCode: 200, FinalURL: "https://example.com/", Body: []byte("# Home\nWelcome"),
+		},
+	}}
+	res := &crawler.Result{Seed: "https://example.com/"}
+	if _, ok := find(geo.New(ff).Analyze(context.Background(), res), "geo-llms-txt"); ok {
+		t.Error("a /llms.txt that redirects to the homepage should not count as published")
+	}
+}
+
 func TestArticleMissingAuthorAndDate(t *testing.T) {
 	issues := run(t, pageResult(t, `<html><body><article><h1>Title</h1><p>Body.</p></article></body></html>`))
 	if _, ok := find(issues, "geo-missing-author"); !ok {

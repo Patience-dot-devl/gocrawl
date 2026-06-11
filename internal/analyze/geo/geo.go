@@ -144,7 +144,7 @@ func (a Analyzer) llmsTxt(ctx context.Context, result *crawler.Result) []analyze
 	llmsURL := base + "/llms.txt"
 
 	page, ferr := a.fetcher.Fetch(ctx, llmsURL)
-	if ferr == nil && page != nil && page.StatusCode == 200 && len(page.Body) > 0 {
+	if ferr == nil && page != nil && page.StatusCode == 200 && len(page.Body) > 0 && isPlausibleLLMSTxt(page, llmsURL) {
 		return []analyze.Issue{{
 			Analyzer: "geo", URL: llmsURL, Severity: analyze.Info,
 			Code: "geo-llms-txt", Message: "Site publishes an /llms.txt content map",
@@ -154,6 +154,29 @@ func (a Analyzer) llmsTxt(ctx context.Context, result *crawler.Result) []analyze
 		Analyzer: "geo", URL: llmsURL, Severity: analyze.Info,
 		Code: "geo-no-llms-txt", Message: "No /llms.txt content map found at the site root",
 	}}
+}
+
+// isPlausibleLLMSTxt guards against soft-404s: many servers answer 200 with an HTML page
+// (or redirect to the homepage) for any unknown path, which would otherwise be misreported
+// as a published /llms.txt. A real llms.txt is a markdown/plain-text file served at that
+// exact path, so reject responses that were redirected elsewhere or that look like HTML/XML.
+func isPlausibleLLMSTxt(page *crawler.Page, requested string) bool {
+	if page.FinalURL != "" && !sameURL(page.FinalURL, requested) {
+		return false
+	}
+	ct := strings.ToLower(page.ContentType)
+	if strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml") {
+		return false
+	}
+	head := strings.ToLower(strings.TrimSpace(string(page.Body)))
+	if strings.HasPrefix(head, "<!doctype") || strings.HasPrefix(head, "<html") || strings.HasPrefix(head, "<?xml") {
+		return false
+	}
+	return true
+}
+
+func sameURL(a, b string) bool {
+	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
 }
 
 func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
