@@ -27,6 +27,7 @@ The top-level [`Report`](../internal/report/report.go):
 | `pages_crawled` | int | Number of pages fetched. |
 | `summary` | object | Aggregated counts — see [Summary](#summary). |
 | `issues` | array | Every [Issue](#issue) emitted by the analyzers. |
+| `notes` | array | Advisories about the run itself (e.g. analyzers skipped because `strip_query` is on), not page findings. Omitted when empty. |
 
 ### Summary
 

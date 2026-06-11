@@ -36,7 +36,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Bool("external", false, "crawl links that leave the seed host")
 	f.Bool("strip-query", false, "ignore query strings, treating ?a=1 and ?a=2 as one URL (disables utm/tracking query analysis)")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
-	f.Bool("specialized", false, "enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density)")
+	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes)")
 	return cmd
 }
 
@@ -67,6 +67,9 @@ func runCrawl(cmd *cobra.Command, args []string) error {
 
 	if err := writeReport(cfg, rep); err != nil {
 		return err
+	}
+	for _, note := range rep.Notes {
+		fmt.Fprintln(os.Stderr, "note:", note)
 	}
 	for _, line := range rep.SummaryLines() {
 		fmt.Fprintln(os.Stderr, line)

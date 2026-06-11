@@ -35,13 +35,14 @@ default** (the value used when you set nothing).
 | `crawl.allow_subdomains` | `--subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
 | `crawl.follow_external` | `--external` | bool | `false` | Crawl links that leave the seed host. |
 | `crawl.follow_nofollow` | — | bool | `false` | Follow links marked `rel="nofollow"`. |
+| `crawl.strip_query` | `--strip-query` | bool | `false` | Ignore query strings (treat `?a=1` and `?a=2` as one URL). Skips the query-dependent analyzers — see below. |
 | `crawl.include` | `--include` | list of regex | *(none)* | Only crawl URLs matching at least one pattern. |
 | `crawl.exclude` | `--exclude` | list of regex | *(none)* | Skip URLs matching any pattern. |
 | `output.format` | `--format` / `-f` | string | `json` | `json`, `csv`, or `html`. |
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
-| `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized AI-search checks (see below). |
+| `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized checks: AI-search heuristics and WordPress security probes (see below). |
 
 ### A note on flag defaults
 
@@ -73,8 +74,9 @@ Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (se
 
 The `--analyzers` CLI flag sets `enabled`. Analyzer names: `seo`, `redirects`, `links`,
 `robots`, `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`,
-`hreflang`, `amp`, `duplicates`, `content`, the SEA analyzers `utm`, `tracking`, `landing`,
-and the AI-search analyzers `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
+`hreflang`, `amp`, `duplicates`, `content`, the CMS-specific `wordpress`, the SEA analyzers
+`utm`, `tracking`, `landing`, and the AI-search analyzers `aeo`, `geo`. See the
+[Analyzer reference](analyzers.md).
 
 ```sh
 # Only SEO, links, and redirects
@@ -86,12 +88,25 @@ analyzers:
   disabled: ["perf"]   # run everything except perf
 ```
 
-### Specialized AI-search checks
+### strip_query and query-dependent analyzers
+
+`crawl.strip_query` drops the query string while crawling, so URLs that differ only by their
+query collapse to one. Because of that, analyzers that read query parameters — `utm` (UTM tags
+on outbound links), `landing` (campaign `utm_*` params identify landing pages), and `wordpress`
+(the `?p=`, `?attachment_id=`, `?s=` URL checks) — would have nothing to inspect. When
+`strip_query` is on they are **automatically skipped** rather than run with empty input, and the
+report records a `notes` entry (printed as a `note:` line on the CLI) listing what was skipped.
+This is independent of the `enabled`/`disabled` lists: a query-dependent analyzer is skipped even
+if you explicitly enable it alongside `strip_query`.
+
+### Specialized checks
 
 `analyzers.specialized` (or the `--specialized` flag) is independent of the allow/deny lists.
-It turns on two opt-in, lower-confidence AI-search heuristics that are off by default —
-`aeo-no-answer-lead` and `geo-low-quotable-density`. The `aeo` and `geo` analyzers always run
-their other checks; this toggle only adds these two. See the
+It turns on opt-in checks that are off by default: two lower-confidence AI-search heuristics
+(`aeo-no-answer-lead` and `geo-low-quotable-density`) and the `wordpress` analyzer's active
+security-endpoint probes (`wp-xmlrpc-enabled`, `wp-user-enumeration-rest`,
+`wp-user-enumeration-author`, `wp-directory-listing`, `wp-readme-exposed`). The affected
+analyzers always run their other checks; this toggle only adds these. See the
 [Specialized AI-search checks](analyzers.md#specialized-ai-search-checks) note for details.
 
 ```sh

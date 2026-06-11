@@ -26,6 +26,9 @@ type Report struct {
 	PagesCrawled int             `json:"pages_crawled"`
 	Summary      Summary         `json:"summary"`
 	Issues       []analyze.Issue `json:"issues"`
+	// Notes carries human-readable advisories about the run itself (e.g. analyzers skipped
+	// because of a conflicting option), not page findings. Omitted when empty.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // Summary aggregates issue counts.

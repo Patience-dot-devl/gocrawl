@@ -4,12 +4,12 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships twenty analyzers, run in this registration order
+gocrawl ships twenty-one analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
 the technical/on-page set `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
 `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
-`content`, the SEA analyzers `utm`, `tracking`, `landing`, and the AI-search analyzers
-`aeo`, `geo`.
+`content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `landing`, and
+the AI-search analyzers `aeo`, `geo`.
 
 List them at any time:
 
@@ -329,6 +329,49 @@ the crawl's mean.
 
 ---
 
+## `wordpress` — WordPress detection and WP-specific checks (CMS)
+
+Source: [`internal/analyze/wordpress/wordpress.go`](../internal/analyze/wordpress/wordpress.go).
+First fingerprints WordPress from the crawled HTML (generator meta tag, `/wp-content/`,
+`/wp-includes/`, `/wp-json/` asset paths, the `X-Pingback` header, and the `api.w.org` REST
+discovery `Link`); on a non-WordPress site it stays completely silent. Because most fingerprints
+live in the shared header/footer template and repeat on every page, the passive findings are
+aggregated and emitted **once per site** (issue `url` is the site base URL); only the ugly-
+permalink check is per page.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `wp-detected` | info | The site is identified as WordPress; carries the gathered context | `version`, `seo_plugin`, `plugins`, `plugin_count` |
+| `wp-version-exposed` | warning | The core version is disclosed in the generator meta tag (maps the install to known CVEs) | `version` |
+| `wp-emoji-enabled` | info | The `wp-emoji` script is loaded sitewide (usually safe to dequeue) | — |
+| `wp-jquery-migrate` | info | The jQuery Migrate compatibility shim is loaded | — |
+| `wp-many-plugin-assets` | warning | At least 10 distinct plugins ship front-end assets (render-blocking request pile-up) | `plugins`, `plugin_count` |
+| `wp-default-tagline` | warning | The site still uses the default "Just another WordPress site" tagline | — |
+| `wp-no-seo-plugin` | info | No SEO plugin (Yoast, Rank Math, All in One SEO) detected | — |
+| `wp-multiple-seo-plugins` | warning | More than one SEO plugin is active (conflicting/duplicate meta output) | `plugins` |
+| `wp-ugly-permalink` | info | A page is served under a default plain permalink (`?p=N`, `?page_id=N`, `?cat=N`) rather than a pretty URL | `param` |
+| `wp-indexable-attachment` | warning | An indexable attachment page (`?attachment_id=N`) — thin auto-generated content | `id` |
+| `wp-indexable-search` | warning | An indexable internal search results page (`?s=…`), which should be noindex | — |
+| `wp-indexable-author-archive` | info | An indexable author archive (`/author/<login>/`) — often duplicates the blog index | — |
+| `wp-indexable-date-archive` | info | An indexable date archive (`/YYYY/`, `/YYYY/MM/`) — thin, duplicate-prone listing | — |
+| `wp-xmlrpc-enabled` ⚙︎ | warning | `xmlrpc.php` answers (brute-force amplification / pingback-DDoS vector) | — |
+| `wp-user-enumeration-rest` ⚙︎ | warning | `/wp-json/wp/v2/users` returns usernames | `usernames`, `count` |
+| `wp-user-enumeration-author` ⚙︎ | warning | `/?author=1` redirects to `/author/<login>/`, leaking a username | `username` |
+| `wp-directory-listing` ⚙︎ | warning | `/wp-content/uploads/` is browsable (directory listing enabled) | — |
+| `wp-readme-exposed` ⚙︎ | warning | `readme.html` is reachable and discloses the core version | `version` |
+
+> ⚙︎ The five probe codes require **active fetches** of well-known endpoints beyond the crawl,
+> so they are **opt-in** and run only with `--specialized` (or `analyzers.specialized: true`).
+> Without it the analyzer is passive — it reads only the already-crawled HTML. SEO-plugin
+> detection covers Yoast SEO, Rank Math, and All in One SEO via their front-end signatures.
+>
+> The `wp-indexable-*` checks fire only when the page is genuinely **indexable** — a `noindex`
+> directive (meta or `X-Robots-Tag`) or a `<link rel="canonical">` pointing elsewhere already
+> handles the page, so it is not flagged. Attachment-page detection relies on the
+> `?attachment_id=N` form; pretty attachment URLs are not detectable from the crawl alone.
+
+---
+
 ## `utm` — UTM campaign-tag auditing (SEA)
 
 Source: [`internal/analyze/utm/utm.go`](../internal/analyze/utm/utm.go). Audits each page's
@@ -480,6 +523,12 @@ analyzers:
 The MCP `crawl` tool exposes the same toggle as a `specialized` boolean. When off, the `aeo`
 and `geo` analyzers still run all of their default checks — only these two heuristics are
 suppressed.
+
+The same `specialized` flag also enables the `wordpress` analyzer's active endpoint probes
+(the ⚙︎ codes above: `wp-xmlrpc-enabled`, `wp-user-enumeration-rest`,
+`wp-user-enumeration-author`, `wp-directory-listing`, `wp-readme-exposed`). These issue extra
+HTTP requests to well-known WordPress paths, so they are gated behind the same opt-in; the
+analyzer's detection and passive checks always run.
 
 ---
 

@@ -4,7 +4,9 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/aeo"
@@ -27,11 +29,16 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/tracking"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/urls"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/utm"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/wordpress"
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/render"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 )
+
+// queryDependentAnalyzers read URL query parameters, so they produce nothing useful when
+// crawl.strip_query drops the query string. Run skips them (with a note) in that mode.
+var queryDependentAnalyzers = []string{"utm", "landing", "wordpress"}
 
 // BuildRegistry constructs the default analyzer registry. The fetcher is used by analyzers
 // that retrieve additional resources (e.g. the sitemap analyzer). When specialized is true,
@@ -55,6 +62,9 @@ func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry 
 	r.Register(amp.New())
 	r.Register(duplicates.New())
 	r.Register(content.New())
+	// CMS-specific checks. WordPress security probes are active (extra fetches), so they ride
+	// the same specialized flag as the opt-in AI-search heuristics.
+	r.Register(wordpress.New(fetcher, wordpress.WithSecurityProbes(specialized)))
 	// SEA (Search Engine Advertising) analyzers.
 	r.Register(utm.New())
 	r.Register(tracking.New())
@@ -120,8 +130,41 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 
 	// Sitemap analyzer fetches with a raw fetcher regardless of render mode.
 	reg := BuildRegistry(crawler.NewHTTPFetcher(opts), cfg.Analyzers.Specialized)
-	analyzers := reg.Select(cfg.Analyzers.Enabled, cfg.Analyzers.Disabled)
+	analyzers, skipped := planAnalyzers(reg, cfg.Analyzers, cfg.Crawl.StripQuery)
 	issues := analyze.Run(ctx, analyzers, result)
 
-	return report.Build(result, issues), nil
+	rep := report.Build(result, issues)
+	if len(skipped) > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("strip_query is on, so query-dependent analyzers were skipped: %s", strings.Join(skipped, ", ")))
+	}
+	return rep, nil
+}
+
+// planAnalyzers selects the analyzers to run for the given config, and returns the names of any
+// query-dependent analyzers skipped because strip_query is on. strip_query drops query strings
+// while crawling, so analyzers that read query parameters (UTM tags on links, WordPress
+// ?p=/?attachment_id=/?s= URLs) would only produce misleading empty results; they are skipped
+// rather than run.
+func planAnalyzers(reg *analyze.Registry, ac config.AnalyzersConfig, stripQuery bool) ([]analyze.Analyzer, []string) {
+	if !stripQuery {
+		return reg.Select(ac.Enabled, ac.Disabled), nil
+	}
+	active := names(reg.Select(ac.Enabled, ac.Disabled))
+	var skipped []string
+	for _, name := range queryDependentAnalyzers {
+		if active[name] {
+			skipped = append(skipped, name)
+		}
+	}
+	disabled := append(append([]string{}, ac.Disabled...), queryDependentAnalyzers...)
+	return reg.Select(ac.Enabled, disabled), skipped
+}
+
+// names returns the set of analyzer names in the given slice.
+func names(as []analyze.Analyzer) map[string]bool {
+	out := make(map[string]bool, len(as))
+	for _, a := range as {
+		out[a.Name()] = true
+	}
+	return out
 }

@@ -33,8 +33,8 @@ crawl:
   follow_external: false   # crawl links that leave the seed host
   follow_nofollow: false   # follow links marked rel="nofollow"
   strip_query: false       # ignore query strings (treat ?a=1 and ?a=2 as one URL).
-                           # NOTE: enabling this strips utm_*/tracking params, so the
-                           # utm and tracking analyzers will have nothing to inspect.
+                           # NOTE: this drops query params, so the query-dependent analyzers
+                           # (utm, landing, wordpress) are automatically skipped while it is on.
   include: []           # only crawl URLs matching at least one of these regexes
   exclude:              # never crawl URLs matching any of these regexes
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
@@ -46,10 +46,12 @@ output:
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those
   # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf,
+  # images, urls, security, pagination, hreflang, amp, duplicates, content, wordpress,
   # the SEA analyzers utm, tracking, landing, and the AI-search analyzers aeo, geo.
   enabled: []
   disabled: []
-  # Turn on the opt-in specialized AI-search heuristics (off by default):
+  # Turn on the opt-in specialized checks (off by default): the AI-search heuristics and
+  # the WordPress security-endpoint probes.
   # aeo-no-answer-lead and geo-low-quotable-density.
   specialized: false
 `
