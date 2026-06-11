@@ -2,6 +2,7 @@ package seo_test
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -64,5 +65,19 @@ func TestSEONoindex(t *testing.T) {
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	if !codes(seo.New().Analyze(context.Background(), res))["meta-noindex"] {
 		t.Error("expected meta-noindex issue")
+	}
+}
+
+func TestSEOXRobotsAndMetaRefresh(t *testing.T) {
+	p := htmlPage(t, `<html><head><title>Header Robots And Refresh</title>
+		<meta http-equiv="refresh" content="3;url=/elsewhere"></head><body><h1>x</h1></body></html>`)
+	p.Header = http.Header{}
+	p.Header.Set("X-Robots-Tag", "noindex, nofollow")
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	got := codes(seo.New().Analyze(context.Background(), res))
+	for _, want := range []string{"x-robots-noindex", "x-robots-nofollow", "meta-refresh"} {
+		if !got[want] {
+			t.Errorf("expected issue %q, not found", want)
+		}
 	}
 }
