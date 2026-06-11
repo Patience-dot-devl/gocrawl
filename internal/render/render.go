@@ -12,6 +12,7 @@ package render
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -48,7 +49,7 @@ func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), allocOpts...)
 
 	// Warm the browser so a missing/broken Chromium surfaces here, not mid-crawl.
-	warmCtx, warmCancel := chromedp.NewContext(allocCtx)
+	warmCtx, warmCancel := chromedp.NewContext(allocCtx, chromedp.WithErrorf(quietErrorf))
 	defer warmCancel()
 	if err := chromedp.Run(warmCtx); err != nil {
 		allocCancel()
@@ -61,6 +62,18 @@ func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 		allocCancel: allocCancel,
 		raw:         crawler.NewHTTPFetcher(opts),
 	}, nil
+}
+
+// quietErrorf is chromedp's error logger with the benign "unhandled node event"
+// noise filtered out. chromedp logs that for CDP DOM events its version doesn't
+// model (e.g. *dom.EventAdoptedStyleSheetsModified, emitted by sites using
+// constructable stylesheets). It has no effect on rendering, so we drop it and
+// pass everything else through to the default logger.
+func quietErrorf(format string, args ...interface{}) {
+	if strings.Contains(format, "unhandled node event") {
+		return
+	}
+	log.Printf(format, args...)
 }
 
 // Close terminates the browser. Safe to call more than once.
@@ -116,7 +129,7 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		timeout = 15 * time.Second
 	}
 
-	tabCtx, tabCancel := chromedp.NewContext(h.allocCtx)
+	tabCtx, tabCancel := chromedp.NewContext(h.allocCtx, chromedp.WithErrorf(quietErrorf))
 	defer tabCancel()
 	runCtx, runCancel := context.WithTimeout(tabCtx, timeout)
 	defer runCancel()
