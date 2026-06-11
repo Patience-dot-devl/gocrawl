@@ -5,6 +5,7 @@ the [project README](../README.md) for install and a quick start; come here for 
 
 | Guide | What's in it |
 | --- | --- |
+| [Install & run](install.md) | Per-platform install on Windows, macOS, and Linux — `go install`, building from source, PATH setup, verifying, running, and the optional headless browser. |
 | [Configuration](configuration.md) | Every option, flag, env var, and default; config layering; analyzer selection; annotated example config. |
 | [Analyzers](analyzers.md) | What each of the ten analyzers checks (SEO + SEA), with every issue code, severity, threshold, and `data` field. |
 | [Output / report](output.md) | The JSON, CSV, and HTML report formats — `Report`, `Summary`, `Issue` — with examples. |

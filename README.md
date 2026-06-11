@@ -27,6 +27,8 @@ over every page — checking technical SEO, redirects, broken links, `robots.txt
 
 ## Install
 
+Works on **Windows, macOS, and Linux**. With [Go 1.26+](https://go.dev/dl/):
+
 ```sh
 go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@latest
 ```
@@ -36,8 +38,12 @@ Or build from source:
 ```sh
 git clone https://github.com/Patience-dot-devl/gocrawl
 cd gocrawl
-make build      # produces ./gocrawl
+make build      # produces ./gocrawl  (on Windows: go build -o gocrawl.exe ./cmd/gocrawl)
 ```
+
+📖 **See [docs/install.md](docs/install.md)** for full per-platform instructions — PATH setup
+on each OS, building without `make` on Windows, verifying the install, and the optional
+Chromium browser needed for `--render headless`.
 
 ## Quick start
 
