@@ -48,6 +48,10 @@
   details { margin-top: 0.35rem; }
   details summary { cursor: pointer; color: var(--muted); font-size: 0.8rem; }
   details pre { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.75rem; margin: 0.35rem 0 0; font-size: 0.8rem; overflow-x: auto; }
+  details.explain dl { margin: 0.35rem 0 0; padding: 0.5rem 0.75rem; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; font-size: 0.82rem; }
+  details.explain dt { font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.7rem; margin-top: 0.5rem; }
+  details.explain dt:first-child { margin-top: 0; }
+  details.explain dd { margin: 0.15rem 0 0; }
   .empty { color: var(--muted); font-style: italic; }
 </style>
 </head>
@@ -109,6 +113,17 @@
         <td class="url"><a href="{{.URL}}">{{.URL}}</a></td>
         <td>
           {{.Message}}
+          {{$ex := explain (printf "%s" .Code)}}
+          {{with $ex}}
+          <details class="explain">
+            <summary>what this means &amp; how to fix</summary>
+            <dl>
+              <dt>What it is</dt><dd>{{.What}}</dd>
+              <dt>Impact</dt><dd>{{.Impact}}</dd>
+              <dt>How to fix</dt><dd>{{.Fix}}</dd>
+            </dl>
+          </details>
+          {{end}}
           {{if .Data}}
           <details><summary>data</summary><pre>{{dataJSON .Data}}</pre></details>
           {{end}}
