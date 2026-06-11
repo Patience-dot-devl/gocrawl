@@ -35,6 +35,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
+	f.Bool("specialized", false, "enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density)")
 	return cmd
 }
 
@@ -115,6 +116,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("analyzers") {
 		cfg.Analyzers.Enabled, _ = f.GetStringSlice("analyzers")
+	}
+	if f.Changed("specialized") {
+		cfg.Analyzers.Specialized, _ = f.GetBool("specialized")
 	}
 }
 

@@ -41,6 +41,7 @@ default** (the value used when you set nothing).
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
+| `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized AI-search checks (see below). |
 
 ### A note on flag defaults
 
@@ -71,8 +72,8 @@ Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (se
 - Otherwise **all** analyzers run **except** any listed in `disabled`.
 
 The `--analyzers` CLI flag sets `enabled`. Analyzer names: `seo`, `redirects`, `links`,
-`robots`, `sitemap`, `structured`, `perf`, and the SEA analyzers `utm`, `tracking`,
-`landing`. See the [Analyzer reference](analyzers.md).
+`robots`, `sitemap`, `structured`, `perf`, the SEA analyzers `utm`, `tracking`, `landing`, and
+the AI-search analyzers `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
 
 ```sh
 # Only SEO, links, and redirects
@@ -82,6 +83,18 @@ gocrawl crawl https://example.com --analyzers seo,links,redirects
 ```yaml
 analyzers:
   disabled: ["perf"]   # run everything except perf
+```
+
+### Specialized AI-search checks
+
+`analyzers.specialized` (or the `--specialized` flag) is independent of the allow/deny lists.
+It turns on two opt-in, lower-confidence AI-search heuristics that are off by default —
+`aeo-no-answer-lead` and `geo-low-quotable-density`. The `aeo` and `geo` analyzers always run
+their other checks; this toggle only adds these two. See the
+[Specialized AI-search checks](analyzers.md#specialized-ai-search-checks) note for details.
+
+```sh
+gocrawl crawl https://example.com --specialized
 ```
 
 ## Environment variables

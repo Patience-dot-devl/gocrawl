@@ -43,9 +43,12 @@ output:
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those
   # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf,
-  # and the SEA analyzers utm, tracking, landing.
+  # the SEA analyzers utm, tracking, landing, and the AI-search analyzers aeo, geo.
   enabled: []
   disabled: []
+  # Turn on the opt-in specialized AI-search heuristics (off by default):
+  # aeo-no-answer-lead and geo-low-quotable-density.
+  specialized: false
 `
 
 // WriteExample writes the example configuration to path, refusing to overwrite an existing

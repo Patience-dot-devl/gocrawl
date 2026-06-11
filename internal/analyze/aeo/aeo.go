@@ -34,14 +34,31 @@ const (
 )
 
 // Analyzer scores a page's readiness to be quoted by answer engines.
-type Analyzer struct{}
+type Analyzer struct {
+	// answerLead enables the opt-in direct-answer-lead check (aeo-no-answer-lead). It is a
+	// lower-confidence heuristic, off by default; see Option.
+	answerLead bool
+}
 
-// New returns an AEO analyzer.
-func New() *Analyzer { return &Analyzer{} }
+// Option configures an AEO analyzer.
+type Option func(*Analyzer)
+
+// WithAnswerLead enables the opt-in direct-answer-lead check (aeo-no-answer-lead), which is
+// off by default.
+func WithAnswerLead(on bool) Option { return func(a *Analyzer) { a.answerLead = on } }
+
+// New returns an AEO analyzer configured by opts.
+func New(opts ...Option) *Analyzer {
+	a := &Analyzer{}
+	for _, o := range opts {
+		o(a)
+	}
+	return a
+}
 
 func (Analyzer) Name() string { return "aeo" }
 func (Analyzer) Description() string {
-	return "Answer Engine Optimization: FAQ/HowTo structured data, question headings, concise answers, snippet-friendly formatting"
+	return "Answer Engine Optimization: FAQ/HowTo structured data, question headings, concise answers, direct-answer lead, snippet-friendly formatting"
 }
 
 func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
@@ -84,6 +101,21 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	if len(questions) >= minQuestionsForFAQ && len(answerSchemas) == 0 {
 		add(analyze.Warning, "aeo-faq-candidate", "Page has question-style headings but no FAQPage/QAPage structured data",
 			map[string]any{"questions": questions})
+	}
+
+	// A question-titled page should answer concisely up front. A missing lead paragraph, or one
+	// too long to be a direct answer, buries what snippets and voice results pull from. Opt-in:
+	// this heuristic is off unless the analyzer was built WithAnswerLead.
+	if h1 := collapse(doc.Find("h1").First().Text()); a.answerLead && isQuestion(h1) {
+		content := doc.Find("main, article").First()
+		if content.Length() == 0 {
+			content = doc.Find("body").First()
+		}
+		lead := collapse(content.Find("p").First().Text())
+		if leadWords := len(strings.Fields(lead)); leadWords == 0 || leadWords > maxAnswerWords {
+			add(analyze.Info, "aeo-no-answer-lead", "Question-titled page does not open with a concise direct answer",
+				map[string]any{"title": h1, "lead_words": leadWords})
+		}
 	}
 
 	// Substantial long-form content with no lists or tables is harder for answer engines to

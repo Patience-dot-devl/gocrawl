@@ -41,6 +41,8 @@ func runInteractive(cmd *cobra.Command) error {
 		render     = cfg.Render
 		format     = cfg.Output.Format
 		outputPath = cfg.Output.Path
+
+		specialized = cfg.Analyzers.Specialized
 	)
 	if render == "" {
 		render = "raw"
@@ -97,6 +99,10 @@ func runInteractive(cmd *cobra.Command) error {
 				Description("Space to toggle; all run by default.").
 				Options(analyzerOpts...).
 				Value(&selected),
+			huh.NewConfirm().
+				Title("Enable specialized AI-search checks?").
+				Description("Opt-in heuristics: AEO answer-lead and GEO quotable-density.").
+				Value(&specialized),
 		),
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -128,6 +134,7 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Render = render
 	cfg.Output.Format = format
 	cfg.Output.Path = strings.TrimSpace(outputPath)
+	cfg.Analyzers.Specialized = specialized
 
 	// An empty Enabled list means "run all"; only set it when a strict subset is chosen.
 	if len(selected) > 0 && len(selected) < len(all) {

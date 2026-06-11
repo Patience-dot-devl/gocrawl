@@ -10,9 +10,11 @@
 package geo
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -43,28 +45,59 @@ var articleTypes = map[string]bool{
 	"ScholarlyArticle": true, "Report": true, "Review": true,
 }
 
-// minProseWords gates the main-landmark check so it only fires on content-heavy pages.
+// minProseWords gates the content-heavy checks (main landmark, JS-dependency, quotable
+// density) so they only fire on pages with enough prose to judge.
 const minProseWords = 300
+
+// maxRawShareForJSDependent is the largest fraction of the rendered prose that the pre-JS
+// HTML may contain before the page counts as JS-dependent. Below this, a non-executing AI
+// crawler sees less than half the content the browser does.
+const maxRawShareForJSDependent = 0.5
+
+// minQuotablePer100Words is the floor for concrete, citable data points (numbers, percentages,
+// currency) per 100 words of prose. Content below it reads as opinion or fluff with little for
+// an answer engine to attribute, so it is a weaker citation candidate.
+const minQuotablePer100Words = 0.5
+
+// quotableRe matches concrete data points LLMs preferentially cite: currency amounts,
+// percentages, and plain or grouped numbers (years, counts, measurements).
+var quotableRe = regexp.MustCompile(`[$€£¥]\s?\d[\d,.]*|\d[\d,.]*\s?%|\b\d[\d,.]*\b`)
 
 // Analyzer reports on AI-crawler access and content citability. It fetches /llms.txt with the
 // given fetcher, regardless of the crawl's render mode.
 type Analyzer struct {
 	fetcher crawler.Fetcher
+	// quotableDensity enables the opt-in quotable-data-density check (geo-low-quotable-density).
+	// It is a lower-confidence heuristic, off by default; see Option.
+	quotableDensity bool
 }
 
-// New returns a GEO analyzer that fetches /llms.txt with the given fetcher.
-func New(fetcher crawler.Fetcher) *Analyzer { return &Analyzer{fetcher: fetcher} }
+// Option configures a GEO analyzer.
+type Option func(*Analyzer)
+
+// WithQuotableDensity enables the opt-in quotable-data-density check (geo-low-quotable-density),
+// which is off by default.
+func WithQuotableDensity(on bool) Option { return func(a *Analyzer) { a.quotableDensity = on } }
+
+// New returns a GEO analyzer that fetches /llms.txt with the given fetcher, configured by opts.
+func New(fetcher crawler.Fetcher, opts ...Option) *Analyzer {
+	a := &Analyzer{fetcher: fetcher}
+	for _, o := range opts {
+		o(a)
+	}
+	return a
+}
 
 func (Analyzer) Name() string { return "geo" }
 func (Analyzer) Description() string {
-	return "Generative Engine Optimization: AI-crawler robots.txt policy, /llms.txt presence, author/date/main-content citability signals"
+	return "Generative Engine Optimization: AI-crawler robots.txt policy, /llms.txt presence, author/date/main-content citability, JS-dependent content, and quotable-data density"
 }
 
 func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze.Issue {
 	var issues []analyze.Issue
 	issues = append(issues, a.crawlerPolicy(result)...)
 	issues = append(issues, a.llmsTxt(ctx, result)...)
-	issues = append(issues, analyze.EachPage(result, analyzePage)...)
+	issues = append(issues, analyze.EachPage(result, a.analyzePage)...)
 	return issues
 }
 
@@ -123,7 +156,7 @@ func (a Analyzer) llmsTxt(ctx context.Context, result *crawler.Result) []analyze
 	}}
 }
 
-func analyzePage(p *crawler.Page) []analyze.Issue {
+func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	if !p.IsHTML() || p.StatusCode != 200 {
 		return nil
 	}
@@ -145,15 +178,51 @@ func analyzePage(p *crawler.Page) []analyze.Issue {
 		}
 	}
 
+	proseWords := countProseWords(doc)
+
 	// A main-content landmark lets answer engines isolate the answer from chrome.
-	if doc.Find("main, article").Length() == 0 {
-		if words := len(strings.Fields(doc.Find("p, li").Text())); words >= minProseWords {
-			add(analyze.Info, "geo-no-main-landmark", "Content-heavy page has no <main> or <article> landmark",
-				map[string]any{"words": words})
+	if doc.Find("main, article").Length() == 0 && proseWords >= minProseWords {
+		add(analyze.Info, "geo-no-main-landmark", "Content-heavy page has no <main> or <article> landmark",
+			map[string]any{"words": proseWords})
+	}
+
+	// Content that only appears after JavaScript runs is invisible to most AI crawlers, which
+	// fetch raw HTML without executing scripts. RawBody is populated only in headless mode.
+	if proseWords >= minProseWords && len(p.RawBody) > 0 {
+		if rawDoc, err := goquery.NewDocumentFromReader(bytes.NewReader(p.RawBody)); err == nil {
+			rawWords := countProseWords(rawDoc)
+			if float64(rawWords) < maxRawShareForJSDependent*float64(proseWords) {
+				add(analyze.Info, "geo-js-dependent-content",
+					"Most page content appears only after JavaScript runs; non-executing AI crawlers will miss it",
+					map[string]any{"rendered_words": proseWords, "raw_words": rawWords})
+			}
+		}
+	}
+
+	// Concrete, attributable facts (numbers, stats, dates) are what answer engines quote.
+	// Prose with almost none is a weaker citation candidate. Opt-in: this heuristic is off
+	// unless the analyzer was built WithQuotableDensity.
+	if a.quotableDensity && proseWords >= minProseWords {
+		dataPoints := len(quotableRe.FindAllString(proseText(doc), -1))
+		if float64(dataPoints) < minQuotablePer100Words*float64(proseWords)/100 {
+			add(analyze.Info, "geo-low-quotable-density",
+				"Content-heavy page has few concrete, citable data points (numbers, stats, dates)",
+				map[string]any{"words": proseWords, "data_points": dataPoints})
 		}
 	}
 
 	return issues
+}
+
+// proseText returns the page's main prose (paragraph and list text) collapsed to single spaces.
+func proseText(doc *goquery.Document) string {
+	return strings.Join(strings.Fields(doc.Find("p, li").Text()), " ")
+}
+
+// countProseWords counts words of paragraph and list prose, the same content basis used across
+// the GEO content checks.
+func countProseWords(doc *goquery.Document) int {
+	return len(strings.Fields(doc.Find("p, li").Text()))
 }
 
 // isArticle reports whether the page presents as editorial content, via an <article> element

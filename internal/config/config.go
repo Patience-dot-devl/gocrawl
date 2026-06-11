@@ -49,6 +49,10 @@ type OutputConfig struct {
 type AnalyzersConfig struct {
 	Enabled  []string `mapstructure:"enabled"`
 	Disabled []string `mapstructure:"disabled"`
+	// Specialized turns on opt-in, lower-confidence AI-search checks that are off by default
+	// (the AEO direct-answer-lead and GEO quotable-density heuristics). They live in the aeo
+	// and geo analyzers but only fire when this is set.
+	Specialized bool `mapstructure:"specialized"`
 }
 
 // Default returns the built-in default configuration.

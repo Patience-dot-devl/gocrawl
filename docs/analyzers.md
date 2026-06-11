@@ -265,10 +265,16 @@ a **question** when it ends with `?` or opens with an interrogative (how, what, 
 | `aeo-answer-schema` | info | Page has `FAQPage`, `QAPage`, `HowTo`, or `Question` JSON-LD (a positive signal) | `types` |
 | `aeo-faq-candidate` | warning | At least 3 question-style headings but no `FAQPage`/`QAPage` structured data | `questions` |
 | `aeo-answer-too-long` | info | The text following a question heading exceeds 60 words (long for a snippet) | `question`, `answer_words` |
+| `aeo-no-answer-lead` ⚙︎ | info | The `<h1>` is a question but the lead paragraph is missing or exceeds 60 words (the answer is buried, not led) | `title`, `lead_words` |
 | `aeo-no-list-format` | info | A `<main>`/`<article>` region has ≥300 words but no list or table to extract | `words` |
 
 > The answer following a question heading is measured as the heading's sibling content up to
-> the next heading, so the snippet-length check works best on conventional article markup.
+> the next heading, so the snippet-length check works best on conventional article markup. The
+> lead paragraph for `aeo-no-answer-lead` is the first `<p>` inside `<main>`/`<article>` (or the
+> body when neither is present).
+>
+> ⚙︎ `aeo-no-answer-lead` is an **opt-in specialized check**, off by default. Turn it on with
+> `--specialized` (or `analyzers.specialized: true` in YAML). See [the note below](#specialized-ai-search-checks).
 
 ---
 
@@ -288,6 +294,8 @@ page.
 | `geo-missing-author` | info | An article-like page (`<article>` or `Article`/`BlogPosting`/… JSON-LD) has no author attribution | — |
 | `geo-missing-date` | info | An article-like page has no published or modified date | — |
 | `geo-no-main-landmark` | info | A page with ≥300 words of prose has no `<main>` or `<article>` landmark | `words` |
+| `geo-js-dependent-content` | info | Under `--render headless`, the pre-JS HTML holds less than half the rendered prose (≥300 words), so non-executing AI crawlers miss most content | `rendered_words`, `raw_words` |
+| `geo-low-quotable-density` ⚙︎ | info | A page with ≥300 words of prose has fewer than ~0.5 concrete data points (numbers, stats, dates) per 100 words | `words`, `data_points` |
 
 > AI crawlers checked include `GPTBot`, `OAI-SearchBot`, `ChatGPT-User`, `ClaudeBot`,
 > `anthropic-ai`, `PerplexityBot`, `Google-Extended`, `Applebot-Extended`, `CCBot`,
@@ -295,6 +303,38 @@ page.
 > `geo-ai-crawler-blocked` is informational — it surfaces a policy that is often set
 > unintentionally. Author/date attribution is read from JSON-LD, `rel`/`itemprop="author"`,
 > `<meta name="author">`, `<time datetime>`, and OpenGraph `article:*` tags.
+>
+> `geo-js-dependent-content` only runs under `--render headless`: the renderer captures the
+> raw pre-JS HTML alongside the post-JS DOM and compares the prose each contains. In raw crawl
+> mode there is nothing to compare, so the check is silent. "Prose" for both this check and
+> `geo-low-quotable-density` is the text of `<p>` and `<li>` elements.
+>
+> ⚙︎ `geo-low-quotable-density` is an **opt-in specialized check**, off by default. See
+> [the note below](#specialized-ai-search-checks).
+
+---
+
+## Specialized AI-search checks
+
+Two of the AI-search checks — `aeo-no-answer-lead` and `geo-low-quotable-density` (marked ⚙︎
+above) — are deliberately fuzzier heuristics. They judge editorial quality (does the page lead
+with a direct answer? does it cite concrete facts?) rather than a hard technical fault, so they
+are **off by default** and run only on demand:
+
+```bash
+# CLI flag
+gocrawl crawl https://example.com --specialized
+```
+
+```yaml
+# YAML config
+analyzers:
+  specialized: true
+```
+
+The MCP `crawl` tool exposes the same toggle as a `specialized` boolean. When off, the `aeo`
+and `geo` analyzers still run all of their default checks — only these two heuristics are
+suppressed.
 
 ---
 

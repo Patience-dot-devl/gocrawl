@@ -26,8 +26,10 @@ import (
 )
 
 // BuildRegistry constructs the default analyzer registry. The fetcher is used by analyzers
-// that retrieve additional resources (e.g. the sitemap analyzer).
-func BuildRegistry(fetcher crawler.Fetcher) *analyze.Registry {
+// that retrieve additional resources (e.g. the sitemap analyzer). When specialized is true,
+// the opt-in, lower-confidence AI-search heuristics (AEO direct-answer-lead, GEO
+// quotable-density) are turned on; otherwise they stay silent.
+func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry {
 	r := analyze.NewRegistry()
 	r.Register(seo.New())
 	r.Register(httpx.New())
@@ -41,8 +43,8 @@ func BuildRegistry(fetcher crawler.Fetcher) *analyze.Registry {
 	r.Register(tracking.New())
 	r.Register(landing.New())
 	// AI-search analyzers: Answer Engine and Generative Engine Optimization.
-	r.Register(aeo.New())
-	r.Register(geo.New(fetcher))
+	r.Register(aeo.New(aeo.WithAnswerLead(specialized)))
+	r.Register(geo.New(fetcher, geo.WithQuotableDensity(specialized)))
 	return r
 }
 
@@ -54,7 +56,7 @@ type AnalyzerInfo struct {
 
 // ListAnalyzers returns metadata for every registered analyzer.
 func ListAnalyzers() []AnalyzerInfo {
-	reg := BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()))
+	reg := BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()), false)
 	var out []AnalyzerInfo
 	for _, a := range reg.All() {
 		out = append(out, AnalyzerInfo{Name: a.Name(), Description: a.Description()})
@@ -100,7 +102,7 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	}
 
 	// Sitemap analyzer fetches with a raw fetcher regardless of render mode.
-	reg := BuildRegistry(crawler.NewHTTPFetcher(opts))
+	reg := BuildRegistry(crawler.NewHTTPFetcher(opts), cfg.Analyzers.Specialized)
 	analyzers := reg.Select(cfg.Analyzers.Enabled, cfg.Analyzers.Disabled)
 	issues := analyze.Run(ctx, analyzers, result)
 

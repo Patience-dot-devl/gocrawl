@@ -23,6 +23,7 @@ type CrawlInput struct {
 	Concurrency   *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
 	Render        string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
 	Analyzers     []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
+	Specialized   *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density); off by default"`
 	RespectRobots *bool    `json:"respect_robots,omitempty" jsonschema:"Obey robots.txt while crawling (default true)"`
 	Subdomains    *bool    `json:"subdomains,omitempty" jsonschema:"Follow links to subdomains of the seed host"`
 	Include       []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
@@ -88,6 +89,9 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 		cfg.Crawl.AllowSubdomains = *in.Subdomains
 	}
 	cfg.Analyzers.Enabled = in.Analyzers
+	if in.Specialized != nil {
+		cfg.Analyzers.Specialized = *in.Specialized
+	}
 	cfg.Crawl.Include = in.Include
 	cfg.Crawl.Exclude = in.Exclude
 

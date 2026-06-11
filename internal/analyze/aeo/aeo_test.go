@@ -25,6 +25,12 @@ func run(t *testing.T, html string) []analyze.Issue {
 	return aeo.New().Analyze(context.Background(), page(t, html))
 }
 
+// runSpecialized runs with the opt-in direct-answer-lead heuristic enabled.
+func runSpecialized(t *testing.T, html string) []analyze.Issue {
+	t.Helper()
+	return aeo.New(aeo.WithAnswerLead(true)).Analyze(context.Background(), page(t, html))
+}
+
 func find(issues []analyze.Issue, code string) (analyze.Issue, bool) {
 	for _, is := range issues {
 		if is.Code == code {
@@ -114,6 +120,48 @@ func TestListFormatPresent(t *testing.T) {
 	issues := run(t, `<html><body><main><p>`+prose+`</p><ul><li>one</li><li>two</li></ul></main></body></html>`)
 	if _, ok := find(issues, "aeo-no-list-format"); ok {
 		t.Error("aeo-no-list-format should not fire when a list is present")
+	}
+}
+
+func TestNoAnswerLeadWhenLeadTooLong(t *testing.T) {
+	longLead := strings.Repeat("word ", 70)
+	issues := runSpecialized(t, `<html><body><h1>What is gocrawl?</h1><main><p>`+longLead+`</p></main></body></html>`)
+	is, ok := find(issues, "aeo-no-answer-lead")
+	if !ok {
+		t.Fatal("expected aeo-no-answer-lead when a question-titled page buries the answer")
+	}
+	if w, _ := is.Data["lead_words"].(int); w <= 60 {
+		t.Errorf("expected >60 lead words, got %v", w)
+	}
+}
+
+func TestNoAnswerLeadWhenLeadMissing(t *testing.T) {
+	issues := runSpecialized(t, `<html><body><h1>How do I install it?</h1><main><ul><li>step</li></ul></main></body></html>`)
+	if _, ok := find(issues, "aeo-no-answer-lead"); !ok {
+		t.Error("expected aeo-no-answer-lead when a question-titled page has no lead paragraph")
+	}
+}
+
+func TestAnswerLeadConciseNotFlagged(t *testing.T) {
+	issues := runSpecialized(t, `<html><body><h1>What is gocrawl?</h1><main><p>A command-line SEO crawler.</p></main></body></html>`)
+	if _, ok := find(issues, "aeo-no-answer-lead"); ok {
+		t.Error("a concise lead answer should not be flagged")
+	}
+}
+
+func TestNoAnswerLeadSkippedForNonQuestionTitle(t *testing.T) {
+	longLead := strings.Repeat("word ", 70)
+	issues := runSpecialized(t, `<html><body><h1>Product overview</h1><main><p>`+longLead+`</p></main></body></html>`)
+	if _, ok := find(issues, "aeo-no-answer-lead"); ok {
+		t.Error("aeo-no-answer-lead should only apply to question-titled pages")
+	}
+}
+
+func TestAnswerLeadOffByDefault(t *testing.T) {
+	longLead := strings.Repeat("word ", 70)
+	issues := run(t, `<html><body><h1>What is gocrawl?</h1><main><p>`+longLead+`</p></main></body></html>`)
+	if _, ok := find(issues, "aeo-no-answer-lead"); ok {
+		t.Error("aeo-no-answer-lead is opt-in and must not fire without WithAnswerLead")
 	}
 }
 

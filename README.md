@@ -95,7 +95,7 @@ It exposes two tools:
 
 - **`crawl`** — run a crawl + analysis and return a structured JSON report. Arguments:
   `url` (required), `depth`, `max_pages`, `concurrency`, `render`, `analyzers`,
-  `respect_robots`, `subdomains`, `include`, `exclude`.
+  `specialized`, `respect_robots`, `subdomains`, `include`, `exclude`.
 - **`list_analyzers`** — list the available analyzers.
 
 Register it with an MCP client. For example, Claude Code:
@@ -139,6 +139,7 @@ Key crawl options:
 | Subdomains | `--subdomains` | Follow links to subdomains of the seed |
 | Output | `--out` / `--format` | File path and `json` / `csv` / `html` |
 | Analyzers | `--analyzers` | Comma-separated allow-list |
+| Specialized checks | `--specialized` | Enable opt-in AI-search heuristics (off by default) |
 
 ## Analyzers (v1)
 
@@ -154,10 +155,12 @@ Key crawl options:
 | `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
 | `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
 | `landing` | **SEA** — landing-page relevance: campaign-keyword alignment + indexability/HTTPS/title/H1 |
-| `aeo` | **AI search** — Answer Engine Optimization: FAQ/HowTo structured data, question headings, concise answers, snippet-friendly formatting |
-| `geo` | **AI search** — Generative Engine Optimization: AI-crawler `robots.txt` policy, `/llms.txt` presence, author/date/main-content citability |
+| `aeo` | **AI search** — Answer Engine Optimization: FAQ/HowTo structured data, question headings, concise answers, direct-answer lead, snippet-friendly formatting |
+| `geo` | **AI search** — Generative Engine Optimization: AI-crawler `robots.txt` policy, `/llms.txt` presence, author/date/main-content citability, JS-dependent content, quotable-data density |
 
-See [docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and threshold.
+The `aeo` direct-answer-lead and `geo` quotable-density checks are **opt-in** specialized
+heuristics, off by default; enable them with `--specialized`. See
+[docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and threshold.
 
 ## How it works
 

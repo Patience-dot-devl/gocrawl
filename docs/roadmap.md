@@ -22,8 +22,11 @@ The current baseline. Everything here works today.
   set `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
 - **Headless rendering (chromedp)** — `--render headless` (or `render: headless` in YAML)
   renders pages in a real Chromium tab via [chromedp][chromedp], capturing the post-JS DOM
-  for downstream analyzers. Requires a Chromium-class browser on PATH; falls back to a raw
-  HTTP fetch per page on rendering error so a single broken page doesn't stall the crawl.
+  for downstream analyzers. It also captures the raw pre-JS HTML alongside the rendered DOM so
+  the [`geo`](analyzers.md#geo--generative-engine-optimization-ai-search) analyzer can flag
+  JavaScript-dependent content that non-executing AI crawlers miss. Requires a Chromium-class
+  browser on PATH; falls back to a raw HTTP fetch per page on rendering error so a single
+  broken page doesn't stall the crawl.
 - **Lab-mode Core Web Vitals** — the [`perf`](analyzers.md#perf--core-web-vitals) analyzer
   reports real LCP, FCP, CLS, TBT, and TTFB from the headless renderer against Google's
   thresholds. INP is field-only and not directly measurable in synthetic crawls; gocrawl
