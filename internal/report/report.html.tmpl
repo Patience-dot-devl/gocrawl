@@ -5,64 +5,106 @@
 <title>gocrawl report — {{.Seed}}</title>
 <style>
   :root {
-    --fg: #1f2328;
-    --muted: #59636e;
-    --bg: #ffffff;
-    --panel: #f6f8fa;
-    --border: #d0d7de;
-    --error: #cf222e;
-    --warning: #9a6700;
-    --info: #0969da;
+    --fg:#1f2328; --muted:#59636e; --bg:#f4f6f9; --panel:#ffffff;
+    --border:#d8dee4; --error:#cf222e; --warning:#9a6700; --info:#0969da;
+    --error-bg:#ffeef0; --warning-bg:#fff8e6; --info-bg:#ddf4ff;
+    --shadow:0 1px 3px rgba(27,31,36,.08),0 1px 2px rgba(27,31,36,.06);
   }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
   body {
-    margin: 0;
-    padding: 2rem;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    color: var(--fg);
-    background: var(--bg);
-    line-height: 1.5;
+    margin:0; padding:0; color:var(--fg); background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    line-height:1.5; font-size:14px;
   }
-  main { max-width: 64rem; margin: 0 auto; }
-  h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
-  h2 { margin: 2rem 0 0.75rem; font-size: 1.15rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
-  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
-  .meta code { font-size: 0.9rem; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; }
-  .card h3 { margin: 0 0 0.5rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-  .card table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-  .card td { padding: 0.15rem 0; }
-  .card td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-  table.issues { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-  table.issues th, table.issues td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
-  table.issues th { background: var(--panel); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
-  table.issues td.url { word-break: break-all; }
-  table.issues td.url a { color: var(--info); text-decoration: none; }
-  table.issues td.url a:hover { text-decoration: underline; }
-  table.issues td code { font-size: 0.85rem; background: var(--panel); padding: 0.1rem 0.35rem; border-radius: 3px; }
-  .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #fff; }
-  .badge.sev-error { background: var(--error); }
-  .badge.sev-warning { background: var(--warning); }
-  .badge.sev-info { background: var(--info); }
-  details { margin-top: 0.35rem; }
-  details summary { cursor: pointer; color: var(--muted); font-size: 0.8rem; }
-  details pre { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.75rem; margin: 0.35rem 0 0; font-size: 0.8rem; overflow-x: auto; }
-  details.explain dl { margin: 0.35rem 0 0; padding: 0.5rem 0.75rem; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; font-size: 0.82rem; }
-  details.explain dt { font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.7rem; margin-top: 0.5rem; }
-  details.explain dt:first-child { margin-top: 0; }
-  details.explain dd { margin: 0.15rem 0 0; }
-  .empty { color: var(--muted); font-style: italic; }
+  main { max-width:90rem; margin:0 auto; padding:0 1.5rem 4rem; }
+  header.hero {
+    background:linear-gradient(135deg,#0d1117 0%,#1f2937 100%);
+    color:#fff; padding:2rem 1.5rem; margin-bottom:1.5rem;
+  }
+  header.hero .inner { max-width:90rem; margin:0 auto; }
+  header.hero h1 { margin:0; font-size:1.6rem; letter-spacing:-.01em; }
+  header.hero .sub { margin-top:.5rem; color:#aeb7c2; font-size:.9rem; }
+  header.hero .sub code { background:rgba(255,255,255,.12); padding:.1rem .45rem; border-radius:4px; color:#e6edf3; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:1rem; margin-bottom:1.75rem; }
+  .tile { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem 1.15rem; box-shadow:var(--shadow); }
+  .tile .n { font-size:2rem; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; }
+  .tile .l { margin-top:.4rem; color:var(--muted); font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  .tile.t-error { border-top:3px solid var(--error); } .tile.t-error .n { color:var(--error); }
+  .tile.t-warning { border-top:3px solid var(--warning); } .tile.t-warning .n { color:var(--warning); }
+  .tile.t-info { border-top:3px solid var(--info); } .tile.t-info .n { color:var(--info); }
+  .tile.t-total { border-top:3px solid #6e7781; }
+  h2 { margin:2rem 0 .9rem; font-size:1.2rem; letter-spacing:-.01em; }
+  .cards { display:flex; flex-wrap:wrap; gap:1rem; }
+  .card { flex:1 1 16rem; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem 1.15rem; box-shadow:var(--shadow); }
+  .card h3 { margin:0 0 .65rem; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  .card table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  .card td { padding:.25rem 0; border-bottom:1px solid #eef1f4; }
+  .card tr:last-child td { border-bottom:0; }
+  .card td:last-child { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+  .empty { color:var(--muted); font-style:italic; }
+  .toolbar {
+    display:flex; flex-wrap:wrap; gap:.6rem; align-items:center;
+    background:var(--bg); padding:.85rem 0; border-bottom:1px solid var(--border);
+  }
+  .toolbar input[type=search] {
+    flex:1 1 18rem; min-width:12rem; padding:.5rem .75rem; font-size:.9rem;
+    border:1px solid var(--border); border-radius:8px; background:#fff;
+  }
+  .toolbar select { padding:.5rem .6rem; border:1px solid var(--border); border-radius:8px; background:#fff; font-size:.9rem; }
+  .sevfilters { display:flex; gap:.4rem; }
+  .sevbtn {
+    cursor:pointer; border:1px solid var(--border); background:#fff; color:var(--muted);
+    padding:.45rem .7rem; border-radius:8px; font-size:.82rem; font-weight:600; opacity:.55;
+  }
+  .sevbtn.active { opacity:1; }
+  .sevbtn.sev-error.active { background:var(--error-bg); border-color:var(--error); color:var(--error); }
+  .sevbtn.sev-warning.active { background:var(--warning-bg); border-color:var(--warning); color:var(--warning); }
+  .sevbtn.sev-info.active { background:var(--info-bg); border-color:var(--info); color:var(--info); }
+  .count { margin-left:auto; color:var(--muted); font-size:.85rem; font-variant-numeric:tabular-nums; }
+  .tablewrap { background:var(--panel); border:1px solid var(--border); border-top:0; border-radius:0 0 10px 10px; box-shadow:var(--shadow); overflow:hidden; }
+  table.issues { width:100%; border-collapse:collapse; font-size:.88rem; }
+  table.issues thead th {
+    position:sticky; top:0; z-index:20; text-align:left; padding:.6rem .8rem;
+    background:#eaeef2; color:var(--muted); font-size:.74rem; text-transform:uppercase;
+    letter-spacing:.04em; font-weight:700; border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  table.issues thead th.sortable { cursor:pointer; user-select:none; }
+  table.issues thead th.sortable:hover { color:var(--fg); }
+  table.issues thead th[data-dir=asc]::after { content:" \25B2"; font-size:.7em; }
+  table.issues thead th[data-dir=desc]::after { content:" \25BC"; font-size:.7em; }
+  table.issues tbody td { padding:.55rem .8rem; border-bottom:1px solid #eef1f4; vertical-align:top; }
+  table.issues tbody tr:nth-child(even) { background:#fafbfc; }
+  table.issues tbody tr:hover { background:#f0f6ff; }
+  table.issues tbody tr { border-left:3px solid transparent; }
+  table.issues td.url { word-break:break-all; max-width:24rem; }
+  table.issues td.url a { color:var(--info); text-decoration:none; }
+  table.issues td.url a:hover { text-decoration:underline; }
+  table.issues td code { font-size:.82rem; background:#f0f3f6; padding:.1rem .4rem; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .badge { display:inline-block; padding:.15rem .55rem; border-radius:999px; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+  .badge.sev-error { background:var(--error-bg); color:var(--error); }
+  .badge.sev-warning { background:var(--warning-bg); color:var(--warning); }
+  .badge.sev-info { background:var(--info-bg); color:var(--info); }
+  details { margin-top:.4rem; }
+  details summary { cursor:pointer; color:var(--info); font-size:.8rem; font-weight:600; }
+  details pre { background:#f6f8fa; border:1px solid var(--border); border-radius:6px; padding:.6rem .8rem; margin:.4rem 0 0; font-size:.8rem; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  details.explain dl { margin:.4rem 0 0; padding:.55rem .8rem; background:#f6f8fa; border:1px solid var(--border); border-left:3px solid var(--info); border-radius:6px; font-size:.85rem; }
+  details.explain dt { font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; font-size:.68rem; margin-top:.55rem; }
+  details.explain dt:first-child { margin-top:0; }
+  details.explain dd { margin:.15rem 0 0; color:var(--fg); }
 </style>
 </head>
 <body>
-<main>
+<header class="hero"><div class="inner">
   <h1>gocrawl report</h1>
-  <div class="meta">
-    Seed: <code>{{.Seed}}</code><br>
-    Crawled {{.PagesCrawled}} page{{if ne .PagesCrawled 1}}s{{end}}
+  <div class="sub">
+    Seed: <code>{{.Seed}}</code>
+    · {{.PagesCrawled}} page{{if ne .PagesCrawled 1}}s{{end}} crawled
     · started {{.StartedAt}} · finished {{.FinishedAt}}
   </div>
+</div></header>
+<main>
+  <div class="tiles" id="tiles"></div>
 
   <h2>Summary</h2>
   <div class="cards">
@@ -100,7 +142,9 @@
 
   <h2>Issues ({{len .Issues}})</h2>
   {{if .Issues}}
-  <table class="issues">
+  <div class="toolbar" id="toolbar"></div>
+  <div class="tablewrap">
+  <table class="issues" id="issuesTable">
     <thead>
       <tr><th>Severity</th><th>Analyzer</th><th>Code</th><th>URL</th><th>Message</th></tr>
     </thead>
@@ -132,9 +176,82 @@
       {{end}}
     </tbody>
   </table>
+  </div>
   {{else}}
   <p class="empty">No issues found.</p>
   {{end}}
 </main>
+<script>
+(function(){
+  var table=document.getElementById('issuesTable');
+  if(!table){return;}
+  var tbody=table.tBodies[0];
+  var rows=Array.prototype.slice.call(tbody.rows);
+  var rank={error:0,warning:1,info:2};
+  var counts={error:0,warning:0,info:0};
+  rows.forEach(function(r){
+    var b=r.querySelector('.badge');
+    r._sev=b?b.textContent.trim().toLowerCase():'';
+    r._an=r.cells[1]?r.cells[1].textContent.trim():'';
+    r._t=r.textContent.toLowerCase();
+    if(counts[r._sev]!=null){counts[r._sev]++;}
+    r.style.borderLeftColor=({error:'#cf222e',warning:'#9a6700',info:'#0969da'})[r._sev]||'transparent';
+  });
+  function tile(cls,n,l){return '<div class="tile '+cls+'"><div class="n">'+Number(n).toLocaleString()+'</div><div class="l">'+l+'</div></div>';}
+  var tiles=document.getElementById('tiles');
+  if(tiles){
+    tiles.innerHTML=
+      tile('t-total',rows.length,'Total issues')+
+      tile('t-error',counts.error,'Errors')+
+      tile('t-warning',counts.warning,'Warnings')+
+      tile('t-info',counts.info,'Info');
+  }
+  rows.sort(function(a,b){return (rank[a._sev]-rank[b._sev])||0;});
+  var f0=document.createDocumentFragment(); rows.forEach(function(r){f0.appendChild(r);}); tbody.appendChild(f0);
+  var ans={}; rows.forEach(function(r){if(r._an){ans[r._an]=1;}});
+  var anlist=Object.keys(ans).sort();
+  var tb=document.getElementById('toolbar');
+  tb.innerHTML='<input type="search" id="q" placeholder="Search URL, message, code…">'+
+    '<div class="sevfilters">'+
+      '<button data-sev="error" class="sevbtn sev-error active">Errors</button>'+
+      '<button data-sev="warning" class="sevbtn sev-warning active">Warnings</button>'+
+      '<button data-sev="info" class="sevbtn sev-info active">Info</button>'+
+    '</div>'+
+    '<select id="anSel"><option value="">All analyzers</option>'+
+      anlist.map(function(a){return '<option value="'+a+'">'+a+'</option>';}).join('')+
+    '</select>'+
+    '<span class="count" id="count"></span>';
+  var q=document.getElementById('q'),sel=document.getElementById('anSel'),ce=document.getElementById('count');
+  var on={error:true,warning:true,info:true};
+  function apply(){
+    var term=q.value.trim().toLowerCase(),an=sel.value,shown=0;
+    for(var i=0;i<rows.length;i++){var r=rows[i],ok=on[r._sev]!==false;
+      if(ok&&an&&r._an!==an){ok=false;}
+      if(ok&&term&&r._t.indexOf(term)===-1){ok=false;}
+      r.style.display=ok?'':'none'; if(ok){shown++;}}
+    ce.textContent='Showing '+shown.toLocaleString()+' of '+rows.length.toLocaleString()+' issues';
+  }
+  var t; q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(apply,150);});
+  sel.addEventListener('change',apply);
+  Array.prototype.forEach.call(tb.querySelectorAll('.sevbtn'),function(btn){
+    btn.addEventListener('click',function(){var s=btn.getAttribute('data-sev');on[s]=!on[s];btn.classList.toggle('active');apply();});
+  });
+  var ths=table.tHead.rows[0].cells,st={c:-1,d:1};
+  Array.prototype.forEach.call(ths,function(th,idx){
+    th.classList.add('sortable');
+    th.addEventListener('click',function(){
+      var d=(st.c===idx)?-st.d:1; st={c:idx,d:d};
+      rows.sort(function(a,b){var x,y;
+        if(idx===0){x=rank[a._sev];y=rank[b._sev];}
+        else{x=a.cells[idx].textContent.trim().toLowerCase();y=b.cells[idx].textContent.trim().toLowerCase();}
+        return x<y?-d:x>y?d:0;});
+      var fr=document.createDocumentFragment(); rows.forEach(function(r){fr.appendChild(r);}); tbody.appendChild(fr);
+      Array.prototype.forEach.call(ths,function(h){h.removeAttribute('data-dir');});
+      th.setAttribute('data-dir',d>0?'asc':'desc');
+    });
+  });
+  apply();
+})();
+</script>
 </body>
 </html>
