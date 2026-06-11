@@ -155,6 +155,9 @@ func runInteractive(cmd *cobra.Command) error {
 	if err := writeReport(cfg, rep); err != nil {
 		return err
 	}
+	for _, note := range rep.Notes {
+		fmt.Fprintln(os.Stderr, "note:", note)
+	}
 	for _, line := range rep.SummaryLines() {
 		fmt.Fprintln(os.Stderr, line)
 	}

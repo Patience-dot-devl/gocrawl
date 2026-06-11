@@ -33,8 +33,8 @@ crawl:
   follow_external: false   # crawl links that leave the seed host
   follow_nofollow: false   # follow links marked rel="nofollow"
   strip_query: false       # ignore query strings (treat ?a=1 and ?a=2 as one URL).
-                           # NOTE: enabling this strips utm_*/tracking params, so the
-                           # utm and tracking analyzers will have nothing to inspect.
+                           # NOTE: this drops query params, so the query-dependent analyzers
+                           # (utm, landing, wordpress) are automatically skipped while it is on.
   include: []           # only crawl URLs matching at least one of these regexes
   exclude:              # never crawl URLs matching any of these regexes
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
