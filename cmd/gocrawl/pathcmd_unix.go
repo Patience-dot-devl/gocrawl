@@ -96,7 +96,12 @@ func appendProfileLine(profile, line, dir string) (alreadyPresent bool, err erro
 	if err != nil {
 		return false, fmt.Errorf("opening %s: %w", tildeAbbrev(profile), err)
 	}
-	defer f.Close()
+	// Surface a flush error from Close, but don't let it mask an earlier write error.
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("closing %s: %w", tildeAbbrev(profile), cerr)
+		}
+	}()
 
 	block := fmt.Sprintf("\n# Added by gocrawl — make the gocrawl binary available on PATH\n%s\n", line)
 	if _, err := f.WriteString(block); err != nil {

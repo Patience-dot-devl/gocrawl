@@ -50,16 +50,16 @@ func runPath(cmd *cobra.Command, assumeYes bool) error {
 	}
 
 	if dirOnPath(dir) {
-		fmt.Fprintf(out, "%s is already on your PATH — nothing to do.\n", dir)
-		return nil
+		_, err := fmt.Fprintf(out, "%s is already on your PATH — nothing to do.\n", dir)
+		return err
 	}
 
 	// Without an interactive terminal we can't safely prompt, so don't touch anything —
 	// print the manual steps and exit cleanly, mirroring the bare-invocation fallback.
 	interactive := term.IsTerminal(int(os.Stdin.Fd()))
 	if !assumeYes && !interactive {
-		fmt.Fprint(out, manualInstructions(dir))
-		return nil
+		_, err := fmt.Fprint(out, manualInstructions(dir))
+		return err
 	}
 
 	if !assumeYes {
@@ -79,8 +79,8 @@ func runPath(cmd *cobra.Command, assumeYes bool) error {
 			return err
 		}
 		if !confirm {
-			fmt.Fprint(out, manualInstructions(dir))
-			return nil
+			_, err := fmt.Fprint(out, manualInstructions(dir))
+			return err
 		}
 	}
 
@@ -89,11 +89,11 @@ func runPath(cmd *cobra.Command, assumeYes bool) error {
 		return err
 	}
 	if upd.AlreadyPresent {
-		fmt.Fprintf(out, "%s is already configured in %s but not loaded yet.\n%s\n", dir, upd.Target, upd.Reload)
-		return nil
+		_, err := fmt.Fprintf(out, "%s is already configured in %s but not loaded yet.\n%s\n", dir, upd.Target, upd.Reload)
+		return err
 	}
-	fmt.Fprintf(out, "Added %s to %s.\n%s\n", dir, upd.Target, upd.Reload)
-	return nil
+	_, err = fmt.Fprintf(out, "Added %s to %s.\n%s\n", dir, upd.Target, upd.Reload)
+	return err
 }
 
 // binaryDir returns the absolute directory containing the running gocrawl binary, resolving
