@@ -60,6 +60,7 @@ type Page struct {
 	Header       http.Header       `json:"-"`
 	ContentType  string            `json:"content_type"`
 	Body         []byte            `json:"-"`
+	RawBody      []byte            `json:"-"` // pre-JS HTML captured during headless render; nil in raw mode
 	Doc          *goquery.Document `json:"-"` // nil if not HTML or parse failed
 	Redirects    []Redirect        `json:"redirects,omitempty"`
 	Links        []Link            `json:"-"`

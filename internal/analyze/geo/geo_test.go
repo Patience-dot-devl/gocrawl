@@ -41,6 +41,12 @@ func run(t *testing.T, res *crawler.Result) []analyze.Issue {
 	return geo.New(fakeFetcher{}).Analyze(context.Background(), res)
 }
 
+// runSpecialized runs with the opt-in quotable-density heuristic enabled.
+func runSpecialized(t *testing.T, res *crawler.Result) []analyze.Issue {
+	t.Helper()
+	return geo.New(fakeFetcher{}, geo.WithQuotableDensity(true)).Analyze(context.Background(), res)
+}
+
 func find(issues []analyze.Issue, code string) (analyze.Issue, bool) {
 	for _, is := range issues {
 		if is.Code == code {
@@ -127,5 +133,62 @@ func TestThinPageNoLandmarkWarning(t *testing.T) {
 	issues := run(t, pageResult(t, `<html><body><div><p>Short.</p></div></body></html>`))
 	if _, ok := find(issues, "geo-no-main-landmark"); ok {
 		t.Error("thin page should not trigger geo-no-main-landmark")
+	}
+}
+
+func TestJSDependentContent(t *testing.T) {
+	rendered := `<html><body><main><p>` + strings.Repeat("word ", 320) + `</p></main></body></html>`
+	raw := `<html><body><div id="root"></div></body></html>`
+	res := &crawler.Result{Pages: []*crawler.Page{{
+		FinalURL: "https://example.com/post", StatusCode: 200, ContentType: "text/html",
+		Doc: doc(t, rendered), RawBody: []byte(raw),
+	}}}
+	is, ok := find(run(t, res), "geo-js-dependent-content")
+	if !ok {
+		t.Fatal("expected geo-js-dependent-content when raw HTML lacks the rendered prose")
+	}
+	if rw, _ := is.Data["raw_words"].(int); rw != 0 {
+		t.Errorf("expected raw_words 0, got %v", rw)
+	}
+}
+
+func TestNotJSDependentWhenRawHasContent(t *testing.T) {
+	html := `<html><body><main><p>` + strings.Repeat("word ", 320) + `</p></main></body></html>`
+	res := &crawler.Result{Pages: []*crawler.Page{{
+		FinalURL: "https://example.com/post", StatusCode: 200, ContentType: "text/html",
+		Doc: doc(t, html), RawBody: []byte(html),
+	}}}
+	if _, ok := find(run(t, res), "geo-js-dependent-content"); ok {
+		t.Error("geo-js-dependent-content should not fire when raw HTML already has the content")
+	}
+}
+
+func TestJSDependentSkippedWithoutRawBody(t *testing.T) {
+	// Raw crawl mode leaves RawBody nil; the check has nothing to compare against.
+	issues := run(t, pageResult(t, `<html><body><main><p>`+strings.Repeat("word ", 320)+`</p></main></body></html>`))
+	if _, ok := find(issues, "geo-js-dependent-content"); ok {
+		t.Error("geo-js-dependent-content should not fire without RawBody")
+	}
+}
+
+func TestLowQuotableDensity(t *testing.T) {
+	issues := runSpecialized(t, pageResult(t, `<html><body><main><p>`+strings.Repeat("word ", 320)+`</p></main></body></html>`))
+	if _, ok := find(issues, "geo-low-quotable-density"); !ok {
+		t.Error("expected geo-low-quotable-density for content-heavy prose with no data points")
+	}
+}
+
+func TestQuotableDensitySufficient(t *testing.T) {
+	prose := strings.Repeat("In 2024 revenue rose 50% to $1200 across 30 markets. ", 30)
+	issues := runSpecialized(t, pageResult(t, `<html><body><main><p>`+prose+`</p></main></body></html>`))
+	if _, ok := find(issues, "geo-low-quotable-density"); ok {
+		t.Error("geo-low-quotable-density should not fire when prose is rich in concrete data")
+	}
+}
+
+func TestQuotableDensityOffByDefault(t *testing.T) {
+	issues := run(t, pageResult(t, `<html><body><main><p>`+strings.Repeat("word ", 320)+`</p></main></body></html>`))
+	if _, ok := find(issues, "geo-low-quotable-density"); ok {
+		t.Error("geo-low-quotable-density is opt-in and must not fire without WithQuotableDensity")
 	}
 }

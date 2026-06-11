@@ -124,6 +124,18 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 	stop := context.AfterFunc(ctx, runCancel)
 	defer stop()
 
+	// Fetch the pre-JS HTML in parallel with rendering so the GEO JS-dependency check can
+	// compare what a non-executing AI crawler sees against the post-JS DOM. This overlaps the
+	// render's settle time, so it adds little wall-clock; failure is non-fatal (RawBody stays nil).
+	rawCh := make(chan []byte, 1)
+	go func() {
+		if rawPage, rerr := h.raw.Fetch(ctx, rawURL); rerr == nil && rawPage != nil {
+			rawCh <- rawPage.Body
+			return
+		}
+		rawCh <- nil
+	}()
+
 	state := &navState{current: rawURL}
 	chromedp.ListenTarget(runCtx, func(ev interface{}) {
 		switch e := ev.(type) {
@@ -187,6 +199,7 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		FetchedAt:    start,
 		Duration:     time.Since(start),
 		Body:         []byte(htmlBody),
+		RawBody:      <-rawCh,
 		Redirects:    state.redirects,
 	}
 	state.mu.Lock()
