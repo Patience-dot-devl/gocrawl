@@ -4,10 +4,12 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships twelve analyzers, run in this registration order
+gocrawl ships twenty analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
-`seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`, `perf`, the SEA
-analyzers `utm`, `tracking`, `landing`, and the AI-search analyzers `aeo`, `geo`.
+the technical/on-page set `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
+`perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
+`content`, the SEA analyzers `utm`, `tracking`, `landing`, and the AI-search analyzers
+`aeo`, `geo`.
 
 List them at any time:
 
@@ -39,6 +41,9 @@ page that returned `200`.
 | `long-meta-description` | info | Description longer than 160 chars | `length` |
 | `meta-noindex` | warning | `<meta name="robots">` contains `noindex` | `robots` |
 | `meta-nofollow` | info | `<meta name="robots">` contains `nofollow` | `robots` |
+| `x-robots-noindex` | warning | The `X-Robots-Tag` HTTP header contains `noindex` | `x_robots_tag` |
+| `x-robots-nofollow` | info | The `X-Robots-Tag` HTTP header contains `nofollow` | `x_robots_tag` |
+| `meta-refresh` | warning | Page uses a `<meta http-equiv="refresh">` redirect (prefer an HTTP 3xx) | `content` |
 | `multiple-canonical` | warning | More than one `<link rel="canonical">` | — |
 | `missing-canonical` | info | No canonical link | — |
 | `missing-h1` | warning | No `<h1>` element | — |
@@ -84,6 +89,11 @@ references each page's outbound links against the crawled page set.
 | `link-to-redirect` | warning | Internal link points to a crawled page that redirects | `target`, `final` |
 | `empty-anchor` | info | The page has links with empty anchor text | `count` |
 | `link-summary` | info | Per-page link counts (always emitted when a page has links) | `total`, `external`, `nofollow` |
+| `inbound-links` | info | Per-page count of internal inbound links (emitted for every HTML `200` page) | `count`, `anchors` |
+
+> `inbound-links` counts internal links pointing **at** each page from other crawled pages
+> and samples up to ten distinct inbound anchor texts. A count of `0` flags a page nothing
+> internally links to (a possible orphan, subject to crawl scope).
 
 > Broken-link / link-to-redirect detection only covers internal links to URLs that were
 > **actually crawled**. Links outside the crawl scope (excluded, external, beyond max-depth,
@@ -137,6 +147,11 @@ blocks and reports their schema.org `@type` values (descending into `@graph` and
 | `invalid-jsonld` | warning | A JSON-LD block is not valid JSON | `error` |
 | `no-structured-data` | info | The page has no JSON-LD blocks | — |
 | `structured-data` | info | JSON-LD found; lists the de-duplicated `@type`s | `types` |
+| `structured-missing-required` | warning | A typed object of a recognized schema.org type omits a required field | `type`, `missing` |
+
+> Required-field validation covers a pragmatic subset of common types (`Product`, `Article`,
+> `Event`, `Organization`, `BreadcrumbList`, `FAQPage`, `Recipe`, …), not the full schema.org
+> vocabulary. It descends into `@graph` the same way type extraction does.
 
 ---
 
@@ -181,6 +196,136 @@ Runs in two modes depending on how the crawl was fetched:
 | `cwv-render-failed` | info | Headless rendering errored on a page; CWV unavailable for it | `note` |
 | `cwv-not-collected` | info | Raw-mode fallback (once on the seed) — reminds to enable `--render headless` | — |
 | `response-time` | info | Raw-mode per-page TTFB proxy from raw fetch duration | `duration_ms` |
+
+---
+
+## `images` — image alt text and dimensions
+
+Source: [`internal/analyze/images/images.go`](../internal/analyze/images/images.go). Runs on
+every HTML `200` page. Aggregates per page (one issue per code, not per image).
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `img-missing-alt` | warning | One or more `<img>` have no `alt` attribute at all | `count`, `sample` |
+| `img-missing-dimensions` | info | One or more `<img>` are missing a `width` or `height` attribute | `count` |
+
+> An explicit empty `alt=""` is **valid** for decorative images and is not flagged — only a
+> missing `alt` attribute counts. `sample` lists up to five offending `src` values. Broken or
+> oversized images are out of scope (they would require fetching the image bytes).
+
+---
+
+## `urls` — URL hygiene
+
+Source: [`internal/analyze/urls/urls.go`](../internal/analyze/urls/urls.go). Runs on every
+crawled page with a non-empty final URL (any status). At most one issue per code per page.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `url-uppercase` | info | The URL path contains uppercase ASCII letters | `url` |
+| `url-underscore` | info | The URL path contains an underscore (`_`) | `url` |
+| `url-non-ascii` | info | The URL contains non-ASCII characters | `url` |
+| `url-too-long` | info | The full URL is longer than 115 characters | `url`, `length` |
+
+---
+
+## `security` — security headers and insecure forms
+
+Source: [`internal/analyze/security/security.go`](../internal/analyze/security/security.go).
+Runs on every HTML `200` page. Header checks are skipped when no response headers were
+captured; the form check still runs.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `missing-hsts` | warning | An HTTPS page sends no `Strict-Transport-Security` header | — |
+| `missing-csp` | info | The page sends no `Content-Security-Policy` header | — |
+| `missing-x-content-type-options` | info | No `X-Content-Type-Options: nosniff` header | — |
+| `insecure-form` | warning | An HTTPS page has a `<form>` posting to an `http://` action | `action` |
+
+> Mixed subresource content is reported separately by the [`redirects`](#redirects--http-status-redirects-slow-responses-mixed-content)
+> analyzer (`mixed-content`); `security` focuses on response headers and form targets.
+
+---
+
+## `pagination` — rel=next/prev sequences
+
+Source: [`internal/analyze/pagination/pagination.go`](../internal/analyze/pagination/pagination.go).
+Runs on every HTML `200` page that declares `rel="next"` or `rel="prev"` head links.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `pagination-detected` | info | The page declares a `rel="next"` and/or `rel="prev"` link | `next`, `prev` |
+| `pagination-broken` | warning | A `next`/`prev` target was crawled and returns `>= 400` or redirects | `target`, `rel`, `status` |
+
+> `pagination-broken` only fires for targets that were actually crawled — same crawl-scope
+> caveat as the [`links`](#links--link-analysis) analyzer.
+
+---
+
+## `hreflang` — international targeting
+
+Source: [`internal/analyze/hreflang/hreflang.go`](../internal/analyze/hreflang/hreflang.go).
+Collects `<link rel="alternate" hreflang="…">` clusters across all HTML `200` pages, then
+validates each cluster (a two-pass analyzer, since reciprocity compares pages to each other).
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `hreflang-invalid-code` | warning | A `hreflang` value isn't a valid language / region code or `x-default` | `code` |
+| `hreflang-missing-x-default` | info | A cluster has no `x-default` entry | — |
+| `hreflang-missing-self` | info | No entry in the cluster points back to the page's own URL | — |
+| `hreflang-no-return-link` | warning | A page references a crawled target that does not link back (no reciprocal annotation) | `target` |
+
+> Valid codes match `xx` or `xx-XX` (plus `x-default`). Reciprocity and self-reference checks
+> resolve hrefs against the crawled page set, so they cover internally-reachable language
+> variants best.
+
+---
+
+## `amp` — Accelerated Mobile Pages
+
+Source: [`internal/analyze/amp/amp.go`](../internal/analyze/amp/amp.go). Runs on every HTML
+`200` page. A page is AMP when its `<html>` element carries an `amp` or `⚡` attribute.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `amp-detected` | info | The page is an AMP document | — |
+| `amp-missing-canonical` | warning | An AMP page has no `<link rel="canonical">` | — |
+| `amp-missing-runtime` | error | An AMP page does not load the AMP runtime (`https://cdn.ampproject.org/v0.js`) | — |
+| `amp-amphtml-linked` | info | A non-AMP page links to an AMP version via `<link rel="amphtml">` | `target` |
+| `amp-broken-amphtml` | warning | The linked `amphtml` target was crawled and returns `>= 400` or redirects | `target` |
+
+---
+
+## `duplicates` — duplicate content, titles, descriptions
+
+Source: [`internal/analyze/duplicates/duplicates.go`](../internal/analyze/duplicates/duplicates.go).
+A cross-page analyzer over all HTML `200` pages. Body comparison uses an MD5 hash of the
+whitespace-collapsed, lowercased `<body>` text.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `duplicate-content` | warning | Two or more pages share identical body content | `duplicates`, `group_size` |
+| `duplicate-title` | warning | Two or more pages share an identical `<title>` | `title`, `duplicates`, `group_size` |
+| `duplicate-meta-description` | info | Two or more pages share an identical meta description | `duplicates`, `group_size` |
+
+> One issue is emitted per page in each duplicate group; `duplicates` lists up to ten of the
+> other URLs in the group. Empty bodies/titles/descriptions are ignored.
+
+---
+
+## `content` — thin and below-average content
+
+Source: [`internal/analyze/content/content.go`](../internal/analyze/content/content.go). A
+cross-page analyzer: it counts `<body>` words per HTML `200` page and compares each page to
+the crawl's mean.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `thin-content` | warning | The page has fewer than 100 words | `words` |
+| `low-content` | info | The page has fewer than half the site-average word count (≥ 3 pages crawled; not already thin) | `words`, `site_average` |
+
+> `thin-content` uses an absolute 100-word floor; `low-content` is relative to the crawl
+> average and is suppressed on pages already flagged as thin, so the two never double-report.
 
 ---
 

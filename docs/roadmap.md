@@ -17,9 +17,18 @@ The current baseline. Everything here works today.
 - **Scope & politeness controls** — `robots.txt` compliance, rate limiting,
   include/exclude URL regexes, subdomain and external-link toggles, custom User-Agent.
 - **Redirect capture** — full redirect chains recorded per page, with loop detection.
-- **Twelve analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
-  `sitemap`, `structured`, `perf`, the SEA set `utm`, `tracking`, `landing`, and the AI-search
-  set `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
+- **Twenty analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
+  `sitemap`, `structured`, `perf`, the content & technical breadth set `images`, `urls`,
+  `security`, `pagination`, `hreflang`, `amp`, `duplicates`, `content`, the SEA set `utm`,
+  `tracking`, `landing`, and the AI-search set `aeo`, `geo`. See the
+  [Analyzer reference](analyzers.md).
+- **Screaming Frog parity — tier 1** — image alt/dimension checks (`images`), URL hygiene
+  (`urls`), security headers and insecure forms (`security`), `rel=next/prev` pagination
+  (`pagination`), hreflang validity and reciprocity (`hreflang`), AMP markup (`amp`), exact
+  duplicate content/titles/descriptions (`duplicates`), and thin-content detection
+  (`content`) — plus extensions to existing analyzers: `X-Robots-Tag`/meta-refresh directives
+  (`seo`), schema.org required-field validation (`structured`), and inbound link counts
+  (`links`). All added on the analyzer seam with no engine changes.
 - **Headless rendering (chromedp)** — `--render headless` (or `render: headless` in YAML)
   renders pages in a real Chromium tab via [chromedp][chromedp], capturing the post-JS DOM
   for downstream analyzers. It also captures the raw pre-JS HTML alongside the rendered DOM so
@@ -49,12 +58,42 @@ The current baseline. Everything here works today.
 
 No tracked items at the moment.
 
+## 📋 Planned — engine & data model
+
+Checks and capabilities that need post-crawl graph passes or richer crawl data before an
+analyzer can consume them.
+
+- **Internal Link Score** — PageRank-style score computed over the crawled link graph
+  (post-crawl graph pass feeding a new analyzer).
+- **Orphan pages** — URLs known from sitemaps (and, later, GA/GSC) but never reached by the
+  crawl. Partially served today by the [`sitemap`](analyzers.md) coverage check.
+- **Near-duplicate / semantic similarity** — cluster semantically similar or off-topic pages
+  via embeddings. A chance to lean on the LLM tooling already in the stack rather than copy
+  [Screaming Frog][sf]'s implementation.
+- **Custom extraction** — user-defined XPath / CSS-selector / regex extraction rules surfaced
+  in the report.
+- **Custom source search** — match arbitrary patterns against raw and rendered HTML.
+- **XML Sitemap generation** — emit a sitemap from the crawled URL set (gocrawl currently only
+  audits sitemaps).
+- **Accessibility & mobile usability** — axe/WCAG checks and Lighthouse mobile-usability
+  signals under headless rendering.
+
 ## 📋 Planned — platform
 
 Broader capabilities beyond individual checks.
 
+- **Persistent crawl storage** — save crawls to disk and reopen them. Prerequisite for crawl
+  comparison and scheduling below.
+- **Crawl comparison** — diff two crawls to track progress over time and map staging vs.
+  production.
+- **Scheduling & auto-export** — recurring crawls with automatic report export.
+- **API integrations** — Google Search Console (incl. URL Inspection), PageSpeed Insights /
+  CrUX, and backlink data (Ahrefs/Majestic/Moz). Subsumes the earlier "export integrations"
+  item.
+- **Authenticated crawling** — forms- and cookie-based auth to reach gated areas.
 - **Resumable crawls** — checkpoint and continue large crawls.
-- **Export integrations** — push results to external sinks/tools.
+
+[sf]: https://www.screamingfrog.co.uk/seo-spider/
 
 ---
 

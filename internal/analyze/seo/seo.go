@@ -77,6 +77,24 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		}
 	}
 
+	// X-Robots-Tag HTTP header directives (header-level equivalent of meta robots).
+	if p.Header != nil {
+		if xr := p.Header.Get("X-Robots-Tag"); xr != "" {
+			low := strings.ToLower(xr)
+			if strings.Contains(low, "noindex") {
+				add(analyze.Warning, "x-robots-noindex", "X-Robots-Tag header marks page noindex", map[string]any{"x_robots_tag": xr})
+			}
+			if strings.Contains(low, "nofollow") {
+				add(analyze.Info, "x-robots-nofollow", "X-Robots-Tag header marks page nofollow", map[string]any{"x_robots_tag": xr})
+			}
+		}
+	}
+
+	// Meta-refresh redirect (an HTTP 3xx redirect is preferred for SEO).
+	if content, ok := metaHTTPEquiv(doc, "refresh"); ok && strings.TrimSpace(content) != "" {
+		add(analyze.Warning, "meta-refresh", "Page uses a meta-refresh redirect (prefer an HTTP 3xx)", map[string]any{"content": content})
+	}
+
 	// Canonical.
 	if href, ok := doc.Find(`head link[rel="canonical"]`).First().Attr("href"); ok && strings.TrimSpace(href) != "" {
 		if doc.Find(`head link[rel="canonical"]`).Length() > 1 {

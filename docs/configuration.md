@@ -72,8 +72,9 @@ Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (se
 - Otherwise **all** analyzers run **except** any listed in `disabled`.
 
 The `--analyzers` CLI flag sets `enabled`. Analyzer names: `seo`, `redirects`, `links`,
-`robots`, `sitemap`, `structured`, `perf`, the SEA analyzers `utm`, `tracking`, `landing`, and
-the AI-search analyzers `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
+`robots`, `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`,
+`hreflang`, `amp`, `duplicates`, `content`, the SEA analyzers `utm`, `tracking`, `landing`,
+and the AI-search analyzers `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
 
 ```sh
 # Only SEO, links, and redirects
