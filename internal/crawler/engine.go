@@ -47,7 +47,7 @@ type task struct {
 
 // Crawl walks the site starting at seed and returns the collected Result.
 func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
-	seed = normalizeURL(seed)
+	seed = normalizeURL(seed, e.opts.StripQuery)
 	su, err := url.Parse(seed)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 
 	var enqueue func(t task)
 	enqueue = func(t task) {
-		norm := normalizeURL(t.url)
+		norm := normalizeURL(t.url, e.opts.StripQuery)
 		mu.Lock()
 		if visited[norm] {
 			mu.Unlock()
@@ -117,9 +117,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 
 			mu.Lock()
 			result.Pages = append(result.Pages, page)
-			result.index[normalizeURL(page.RequestedURL)] = page
+			result.index[normalizeURL(page.RequestedURL, e.opts.StripQuery)] = page
 			if page.FinalURL != "" {
-				result.index[normalizeURL(page.FinalURL)] = page
+				result.index[normalizeURL(page.FinalURL, e.opts.StripQuery)] = page
 			}
 			mu.Unlock()
 
@@ -184,7 +184,7 @@ func (e *Engine) extractLinks(page *Page) []Link {
 	var links []Link
 	page.Doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
-		abs, ok := resolveURL(base, href)
+		abs, ok := resolveURL(base, href, e.opts.StripQuery)
 		if !ok || seen[abs] {
 			return
 		}

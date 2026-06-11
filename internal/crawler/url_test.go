@@ -13,8 +13,23 @@ func TestNormalizeURL(t *testing.T) {
 		"https://example.com/a?b=1":    "https://example.com/a?b=1",
 	}
 	for in, want := range cases {
-		if got := normalizeURL(in); got != want {
-			t.Errorf("normalizeURL(%q) = %q, want %q", in, got, want)
+		if got := normalizeURL(in, false); got != want {
+			t.Errorf("normalizeURL(%q, false) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormalizeURLStripQuery(t *testing.T) {
+	cases := map[string]string{
+		"https://example.com/a?b=1":         "https://example.com/a",
+		"https://example.com/a?b=1&c=2":     "https://example.com/a",
+		"https://example.com/a":             "https://example.com/a",
+		"https://example.com/?utm_source=x": "https://example.com/",
+		"https://example.com/a?#frag":       "https://example.com/a",
+	}
+	for in, want := range cases {
+		if got := normalizeURL(in, true); got != want {
+			t.Errorf("normalizeURL(%q, true) = %q, want %q", in, got, want)
 		}
 	}
 }
