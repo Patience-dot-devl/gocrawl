@@ -17,9 +17,9 @@ The current baseline. Everything here works today.
 - **Scope & politeness controls** — `robots.txt` compliance, rate limiting,
   include/exclude URL regexes, subdomain and external-link toggles, custom User-Agent.
 - **Redirect capture** — full redirect chains recorded per page, with loop detection.
-- **Ten analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
-  `sitemap`, `structured`, `perf`, plus the SEA set `utm`, `tracking`, `landing`. See the
-  [Analyzer reference](analyzers.md).
+- **Twelve analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
+  `sitemap`, `structured`, `perf`, the SEA set `utm`, `tracking`, `landing`, and the AI-search
+  set `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
 - **Headless rendering (chromedp)** — `--render headless` (or `render: headless` in YAML)
   renders pages in a real Chromium tab via [chromedp][chromedp], capturing the post-JS DOM
   for downstream analyzers. Requires a Chromium-class browser on PATH; falls back to a raw

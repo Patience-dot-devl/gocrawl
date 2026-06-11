@@ -8,10 +8,11 @@ over every page — checking technical SEO, redirects, broken links, `robots.txt
 `sitemap.xml` coverage, structured data, and more — then writes a JSON, CSV, or HTML report.
 
 > **Status:** early, working vertical slice. Raw-HTML crawling, the core SEO analyzers, the
-> SEA analyzers (UTM auditing, tracking-pixel detection, landing-page relevance), and
-> headless rendering with lab-mode Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) are all
-> implemented. The design's whole point is that checks slot in as new analyzers without
-> touching the engine — see the [Roadmap](#roadmap) for what's next.
+> SEA analyzers (UTM auditing, tracking-pixel detection, landing-page relevance), the
+> AI-search analyzers (Answer Engine and Generative Engine Optimization), and headless
+> rendering with lab-mode Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) are all implemented. The
+> design's whole point is that checks slot in as new analyzers without touching the engine —
+> see the [Roadmap](#roadmap) for what's next.
 
 ## Why gocrawl
 
@@ -19,8 +20,9 @@ over every page — checking technical SEO, redirects, broken links, `robots.txt
   disable, or configure. Crawl scope (depth, page cap, include/exclude patterns,
   subdomains, rate limiting, robots compliance) is fully configurable.
 - **Fast & portable.** Concurrent Go engine, single static binary, no runtime deps.
-- **SEO and SEA.** Ships with both SEO/technical analyzers and SEA analyzers (UTM auditing,
-  tracking-pixel detection, landing-page relevance) — each an independent check on the same
+- **SEO, SEA, and AI search.** Ships with SEO/technical analyzers, SEA analyzers (UTM
+  auditing, tracking-pixel detection, landing-page relevance), and AI-search analyzers
+  (Answer Engine and Generative Engine Optimization) — each an independent check on the same
   interface.
 - **Reports you can pipe or share.** JSON for tooling, CSV for spreadsheets, and a
   self-contained HTML page (inline CSS, no JS) for handing to stakeholders.
@@ -152,6 +154,8 @@ Key crawl options:
 | `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
 | `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
 | `landing` | **SEA** — landing-page relevance: campaign-keyword alignment + indexability/HTTPS/title/H1 |
+| `aeo` | **AI search** — Answer Engine Optimization: FAQ/HowTo structured data, question headings, concise answers, snippet-friendly formatting |
+| `geo` | **AI search** — Generative Engine Optimization: AI-crawler `robots.txt` policy, `/llms.txt` presence, author/date/main-content citability |
 
 See [docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and threshold.
 

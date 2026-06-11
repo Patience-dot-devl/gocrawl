@@ -7,6 +7,8 @@ import (
 	"io"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/aeo"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/geo"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/httpx"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/landing"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/links"
@@ -38,6 +40,9 @@ func BuildRegistry(fetcher crawler.Fetcher) *analyze.Registry {
 	r.Register(utm.New())
 	r.Register(tracking.New())
 	r.Register(landing.New())
+	// AI-search analyzers: Answer Engine and Generative Engine Optimization.
+	r.Register(aeo.New())
+	r.Register(geo.New(fetcher))
 	return r
 }
 

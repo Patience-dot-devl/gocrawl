@@ -4,10 +4,10 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships ten analyzers, run in this registration order
+gocrawl ships twelve analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
-`seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`, `perf`, and the SEA
-analyzers `utm`, `tracking`, `landing`.
+`seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`, `perf`, the SEA
+analyzers `utm`, `tracking`, `landing`, and the AI-search analyzers `aeo`, `geo`.
 
 List them at any time:
 
@@ -250,6 +250,51 @@ data — no external campaign feed is needed.
 > re-checks a few `seo` signals (title, H1, description) at a stricter, ad-quality bar with
 > distinct codes. Because external destinations are usually not crawled, coverage is best for
 > internally-reachable and self-tagged landing pages.
+
+---
+
+## `aeo` — Answer Engine Optimization (AI search)
+
+Source: [`internal/analyze/aeo/aeo.go`](../internal/analyze/aeo/aeo.go). A static, per-page
+check that runs on every HTML `200` page. It scores how readily the page can be surfaced as a
+direct answer in featured snippets, "People Also Ask", and voice results. A heading counts as
+a **question** when it ends with `?` or opens with an interrogative (how, what, why, …).
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `aeo-answer-schema` | info | Page has `FAQPage`, `QAPage`, `HowTo`, or `Question` JSON-LD (a positive signal) | `types` |
+| `aeo-faq-candidate` | warning | At least 3 question-style headings but no `FAQPage`/`QAPage` structured data | `questions` |
+| `aeo-answer-too-long` | info | The text following a question heading exceeds 60 words (long for a snippet) | `question`, `answer_words` |
+| `aeo-no-list-format` | info | A `<main>`/`<article>` region has ≥300 words but no list or table to extract | `words` |
+
+> The answer following a question heading is measured as the heading's sibling content up to
+> the next heading, so the snippet-length check works best on conventional article markup.
+
+---
+
+## `geo` — Generative Engine Optimization (AI search)
+
+Source: [`internal/analyze/geo/geo.go`](../internal/analyze/geo/geo.go). Assesses whether AI
+answer engines (ChatGPT, Perplexity, Google AI Overviews, Gemini, Claude) can access the site
+and trust its content. It combines a per-host robots.txt view, a per-site `/llms.txt` fetch
+(using a raw fetcher, like `sitemap`), and per-page citability signals on every HTML `200`
+page.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `geo-ai-crawler-blocked` | info | A host's `robots.txt` disallows one or more known AI crawlers at the site root | `blocked` |
+| `geo-llms-txt` | info | The seed host serves an `/llms.txt` content map (a positive signal) | — |
+| `geo-no-llms-txt` | info | No `/llms.txt` was found at the seed host root | — |
+| `geo-missing-author` | info | An article-like page (`<article>` or `Article`/`BlogPosting`/… JSON-LD) has no author attribution | — |
+| `geo-missing-date` | info | An article-like page has no published or modified date | — |
+| `geo-no-main-landmark` | info | A page with ≥300 words of prose has no `<main>` or `<article>` landmark | `words` |
+
+> AI crawlers checked include `GPTBot`, `OAI-SearchBot`, `ChatGPT-User`, `ClaudeBot`,
+> `anthropic-ai`, `PerplexityBot`, `Google-Extended`, `Applebot-Extended`, `CCBot`,
+> `Bytespider`, and `meta-externalagent`. Blocking them is a legitimate choice, so
+> `geo-ai-crawler-blocked` is informational — it surfaces a policy that is often set
+> unintentionally. Author/date attribution is read from JSON-LD, `rel`/`itemprop="author"`,
+> `<meta name="author">`, `<time datetime>`, and OpenGraph `article:*` tags.
 
 ---
 
