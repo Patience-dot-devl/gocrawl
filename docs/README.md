@@ -7,7 +7,7 @@ the [project README](../README.md) for install and a quick start; come here for 
 | --- | --- |
 | [Install & run](install.md) | Per-platform install on Windows, macOS, and Linux — `go install`, building from source, PATH setup, verifying, running, and the optional headless browser. |
 | [Configuration](configuration.md) | Every option, flag, env var, and default; config layering; analyzer selection; annotated example config. |
-| [Analyzers](analyzers.md) | What each of the twelve analyzers checks (SEO + SEA + AI search), with every issue code, severity, threshold, and `data` field. |
+| [Analyzers](analyzers.md) | What each of the twenty analyzers checks (technical SEO + SEA + AI search), with every issue code, severity, threshold, and `data` field. |
 | [Output / report](output.md) | The JSON, CSV, and HTML report formats — `Report`, `Summary`, `Issue` — with examples. |
 | [MCP server](mcp.md) | Running gocrawl as an MCP server, registering it with clients, and the `crawl` / `list_analyzers` tool schemas. |
 | [Architecture](architecture.md) | How the engine, analyzer pipeline, and report builder fit together; the package map; adding an analyzer. |
