@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -133,6 +134,11 @@ func writeReport(cfg config.Config, rep *report.Report) error {
 	reporter := report.For(cfg.Output.Format)
 	if cfg.Output.Path == "" {
 		return reporter.Write(os.Stdout, rep)
+	}
+	if dir := filepath.Dir(cfg.Output.Path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("creating output directory %q: %w", dir, err)
+		}
 	}
 	file, err := os.Create(cfg.Output.Path)
 	if err != nil {
