@@ -35,7 +35,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
-	f.Bool("specialized", false, "enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density)")
+	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes)")
 	return cmd
 }
 

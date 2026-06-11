@@ -41,7 +41,7 @@ default** (the value used when you set nothing).
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
-| `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized AI-search checks (see below). |
+| `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized checks: AI-search heuristics and WordPress security probes (see below). |
 
 ### A note on flag defaults
 
@@ -73,8 +73,9 @@ Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (se
 
 The `--analyzers` CLI flag sets `enabled`. Analyzer names: `seo`, `redirects`, `links`,
 `robots`, `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`,
-`hreflang`, `amp`, `duplicates`, `content`, the SEA analyzers `utm`, `tracking`, `landing`,
-and the AI-search analyzers `aeo`, `geo`. See the [Analyzer reference](analyzers.md).
+`hreflang`, `amp`, `duplicates`, `content`, the CMS-specific `wordpress`, the SEA analyzers
+`utm`, `tracking`, `landing`, and the AI-search analyzers `aeo`, `geo`. See the
+[Analyzer reference](analyzers.md).
 
 ```sh
 # Only SEO, links, and redirects
@@ -86,12 +87,14 @@ analyzers:
   disabled: ["perf"]   # run everything except perf
 ```
 
-### Specialized AI-search checks
+### Specialized checks
 
 `analyzers.specialized` (or the `--specialized` flag) is independent of the allow/deny lists.
-It turns on two opt-in, lower-confidence AI-search heuristics that are off by default —
-`aeo-no-answer-lead` and `geo-low-quotable-density`. The `aeo` and `geo` analyzers always run
-their other checks; this toggle only adds these two. See the
+It turns on opt-in checks that are off by default: two lower-confidence AI-search heuristics
+(`aeo-no-answer-lead` and `geo-low-quotable-density`) and the `wordpress` analyzer's active
+security-endpoint probes (`wp-xmlrpc-enabled`, `wp-user-enumeration-rest`,
+`wp-user-enumeration-author`, `wp-directory-listing`, `wp-readme-exposed`). The affected
+analyzers always run their other checks; this toggle only adds these. See the
 [Specialized AI-search checks](analyzers.md#specialized-ai-search-checks) note for details.
 
 ```sh

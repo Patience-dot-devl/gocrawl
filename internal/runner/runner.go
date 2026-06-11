@@ -27,6 +27,7 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/tracking"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/urls"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/utm"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/wordpress"
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/render"
@@ -55,6 +56,9 @@ func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry 
 	r.Register(amp.New())
 	r.Register(duplicates.New())
 	r.Register(content.New())
+	// CMS-specific checks. WordPress security probes are active (extra fetches), so they ride
+	// the same specialized flag as the opt-in AI-search heuristics.
+	r.Register(wordpress.New(fetcher, wordpress.WithSecurityProbes(specialized)))
 	// SEA (Search Engine Advertising) analyzers.
 	r.Register(utm.New())
 	r.Register(tracking.New())

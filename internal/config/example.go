@@ -43,10 +43,12 @@ output:
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those
   # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf,
+  # images, urls, security, pagination, hreflang, amp, duplicates, content, wordpress,
   # the SEA analyzers utm, tracking, landing, and the AI-search analyzers aeo, geo.
   enabled: []
   disabled: []
-  # Turn on the opt-in specialized AI-search heuristics (off by default):
+  # Turn on the opt-in specialized checks (off by default): the AI-search heuristics and
+  # the WordPress security-endpoint probes.
   # aeo-no-answer-lead and geo-low-quotable-density.
   specialized: false
 `

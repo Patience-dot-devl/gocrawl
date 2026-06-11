@@ -100,8 +100,8 @@ func runInteractive(cmd *cobra.Command) error {
 				Options(analyzerOpts...).
 				Value(&selected),
 			huh.NewConfirm().
-				Title("Enable specialized AI-search checks?").
-				Description("Opt-in heuristics: AEO answer-lead and GEO quotable-density.").
+				Title("Enable specialized checks?").
+				Description("Opt-in: AEO answer-lead, GEO quotable-density, and WordPress security probes.").
 				Value(&specialized),
 		),
 		huh.NewGroup(
