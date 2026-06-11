@@ -46,7 +46,11 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	}
 	var issues []analyze.Issue
 
-	// Candidate sitemap URLs: those declared in robots.txt plus common conventional paths.
+	// Candidate sitemap URLs: those declared in robots.txt (declared==true) plus common
+	// conventional paths we merely guess at (declared==false). The distinction matters for
+	// error reporting: a declared sitemap that won't parse is a real misconfiguration worth
+	// flagging, but a guessed path that returns non-XML is almost always a soft-404 (the
+	// server answers 200 with an HTML page for any unknown path), so we stay silent about it.
 	candidates := map[string]bool{}
 	for _, data := range result.Robots {
 		for _, sm := range data.Sitemaps {
@@ -55,15 +59,17 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	}
 	base := seed.Scheme + "://" + seed.Host
 	for _, path := range []string{"/sitemap.xml", "/sitemap_index.xml"} {
-		candidates[base+path] = true
+		if _, ok := candidates[base+path]; !ok {
+			candidates[base+path] = false
+		}
 	}
 
 	sitemapURLs := map[string]bool{}
 	var parsed int
 	visited := map[string]bool{}
 
-	var fetchOne func(smURL string, depth int)
-	fetchOne = func(smURL string, depth int) {
+	var fetchOne func(smURL string, depth int, declared bool)
+	fetchOne = func(smURL string, depth int, declared bool) {
 		if depth > 2 || visited[smURL] {
 			return
 		}
@@ -73,19 +79,21 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 		if ferr != nil || page == nil || page.StatusCode != 200 || len(page.Body) == 0 {
 			return
 		}
-		parsed++
 
 		var idx sitemapindex
 		if xml.Unmarshal(page.Body, &idx) == nil && len(idx.Sitemaps) > 0 {
+			parsed++
 			for _, s := range idx.Sitemaps {
 				if loc := strings.TrimSpace(s.Loc); loc != "" {
-					fetchOne(loc, depth+1)
+					// Children referenced by an index are declared by it.
+					fetchOne(loc, depth+1, true)
 				}
 			}
 			return
 		}
 		var us urlset
 		if xml.Unmarshal(page.Body, &us) == nil {
+			parsed++
 			for _, u := range us.URLs {
 				if loc := strings.TrimSpace(u.Loc); loc != "" {
 					sitemapURLs[normalize(loc)] = true
@@ -93,14 +101,19 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 			}
 			return
 		}
-		issues = append(issues, analyze.Issue{
-			Analyzer: "sitemap", URL: smURL, Severity: analyze.Warning,
-			Code: "invalid-sitemap", Message: "Could not parse sitemap as urlset or index",
-		})
+		// The response did not parse as a sitemap. Only flag it when the sitemap was
+		// explicitly declared (robots.txt or an index); a guessed conventional path that
+		// returns HTML is a soft-404, not a broken sitemap, so reporting it is noise.
+		if declared {
+			issues = append(issues, analyze.Issue{
+				Analyzer: "sitemap", URL: smURL, Severity: analyze.Warning,
+				Code: "invalid-sitemap", Message: "Could not parse sitemap as urlset or index",
+			})
+		}
 	}
 
-	for c := range candidates {
-		fetchOne(c, 0)
+	for c, declared := range candidates {
+		fetchOne(c, 0, declared)
 	}
 
 	if parsed == 0 {
