@@ -155,7 +155,7 @@ Key crawl options:
 | `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
 | `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
 | `landing` | **SEA** — landing-page relevance: campaign-keyword alignment + indexability/HTTPS/title/H1 |
-| `wordpress` | **CMS** — WordPress detection: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, and opt-in xmlrpc/user-enumeration/directory-listing/readme probes |
+| `wordpress` | **CMS** — WordPress detection: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, multilingual/WPML setup, leaked ACF markup, and opt-in xmlrpc/user-enumeration/directory-listing/readme probes |
 | `aeo` | **AI search** — Answer Engine Optimization: FAQ/HowTo structured data, question headings, concise answers, direct-answer lead, snippet-friendly formatting |
 | `geo` | **AI search** — Generative Engine Optimization: AI-crawler `robots.txt` policy, `/llms.txt` presence, author/date/main-content citability, JS-dependent content, quotable-data density |
 

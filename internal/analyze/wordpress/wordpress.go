@@ -1,8 +1,14 @@
 // Package wordpress fingerprints WordPress sites and runs WordPress-specific checks that the
 // generic analyzers do not name. It works in two passes: a passive pass over the crawled HTML
-// (detection, version disclosure, front-end bloat, the default tagline, ugly permalinks) and an
-// opt-in active pass that probes well-known endpoints for security and hygiene problems
-// (xmlrpc.php, REST/author user enumeration, directory listing, readme.html).
+// (detection, version disclosure, front-end bloat, the default tagline, ugly permalinks,
+// multilingual/WPML configuration, and leaked Advanced Custom Fields markup) and an opt-in active
+// pass that probes well-known endpoints for security and hygiene problems (xmlrpc.php, REST/author
+// user enumeration, directory listing, readme.html).
+//
+// The multilingual checks deliberately stop at WordPress-specific signals (which plugin is active,
+// whether it emits hreflang at all, and the language-negotiation style); hreflang correctness
+// itself — invalid codes, missing return links, missing x-default — is the dedicated hreflang
+// analyzer's job and is not duplicated here.
 //
 // Most WordPress fingerprints live in the shared header/footer template, so they repeat on every
 // page. To avoid flooding the report, the passive checks are aggregated across the crawl and
@@ -57,6 +63,28 @@ var seoPlugins = []struct{ signal, name string }{
 	{"all in one seo", "All in One SEO"},
 }
 
+// i18nPlugins maps a lowercased asset/body signal to the multilingual plugin it indicates. The
+// signals are the plugin folder slug plus a front-end marker the plugin leaves in the markup
+// (a switcher class or a JS namespace), so detection survives even when the plugin folder name is
+// rewritten by an asset optimizer.
+var i18nPlugins = []struct{ signal, name string }{
+	{"sitepress-multilingual-cms", "WPML"},
+	{"wpml-ls", "WPML"}, // WPML language-switcher markup class
+	{"icl_", "WPML"},    // WPML JS namespace (icl_vars, icl_data)
+	{"polylang", "Polylang"},
+	{"translatepress", "TranslatePress"},
+	{"weglot", "Weglot"},
+}
+
+// acfShortcodeRe matches an unrendered ACF shortcode ("[acf field=...]", "[acf_view ...]"), and
+// acfTemplateRe matches a leaked ACF template tag (the_field(), get_field(), and their _sub_
+// variants) that was echoed into the page instead of being executed. Both indicate a template or
+// shortcode-context bug that prints ACF markup as visible text.
+var (
+	acfShortcodeRe = regexp.MustCompile(`(?i)\[acf[_\s\]]`)
+	acfTemplateRe  = regexp.MustCompile(`(?i)\b(?:the|get)(?:_sub)?_field\s*\(`)
+)
+
 // Analyzer fingerprints WordPress and runs WordPress-specific checks. The fetcher is used by the
 // opt-in security probes; it is not touched when probes are disabled.
 type Analyzer struct {
@@ -83,7 +111,7 @@ func New(fetcher crawler.Fetcher, opts ...Option) *Analyzer {
 
 func (Analyzer) Name() string { return "wordpress" }
 func (Analyzer) Description() string {
-	return "WordPress detection plus WP-specific checks: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, and (opt-in) xmlrpc/user-enumeration/directory-listing/readme probes"
+	return "WordPress detection plus WP-specific checks: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, multilingual/WPML configuration, leaked ACF markup, and (opt-in) xmlrpc/user-enumeration/directory-listing/readme probes"
 }
 
 // site holds what the passive pass learned about the WordPress install, aggregated across pages.
@@ -95,6 +123,8 @@ type site struct {
 	emoji          bool            // wp-emoji script loaded
 	jqueryMigrate  bool            // jQuery Migrate shim loaded
 	defaultTagline bool            // "Just another WordPress site"
+	i18nPlugins    map[string]bool // detected multilingual plugin names (WPML, Polylang, ...)
+	anyHreflang    bool            // any <link rel="alternate" hreflang> seen across the crawl
 }
 
 func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze.Issue {
@@ -111,12 +141,16 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 
 	plugins := sortedKeys(s.plugins)
 	seoPlugins := sortedKeys(s.seoPlugins)
+	i18n := sortedKeys(s.i18nPlugins)
 	detData := map[string]any{"plugins": plugins, "plugin_count": len(plugins)}
 	if s.version != "" {
 		detData["version"] = s.version
 	}
 	if len(seoPlugins) > 0 {
 		detData["seo_plugin"] = seoPlugins[0]
+	}
+	if len(i18n) > 0 {
+		detData["i18n_plugin"] = i18n[0]
 	}
 	add(analyze.Info, "wp-detected", "Site is built on WordPress", detData)
 
@@ -147,6 +181,17 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 			map[string]any{"plugins": seoPlugins})
 	}
 
+	// Multilingual setup. hreflang correctness is the hreflang analyzer's job; here we only flag the
+	// WordPress-specific condition that a multilingual plugin is active yet emits no hreflang at all.
+	if len(i18n) > 0 {
+		add(analyze.Info, "wp-multilingual-detected", "A multilingual plugin is active",
+			map[string]any{"plugins": i18n})
+		if !s.anyHreflang {
+			add(analyze.Warning, "wp-i18n-no-hreflang", "A multilingual plugin is active but no hreflang alternate links were found on any crawled page, so search engines cannot see the language/region relationships",
+				map[string]any{"plugins": i18n})
+		}
+	}
+
 	// Per-page checks: ugly permalinks and indexable low-value pages vary URL by URL.
 	issues = append(issues, analyze.EachPage(result, perPage)...)
 
@@ -158,7 +203,7 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 
 // detect scans every crawled HTML page for WordPress fingerprints and aggregates what it finds.
 func detect(result *crawler.Result) site {
-	s := site{plugins: map[string]bool{}, seoPlugins: map[string]bool{}}
+	s := site{plugins: map[string]bool{}, seoPlugins: map[string]bool{}, i18nPlugins: map[string]bool{}}
 	for _, p := range result.Pages {
 		if !p.IsHTML() || p.StatusCode != 200 {
 			continue
@@ -193,15 +238,25 @@ func detect(result *crawler.Result) site {
 				s.seoPlugins[sp.name] = true
 			}
 		}
+		signals := strings.ToLower(assets) + "\n" + body
+		for _, ip := range i18nPlugins {
+			if strings.Contains(signals, ip.signal) {
+				s.i18nPlugins[ip.name] = true
+			}
+		}
+		if hasHreflang(p.Doc) {
+			s.anyHreflang = true
+		}
 	}
 	return s
 }
 
-// perPage runs the URL-dependent checks against a single page: the ugly-permalink check, and the
+// perPage runs the URL-dependent checks against a single page: the ugly-permalink check, the
 // indexable-low-value-page checks for WordPress's auto-generated thin/duplicate pages (attachment
-// pages, internal search results, author and date archives). The low-value checks fire only when
-// the page is actually indexable — a noindex tag or a canonical pointing elsewhere already
-// handles it, so there is nothing to flag.
+// pages, internal search results, author and date archives), the multilingual language-negotiation
+// checks, and the leaked-ACF-markup check. The low-value checks fire only when the page is actually
+// indexable — a noindex tag or a canonical pointing elsewhere already handles it, so there is
+// nothing to flag.
 func perPage(p *crawler.Page) []analyze.Issue {
 	if !p.IsHTML() || p.StatusCode != 200 {
 		return nil
@@ -222,6 +277,25 @@ func perPage(p *crawler.Page) []analyze.Issue {
 				map[string]any{"param": key})
 			break
 		}
+	}
+
+	// Multilingual: WPML and friends can negotiate language via a ?lang= query parameter, which is
+	// the SEO-weakest option (no per-language path or subdomain). When present, also check that the
+	// rendered <html lang> agrees with the requested language.
+	if lang := strings.ToLower(q.Get("lang")); lang != "" {
+		add(analyze.Info, "wp-i18n-lang-query-param", "Language is selected via a ?lang= query parameter rather than a per-language path or subdomain",
+			map[string]any{"lang": lang})
+		urlLang := primarySubtag(lang)
+		if hl := htmlLang(p.Doc); hl != "" && hl != urlLang {
+			add(analyze.Warning, "wp-html-lang-mismatch", "The <html lang> attribute disagrees with the language requested in the URL",
+				map[string]any{"html_lang": hl, "url_lang": urlLang})
+		}
+	}
+
+	// Advanced Custom Fields: unrendered field tags or shortcodes leaking into the page content.
+	if snip := leakedACF(p.Doc); snip != "" {
+		add(analyze.Warning, "wp-acf-leaked-markup", "Unrendered Advanced Custom Fields markup is leaking into the page content (a field tag or shortcode was output as text instead of being executed)",
+			map[string]any{"snippet": snip})
 	}
 
 	if indexable(p) {
@@ -403,6 +477,56 @@ func metaNamed(doc *goquery.Document, name string) string {
 		return true
 	})
 	return strings.TrimSpace(content)
+}
+
+// hasHreflang reports whether the document carries any <link rel="alternate" hreflang="...">.
+func hasHreflang(doc *goquery.Document) bool {
+	return doc.Find(`link[rel="alternate"][hreflang]`).Length() > 0
+}
+
+// htmlLang returns the primary language subtag of the <html lang> attribute (e.g. "en" for
+// "en-GB"), lowercased, or "".
+func htmlLang(doc *goquery.Document) string {
+	v, _ := doc.Find("html").First().Attr("lang")
+	return primarySubtag(strings.ToLower(strings.TrimSpace(v)))
+}
+
+// primarySubtag returns the part of a BCP-47 language tag before the first region/script separator
+// (e.g. "fr" for "fr-CA" or "fr_ca").
+func primarySubtag(tag string) string {
+	if i := strings.IndexAny(tag, "-_"); i >= 0 {
+		return tag[:i]
+	}
+	return tag
+}
+
+// leakedACF returns a short snippet of unrendered Advanced Custom Fields markup found in the
+// page's visible text, or "". Script, style, and verbatim code/pre/textarea blocks are excluded so
+// that documentation or tutorials about ACF do not trip the check. The body selection is cloned
+// before mutation because the goquery document is shared across analyzers.
+func leakedACF(doc *goquery.Document) string {
+	body := doc.Find("body").Clone()
+	body.Find("script, style, code, pre, textarea").Remove()
+	text := body.Text()
+	for _, re := range []*regexp.Regexp{acfShortcodeRe, acfTemplateRe} {
+		if loc := re.FindStringIndex(text); loc != nil {
+			return snippet(text, loc[0])
+		}
+	}
+	return ""
+}
+
+// snippet returns a whitespace-collapsed window of text around byte offset at, kept valid UTF-8.
+func snippet(text string, at int) string {
+	start, end := at-20, at+60
+	if start < 0 {
+		start = 0
+	}
+	if end > len(text) {
+		end = len(text)
+	}
+	clean := strings.ToValidUTF8(text[start:end], "")
+	return strings.Join(strings.Fields(clean), " ")
 }
 
 // headerSignals reports WordPress-specific response headers: X-Pingback and the REST API

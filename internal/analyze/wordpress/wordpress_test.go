@@ -233,6 +233,104 @@ func TestDatePermalinkPostNotFlagged(t *testing.T) {
 	}
 }
 
+// --- multilingual / WPML ---
+
+func TestMultilingualDetectedAndNoHreflang(t *testing.T) {
+	// WPML active (plugin asset path) but no hreflang anywhere across the crawl.
+	html := strings.Replace(wpHome, "<p>Hello</p>",
+		`<div class="wpml-ls-statics-shortcode_actions"><a href="/fr/">FR</a></div><p>Hello</p>`, 1)
+	issues := run(t, result(page(t, "https://example.com/", html)))
+	det, _ := find(issues, "wp-detected")
+	if det.Data["i18n_plugin"] != "WPML" {
+		t.Errorf("expected i18n_plugin WPML, got %v", det.Data["i18n_plugin"])
+	}
+	if _, ok := find(issues, "wp-multilingual-detected"); !ok {
+		t.Error("expected wp-multilingual-detected")
+	}
+	if _, ok := find(issues, "wp-i18n-no-hreflang"); !ok {
+		t.Error("expected wp-i18n-no-hreflang when no hreflang links are present")
+	}
+}
+
+func TestMultilingualWithHreflangSuppressesNoHreflang(t *testing.T) {
+	html := strings.Replace(wpHome, "</head>",
+		`<link rel="alternate" hreflang="fr" href="https://example.com/fr/"></head>`, 1)
+	html = strings.Replace(html, "<p>Hello</p>", `<div class="wpml-ls"></div><p>Hello</p>`, 1)
+	issues := run(t, result(page(t, "https://example.com/", html)))
+	if _, ok := find(issues, "wp-multilingual-detected"); !ok {
+		t.Error("expected wp-multilingual-detected")
+	}
+	if _, ok := find(issues, "wp-i18n-no-hreflang"); ok {
+		t.Error("wp-i18n-no-hreflang must not fire when hreflang links exist")
+	}
+}
+
+func TestLangQueryParamAndHTMLLangMismatch(t *testing.T) {
+	// Page requested as French via ?lang=fr but rendered <html lang="en">.
+	html := `<html lang="en"><head><meta name="generator" content="WordPress"></head><body><p>Bonjour</p></body></html>`
+	issues := run(t, result(
+		page(t, "https://example.com/", wpHome),
+		page(t, "https://example.com/?lang=fr", html),
+	))
+	lp, ok := find(issues, "wp-i18n-lang-query-param")
+	if !ok {
+		t.Fatal("expected wp-i18n-lang-query-param for ?lang=fr")
+	}
+	if lp.Data["lang"] != "fr" {
+		t.Errorf("expected lang fr, got %v", lp.Data["lang"])
+	}
+	mm, ok := find(issues, "wp-html-lang-mismatch")
+	if !ok {
+		t.Fatal("expected wp-html-lang-mismatch when ?lang=fr but <html lang=en>")
+	}
+	if mm.Data["html_lang"] != "en" || mm.Data["url_lang"] != "fr" {
+		t.Errorf("unexpected mismatch data: %v", mm.Data)
+	}
+}
+
+func TestLangQueryParamMatchingHTMLLangNoMismatch(t *testing.T) {
+	html := `<html lang="fr-CA"><head><meta name="generator" content="WordPress"></head><body><p>Bonjour</p></body></html>`
+	issues := run(t, result(
+		page(t, "https://example.com/", wpHome),
+		page(t, "https://example.com/?lang=fr", html),
+	))
+	if _, ok := find(issues, "wp-i18n-lang-query-param"); !ok {
+		t.Error("expected wp-i18n-lang-query-param")
+	}
+	if _, ok := find(issues, "wp-html-lang-mismatch"); ok {
+		t.Error("wp-html-lang-mismatch must not fire when primary subtags agree (fr vs fr-CA)")
+	}
+}
+
+// --- Advanced Custom Fields leaked markup ---
+
+func TestACFLeakedShortcode(t *testing.T) {
+	html := strings.Replace(wpHome, "<p>Hello</p>", `<p>Hello</p><div>[acf field="hero_title"]</div>`, 1)
+	is, ok := find(run(t, result(page(t, "https://example.com/", html))), "wp-acf-leaked-markup")
+	if !ok {
+		t.Fatal("expected wp-acf-leaked-markup for a leaked [acf] shortcode")
+	}
+	if snip, _ := is.Data["snippet"].(string); !strings.Contains(snip, "[acf") {
+		t.Errorf("expected snippet to contain the shortcode, got %q", is.Data["snippet"])
+	}
+}
+
+func TestACFLeakedTemplateTag(t *testing.T) {
+	html := strings.Replace(wpHome, "<p>Hello</p>", `<p>the_field('subtitle')</p>`, 1)
+	if _, ok := find(run(t, result(page(t, "https://example.com/", html))), "wp-acf-leaked-markup"); !ok {
+		t.Error("expected wp-acf-leaked-markup for a leaked the_field() call")
+	}
+}
+
+func TestACFInCodeBlockNotFlagged(t *testing.T) {
+	// A tutorial showing ACF usage inside <code>/<pre> must not trip the check.
+	html := strings.Replace(wpHome, "<p>Hello</p>",
+		`<pre><code>the_field('title'); // [acf field="x"]</code></pre>`, 1)
+	if _, ok := find(run(t, result(page(t, "https://example.com/", html))), "wp-acf-leaked-markup"); ok {
+		t.Error("ACF examples inside code/pre blocks must not be flagged")
+	}
+}
+
 // --- security probes (opt-in) ---
 
 func runProbed(ff fakeFetcher, res *crawler.Result) []analyze.Issue {
