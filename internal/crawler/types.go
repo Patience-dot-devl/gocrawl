@@ -114,6 +114,22 @@ func (r *Result) Page(rawURL string) (*Page, bool) {
 	return p, ok
 }
 
+// Reindex rebuilds the URL lookup index from r.Pages. The engine populates the index
+// incrementally during a crawl, so production code never needs this; it lets callers that
+// construct a Result by hand (notably tests) make Page lookups resolve.
+func (r *Result) Reindex() {
+	r.index = make(map[string]*Page, len(r.Pages)*2)
+	for _, p := range r.Pages {
+		if p == nil {
+			continue
+		}
+		r.index[normalizeURL(p.RequestedURL)] = p
+		if p.FinalURL != "" {
+			r.index[normalizeURL(p.FinalURL)] = p
+		}
+	}
+}
+
 // Options controls crawl scope and politeness.
 type Options struct {
 	MaxDepth        int
