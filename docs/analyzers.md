@@ -341,7 +341,7 @@ permalink check is per page.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `wp-detected` | info | The site is identified as WordPress; carries the gathered context | `version`, `seo_plugin`, `plugins`, `plugin_count` |
+| `wp-detected` | info | The site is identified as WordPress; carries the gathered context | `version`, `seo_plugin`, `i18n_plugin`, `plugins`, `plugin_count` |
 | `wp-version-exposed` | warning | The core version is disclosed in the generator meta tag (maps the install to known CVEs) | `version` |
 | `wp-emoji-enabled` | info | The `wp-emoji` script is loaded sitewide (usually safe to dequeue) | — |
 | `wp-jquery-migrate` | info | The jQuery Migrate compatibility shim is loaded | — |
@@ -349,7 +349,12 @@ permalink check is per page.
 | `wp-default-tagline` | warning | The site still uses the default "Just another WordPress site" tagline | — |
 | `wp-no-seo-plugin` | info | No SEO plugin (Yoast, Rank Math, All in One SEO) detected | — |
 | `wp-multiple-seo-plugins` | warning | More than one SEO plugin is active (conflicting/duplicate meta output) | `plugins` |
+| `wp-multilingual-detected` | info | A multilingual plugin (WPML, Polylang, TranslatePress, Weglot) is active | `plugins` |
+| `wp-i18n-no-hreflang` | warning | A multilingual plugin is active but no `hreflang` alternate links were found on any crawled page | `plugins` |
 | `wp-ugly-permalink` | info | A page is served under a default plain permalink (`?p=N`, `?page_id=N`, `?cat=N`) rather than a pretty URL | `param` |
+| `wp-i18n-lang-query-param` | info | Language is negotiated via a `?lang=` query parameter rather than a per-language path or subdomain | `lang` |
+| `wp-html-lang-mismatch` | warning | The `<html lang>` attribute disagrees with the language requested in the URL (`?lang=`) | `html_lang`, `url_lang` |
+| `wp-acf-leaked-markup` | warning | Unrendered Advanced Custom Fields markup (a field tag or shortcode) is output as visible text | `snippet` |
 | `wp-indexable-attachment` | warning | An indexable attachment page (`?attachment_id=N`) — thin auto-generated content | `id` |
 | `wp-indexable-search` | warning | An indexable internal search results page (`?s=…`), which should be noindex | — |
 | `wp-indexable-author-archive` | info | An indexable author archive (`/author/<login>/`) — often duplicates the blog index | — |
@@ -369,6 +374,16 @@ permalink check is per page.
 > directive (meta or `X-Robots-Tag`) or a `<link rel="canonical">` pointing elsewhere already
 > handles the page, so it is not flagged. Attachment-page detection relies on the
 > `?attachment_id=N` form; pretty attachment URLs are not detectable from the crawl alone.
+>
+> The multilingual checks stop at WordPress-specific signals — which plugin is active, whether it
+> emits `hreflang` at all, and the language-negotiation style. `hreflang` correctness itself
+> (invalid codes, missing return links, missing `x-default`) is the dedicated
+> [`hreflang`](#hreflang--international-targeting) analyzer's job and is not duplicated here.
+>
+> `wp-acf-leaked-markup` scans the page's **visible text** (script, style, and `code`/`pre`/
+> `textarea` blocks excluded, so ACF tutorials are not flagged) for field tags or shortcodes that
+> were printed instead of executed. ACF field *values*, once rendered, are ordinary HTML and are
+> not distinguishable from hand-written content, so the analyzer only catches this leak failure.
 
 ---
 
