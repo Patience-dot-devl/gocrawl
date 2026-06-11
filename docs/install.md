@@ -27,6 +27,26 @@ For the `gocrawl` command to work from anywhere, that directory must be on your 
 
 ### Putting the Go bin directory on your PATH
 
+The quickest way is to let `gocrawl` do it for you. Run it once by its full path — it
+detects where it lives and, if that directory isn't on your `PATH`, offers to add it:
+
+```sh
+# macOS / Linux (adjust if GOBIN is set)
+"$(go env GOPATH)/bin/gocrawl" path
+```
+
+```powershell
+# Windows
+& "$(go env GOPATH)\bin\gocrawl.exe" path
+```
+
+On macOS/Linux it appends a line to your shell profile (`~/.zshrc`, `~/.bashrc`,
+`~/.bash_profile`, or fish's `config.fish`, picked from your `$SHELL`). On Windows it updates
+your user `PATH` in the registry. It's safe to re-run — it does nothing if you're already set
+up — and pass `--yes` to skip the prompt. Then restart your terminal.
+
+Prefer to do it by hand? The manual steps per platform:
+
 <details>
 <summary><b>macOS / Linux</b> (bash or zsh)</summary>
 
@@ -150,7 +170,7 @@ crawls. The `gocrawl` command must be on the client's `PATH` (or referenced by a
 
 | Symptom | Fix |
 | --- | --- |
-| `command not found: gocrawl` / `'gocrawl' is not recognized` | The Go bin dir isn't on your `PATH` — see [PATH setup](#putting-the-go-bin-directory-on-your-path), then restart your terminal. |
+| `command not found: gocrawl` / `'gocrawl' is not recognized` | The Go bin dir isn't on your `PATH`. Run `gocrawl path` (by full path — see [PATH setup](#putting-the-go-bin-directory-on-your-path)) to add it, then restart your terminal. |
 | `go: command not found` | Install [Go 1.26+](https://go.dev/dl/) and reopen your terminal. |
 | `launching headless browser: ...` | No Chrome/Chromium/Edge on `PATH` — install one (see [Headless rendering](#headless-rendering-optional)) or drop `--render headless`. |
 | `make: command not found` (Windows) | Use the `go build` / `go install` commands directly — see [Build from source](#build-from-source). |
