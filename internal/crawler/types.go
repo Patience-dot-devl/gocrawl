@@ -110,7 +110,7 @@ func (r *Result) Page(rawURL string) (*Page, bool) {
 	if r.index == nil {
 		return nil, false
 	}
-	p, ok := r.index[normalizeURL(rawURL)]
+	p, ok := r.index[normalizeURL(rawURL, r.Opts.StripQuery)]
 	return p, ok
 }
 
@@ -123,9 +123,9 @@ func (r *Result) Reindex() {
 		if p == nil {
 			continue
 		}
-		r.index[normalizeURL(p.RequestedURL)] = p
+		r.index[normalizeURL(p.RequestedURL, r.Opts.StripQuery)] = p
 		if p.FinalURL != "" {
-			r.index[normalizeURL(p.FinalURL)] = p
+			r.index[normalizeURL(p.FinalURL, r.Opts.StripQuery)] = p
 		}
 	}
 }
@@ -143,9 +143,12 @@ type Options struct {
 	AllowSubdomains bool
 	FollowExternal  bool
 	FollowNofollow  bool
-	Timeout         time.Duration
-	MaxBodyBytes    int64
-	MaxRedirects    int
+	// StripQuery drops the query string when normalizing URLs, so URLs that differ only by
+	// their query collapse to one and are crawled once.
+	StripQuery   bool
+	Timeout      time.Duration
+	MaxBodyBytes int64
+	MaxRedirects int
 }
 
 // DefaultOptions returns conservative, polite defaults.

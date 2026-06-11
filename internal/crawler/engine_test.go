@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -95,6 +96,64 @@ func TestEngineMaxPages(t *testing.T) {
 	}
 	if len(result.Pages) > 2 {
 		t.Errorf("MaxPages=2 not honored: crawled %d pages", len(result.Pages))
+	}
+}
+
+func countItemsPages(result *Result) int {
+	n := 0
+	for _, p := range result.Pages {
+		if strings.Contains(p.RequestedURL, "/items") {
+			n++
+		}
+	}
+	return n
+}
+
+func TestEngineStripQuery(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><body>
+			<a href="/items?page=1">1</a>
+			<a href="/items?page=2">2</a>
+			<a href="/items?page=3">3</a>
+		</body></html>`)
+	})
+	mux.HandleFunc("/items", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Items List Page</title></head><body>ok</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	crawl := func(strip bool) *Result {
+		opts := DefaultOptions()
+		opts.MaxDepth = 1
+		opts.StripQuery = strip
+		result, err := New(opts, NewHTTPFetcher(opts)).Crawl(context.Background(), ts.URL)
+		if err != nil {
+			t.Fatalf("crawl error: %v", err)
+		}
+		return result
+	}
+
+	// Without stripping, the three ?page=N links are distinct URLs.
+	if got := countItemsPages(crawl(false)); got != 3 {
+		t.Errorf("strip-query off: expected 3 /items pages, got %d", got)
+	}
+
+	// With stripping, they collapse to a single crawled page...
+	stripped := crawl(true)
+	if got := countItemsPages(stripped); got != 1 {
+		t.Errorf("strip-query on: expected 1 /items page, got %d", got)
+	}
+	// ...the stored URL carries no query...
+	for _, p := range stripped.Pages {
+		if strings.Contains(p.RequestedURL, "?") {
+			t.Errorf("strip-query on: page URL retained a query string: %q", p.RequestedURL)
+		}
+	}
+	// ...and a lookup by any query variant resolves to that one page.
+	if _, ok := stripped.Page(ts.URL + "/items?page=99"); !ok {
+		t.Error("strip-query on: lookup by a query variant should resolve to the stripped page")
 	}
 }
 

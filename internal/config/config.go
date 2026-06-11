@@ -35,6 +35,7 @@ type CrawlConfig struct {
 	AllowSubdomains bool          `mapstructure:"allow_subdomains"`
 	FollowExternal  bool          `mapstructure:"follow_external"`
 	FollowNofollow  bool          `mapstructure:"follow_nofollow"`
+	StripQuery      bool          `mapstructure:"strip_query"`
 	Include         []string      `mapstructure:"include"`
 	Exclude         []string      `mapstructure:"exclude"`
 }
@@ -147,6 +148,7 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	o.AllowSubdomains = c.Crawl.AllowSubdomains
 	o.FollowExternal = c.Crawl.FollowExternal
 	o.FollowNofollow = c.Crawl.FollowNofollow
+	o.StripQuery = c.Crawl.StripQuery
 
 	inc, err := compile(c.Crawl.Include)
 	if err != nil {

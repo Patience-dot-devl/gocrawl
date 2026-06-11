@@ -37,16 +37,28 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		issues = append(issues, analyze.Issue{Analyzer: "redirects", URL: url, Severity: sev, Code: code, Message: msg, Data: data})
 	}
 
+	// found_on records the page this URL was first discovered on, so a broken/unreachable
+	// URL points back to where it was linked rather than just naming the URL that failed.
+	found := func(data map[string]any) map[string]any {
+		if p.Referrer != "" {
+			if data == nil {
+				data = map[string]any{}
+			}
+			data["found_on"] = p.Referrer
+		}
+		return data
+	}
+
 	if p.Err != "" {
-		add(analyze.Error, "fetch-error", "Failed to fetch page: "+p.Err, nil)
+		add(analyze.Error, "fetch-error", "Failed to fetch page: "+p.Err, found(nil))
 		return issues
 	}
 
 	switch {
 	case p.StatusCode >= 500:
-		add(analyze.Error, "server-error", "Server error response", map[string]any{"status": p.StatusCode})
+		add(analyze.Error, "server-error", "Server error response", found(map[string]any{"status": p.StatusCode}))
 	case p.StatusCode >= 400:
-		add(analyze.Error, "client-error", "Client error response", map[string]any{"status": p.StatusCode})
+		add(analyze.Error, "client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
 	}
 
 	// Redirect chain and loops.
