@@ -15,11 +15,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	cdppage "github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -33,6 +35,7 @@ type HeadlessFetcher struct {
 	allocCtx    context.Context
 	allocCancel context.CancelFunc
 	raw         *crawler.HTTPFetcher
+	ua          *crawler.UAPool
 
 	closeMu sync.Mutex
 	closed  bool
@@ -44,8 +47,17 @@ type HeadlessFetcher struct {
 func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 	allocOpts := append([]chromedp.ExecAllocatorOption{},
 		chromedp.DefaultExecAllocatorOptions[:]...)
-	if opts.UserAgent != "" {
-		allocOpts = append(allocOpts, chromedp.UserAgent(opts.UserAgent))
+	ua := crawler.NewUAPool(opts)
+	// Set the browser-level User-Agent to the pool's first entry. When the pool rotates, each
+	// navigation overrides it per-page via network.SetUserAgentOverride in headless().
+	if def := ua.Default(); def != "" {
+		allocOpts = append(allocOpts, chromedp.UserAgent(def))
+	}
+	// Chromium takes a single proxy per browser process, so headless mode uses the first proxy
+	// in the pool; per-request proxy rotation applies to raw mode only. Credentials in the URL
+	// are dropped here (Chromium prompts for proxy auth via a separate CDP flow we don't drive).
+	if len(opts.Proxies) > 0 {
+		allocOpts = append(allocOpts, chromedp.ProxyServer(proxyServerArg(opts.Proxies[0])))
 	}
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), allocOpts...)
 
@@ -62,7 +74,24 @@ func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 		allocCtx:    allocCtx,
 		allocCancel: allocCancel,
 		raw:         crawler.NewHTTPFetcher(opts),
+		ua:          ua,
 	}, nil
+}
+
+// proxyServerArg renders a proxy URL as Chromium's --proxy-server value: scheme://host[:port],
+// without any userinfo (Chromium rejects credentials embedded in the flag).
+func proxyServerArg(u *url.URL) string {
+	return u.Scheme + "://" + u.Host
+}
+
+// hostOf extracts the hostname from rawURL for sticky-host User-Agent rotation. A parse
+// failure yields "" (the sticky hash then maps everything to one agent, which is harmless).
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }
 
 // quietErrorf is chromedp's error logger with the benign "unhandled node event"
@@ -202,8 +231,15 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		metrics  cwvJS
 		dlJSON   string
 	)
-	err := chromedp.Run(runCtx,
-		network.Enable(),
+	actions := []chromedp.Action{network.Enable()}
+	// When the UA pool rotates, pick this page's agent and override it for the navigation. A
+	// single-agent pool is already set browser-wide at allocation, so we skip the override.
+	if h.ua.Rotates() {
+		if ua := h.ua.Next(hostOf(rawURL)); ua != "" {
+			actions = append(actions, emulation.SetUserAgentOverride(ua))
+		}
+	}
+	actions = append(actions,
 		chromedp.ActionFunc(func(c context.Context) error {
 			_, err := cdppage.AddScriptToEvaluateOnNewDocument(cwvBootstrap).Do(c)
 			return err
@@ -217,7 +253,7 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		chromedp.Evaluate(dataLayerReadScript, &dlJSON),
 		chromedp.OuterHTML("html", &htmlBody, chromedp.ByQuery),
 	)
-	if err != nil {
+	if err := chromedp.Run(runCtx, actions...); err != nil {
 		return nil, err
 	}
 	dlPresent, dlEntries := parseDataLayer(dlJSON)

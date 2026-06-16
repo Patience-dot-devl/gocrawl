@@ -28,6 +28,13 @@ type CrawlInput struct {
 	Subdomains    *bool    `json:"subdomains,omitempty" jsonschema:"Follow links to subdomains of the seed host"`
 	Include       []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
 	Exclude       []string `json:"exclude,omitempty" jsonschema:"Skip URLs matching any of these regexes"`
+
+	UserAgent         string   `json:"user_agent,omitempty" jsonschema:"User-Agent header sent on every request"`
+	UserAgents        []string `json:"user_agents,omitempty" jsonschema:"Pool of User-Agent strings to rotate across (supersedes user_agent)"`
+	UserAgentRotation string   `json:"user_agent_rotation,omitempty" jsonschema:"Rotation across user_agents: off, round-robin, or random"`
+	Proxy             string   `json:"proxy,omitempty" jsonschema:"Route requests through this proxy URL (http(s):// or socks5://; supports user:pass@host)"`
+	Proxies           []string `json:"proxies,omitempty" jsonschema:"Pool of proxy URLs to rotate across"`
+	ProxyRotation     string   `json:"proxy_rotation,omitempty" jsonschema:"Rotation across proxies: off, round-robin, random, or sticky-host"`
 }
 
 // CrawlOutput is the MCP "crawl" tool output: the full crawl report.
@@ -94,6 +101,14 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 	}
 	cfg.Crawl.Include = in.Include
 	cfg.Crawl.Exclude = in.Exclude
+	if in.UserAgent != "" {
+		cfg.Crawl.UserAgent = in.UserAgent
+	}
+	cfg.Crawl.UserAgents = in.UserAgents
+	cfg.Crawl.UserAgentRotation = in.UserAgentRotation
+	cfg.Crawl.Proxy = in.Proxy
+	cfg.Crawl.Proxies = in.Proxies
+	cfg.Crawl.ProxyRotation = in.ProxyRotation
 
 	rep, err := runner.Run(ctx, cfg, seed)
 	if err != nil {

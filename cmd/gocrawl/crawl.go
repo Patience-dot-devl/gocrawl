@@ -32,6 +32,11 @@ func newCrawlCmd() *cobra.Command {
 	f.StringSlice("include", nil, "only crawl URLs matching these regexes")
 	f.StringSlice("exclude", nil, "skip URLs matching these regexes")
 	f.String("user-agent", "", "User-Agent header")
+	f.StringSlice("user-agents", nil, "pool of User-Agent strings to rotate across (supersedes --user-agent)")
+	f.String("user-agent-rotation", "", "rotation across --user-agents: off, round-robin, or random (default round-robin)")
+	f.String("proxy", "", "route requests through this proxy URL (http(s):// or socks5://; supports user:pass@host)")
+	f.StringSlice("proxies", nil, "pool of proxy URLs to rotate across")
+	f.String("proxy-rotation", "", "rotation across proxies: off, round-robin, random, or sticky-host (default round-robin)")
 	f.Bool("respect-robots", true, "obey robots.txt while crawling")
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
@@ -111,6 +116,21 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("user-agent") {
 		cfg.Crawl.UserAgent, _ = f.GetString("user-agent")
+	}
+	if f.Changed("user-agents") {
+		cfg.Crawl.UserAgents, _ = f.GetStringSlice("user-agents")
+	}
+	if f.Changed("user-agent-rotation") {
+		cfg.Crawl.UserAgentRotation, _ = f.GetString("user-agent-rotation")
+	}
+	if f.Changed("proxy") {
+		cfg.Crawl.Proxy, _ = f.GetString("proxy")
+	}
+	if f.Changed("proxies") {
+		cfg.Crawl.Proxies, _ = f.GetStringSlice("proxies")
+	}
+	if f.Changed("proxy-rotation") {
+		cfg.Crawl.ProxyRotation, _ = f.GetString("proxy-rotation")
 	}
 	if f.Changed("respect-robots") {
 		cfg.Crawl.RespectRobots, _ = f.GetBool("respect-robots")
