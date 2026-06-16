@@ -46,7 +46,7 @@ analyzers over the result, and hands everything to the report builder.
 | [`internal/crawler`](../internal/crawler) | Concurrent crawl engine, HTTP fetcher, robots.txt, URL normalization, scope rules, link extraction. Defines `Page`, `Link`, `Redirect`, `Result`, `Options`. |
 | [`internal/render`](../internal/render) | Render-mode fetcher selection; headless (chromedp) is stubbed. |
 | [`internal/analyze`](../internal/analyze) | The `Analyzer` interface, `Issue`/`Severity` types, and the `Registry`. |
-| `internal/analyze/<name>` | One package per analyzer: `seo`, `httpx` (name `redirects`), `links`, `robotscheck` (name `robots`), `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`, `content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `landing`, and the AI-search analyzers `aeo`, `geo`. `seaurl` is a shared UTM-parsing helper (not an analyzer). |
+| `internal/analyze/<name>` | One package per analyzer: `seo`, `httpx` (name `redirects`), `links`, `robotscheck` (name `robots`), `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`, `content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `datalayer`, `landing`, and the AI-search analyzers `aeo`, `geo`. `seaurl` is a shared UTM-parsing helper (not an analyzer). |
 | [`internal/runner`](../internal/runner) | Wires engine + registry + report into `Run`; also `BuildRegistry` and `ListAnalyzers`. |
 | [`internal/report`](../internal/report) | Builds the `Report` and serializes it (JSON, CSV, HTML). |
 | [`internal/mcpserver`](../internal/mcpserver) | Exposes `crawl` and `list_analyzers` over MCP. |

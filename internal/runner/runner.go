@@ -12,6 +12,7 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/aeo"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/amp"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/content"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/datalayer"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/duplicates"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/geo"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/hreflang"
@@ -68,6 +69,7 @@ func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry 
 	// SEA (Search Engine Advertising) analyzers.
 	r.Register(utm.New())
 	r.Register(tracking.New())
+	r.Register(datalayer.New())
 	r.Register(landing.New())
 	// AI-search analyzers: Answer Engine and Generative Engine Optimization.
 	r.Register(aeo.New(aeo.WithAnswerLead(specialized)))

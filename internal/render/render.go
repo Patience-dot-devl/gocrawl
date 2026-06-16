@@ -11,6 +11,7 @@ package render
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -111,7 +112,13 @@ func (h *HeadlessFetcher) fallback(ctx context.Context, rawURL string, cause err
 	return page, err
 }
 
-// navState tracks main-document network activity across redirects.
+// maxCapturedRequests bounds how many outbound request URLs a single render records. A
+// typical page issues well under this; the cap guards against runaway pages (infinite
+// pollers, ad refreshes) without losing the analytics beacons we care about.
+const maxCapturedRequests = 400
+
+// navState tracks main-document network activity across redirects, plus every outbound
+// request URL (bounded) so analyzers can tell which tags actually fired.
 type navState struct {
 	mu        sync.Mutex
 	navID     network.RequestID
@@ -119,6 +126,7 @@ type navState struct {
 	redirects []crawler.Redirect
 	status    int
 	headers   network.Headers
+	requests  []string
 }
 
 func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler.Page, error) {
@@ -153,11 +161,14 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 	chromedp.ListenTarget(runCtx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *network.EventRequestWillBeSent:
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			if len(state.requests) < maxCapturedRequests {
+				state.requests = append(state.requests, e.Request.URL)
+			}
 			if e.Type != network.ResourceTypeDocument {
 				return
 			}
-			state.mu.Lock()
-			defer state.mu.Unlock()
 			if state.navID == "" {
 				state.navID = e.RequestID
 			}
@@ -189,6 +200,7 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 	var (
 		htmlBody string
 		metrics  cwvJS
+		dlJSON   string
 	)
 	err := chromedp.Run(runCtx,
 		network.Enable(),
@@ -198,14 +210,17 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		}),
 		chromedp.Navigate(rawURL),
 		chromedp.WaitReady("body", chromedp.ByQuery),
-		// Allow paint, layout shifts, and long tasks to settle before reading metrics.
+		// Allow paint, layout shifts, long tasks, and tag-manager pushes to settle before
+		// reading metrics and the dataLayer.
 		chromedp.Sleep(2*time.Second),
 		chromedp.Evaluate(cwvReadScript, &metrics),
+		chromedp.Evaluate(dataLayerReadScript, &dlJSON),
 		chromedp.OuterHTML("html", &htmlBody, chromedp.ByQuery),
 	)
 	if err != nil {
 		return nil, err
 	}
+	dlPresent, dlEntries := parseDataLayer(dlJSON)
 
 	p := &crawler.Page{
 		RequestedURL: rawURL,
@@ -226,13 +241,19 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 			p.Doc = doc
 		}
 	}
+	state.mu.Lock()
+	reqs := append([]string(nil), state.requests...)
+	state.mu.Unlock()
 	p.Render = &crawler.RenderResult{
-		Implemented: true,
-		LCP:         metrics.LCP,
-		FCP:         metrics.FCP,
-		CLS:         metrics.CLS,
-		TBT:         metrics.TBT,
-		TTFB:        metrics.TTFB,
+		Implemented:      true,
+		LCP:              metrics.LCP,
+		FCP:              metrics.FCP,
+		CLS:              metrics.CLS,
+		TBT:              metrics.TBT,
+		TTFB:             metrics.TTFB,
+		DataLayerPresent: dlPresent,
+		DataLayer:        dlEntries,
+		Requests:         reqs,
 	}
 	return p, nil
 }
@@ -285,6 +306,50 @@ const cwvReadScript = `
   return out;
 })()
 `
+
+// dataLayerReadScript serializes window.dataLayer to a JSON string after the page has
+// settled. GTM's dataLayer is append-only (entries are never removed once pushed), so the
+// final array is the full event history — no push hook is needed. The replacer drops
+// functions and breaks cycles so a single un-serializable entry can't fail the whole read.
+// It returns a string (not an object) because chromedp serializes deep page objects
+// unreliably; we re-parse the string on the Go side.
+const dataLayerReadScript = `
+(() => {
+  try {
+    const dl = window.dataLayer;
+    if (!Array.isArray(dl)) return JSON.stringify({ present: false, entries: [] });
+    const seen = new WeakSet();
+    const replacer = (k, v) => {
+      if (typeof v === 'function') return undefined;
+      if (typeof v === 'object' && v !== null) {
+        if (seen.has(v)) return undefined;
+        seen.add(v);
+      }
+      return v;
+    };
+    return JSON.stringify({ present: true, entries: dl }, replacer);
+  } catch (e) {
+    return JSON.stringify({ present: false, entries: [] });
+  }
+})()
+`
+
+// parseDataLayer decodes the dataLayerReadScript output into a presence flag and the raw
+// JSON of each entry. A blank or malformed payload yields (false, nil) so callers degrade
+// gracefully.
+func parseDataLayer(s string) (bool, []json.RawMessage) {
+	if strings.TrimSpace(s) == "" {
+		return false, nil
+	}
+	var snap struct {
+		Present bool              `json:"present"`
+		Entries []json.RawMessage `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(s), &snap); err != nil {
+		return false, nil
+	}
+	return snap.Present, snap.Entries
+}
 
 func headersToHTTP(hs network.Headers) http.Header {
 	out := http.Header{}
