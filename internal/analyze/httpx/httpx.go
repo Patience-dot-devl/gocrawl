@@ -119,4 +119,8 @@ func insecureSubresources(doc *goquery.Document) []string {
 	return out
 }
 
-func normalize(u string) string { return strings.TrimRight(strings.TrimSpace(u), "/") }
+// normalize prepares a URL for loop detection. It deliberately preserves the
+// trailing slash: "/foo" and "/foo/" are distinct URLs, and a 301 from one to
+// the other (e.g. WordPress canonical redirects) is a benign single hop, not a
+// loop. A real loop is the same URL reappearing in the chain (A → B → A).
+func normalize(u string) string { return strings.TrimSpace(u) }
