@@ -92,6 +92,14 @@
   details.explain dt { font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; font-size:.68rem; margin-top:.55rem; }
   details.explain dt:first-child { margin-top:0; }
   details.explain dd { margin:.15rem 0 0; color:var(--fg); }
+  .toolbar label.hidetog { display:flex; align-items:center; gap:.35rem; font-size:.82rem; color:var(--muted); font-weight:600; cursor:pointer; user-select:none; }
+  table.issues td.review { white-space:nowrap; }
+  table.issues td.review label { display:flex; align-items:center; gap:.35rem; font-size:.78rem; color:var(--muted); font-weight:600; cursor:pointer; user-select:none; margin-bottom:.2rem; }
+  table.issues td.review label input { margin:0; }
+  table.issues td.review textarea { margin-top:.35rem; width:13rem; max-width:100%; font:inherit; font-size:.8rem; padding:.35rem .5rem; border:1px solid var(--border); border-radius:6px; resize:vertical; background:#fff; }
+  table.issues tbody tr.reviewed { opacity:.5; }
+  table.issues tbody tr.reviewed:hover { opacity:1; }
+  table.issues tbody tr.reviewed td.url a { text-decoration:line-through; }
 </style>
 </head>
 <body>
@@ -146,7 +154,7 @@
   <div class="tablewrap">
   <table class="issues" id="issuesTable">
     <thead>
-      <tr><th>Severity</th><th>Analyzer</th><th>Code</th><th>URL</th><th>Message</th></tr>
+      <tr><th>Severity</th><th>Analyzer</th><th>Code</th><th>URL</th><th>Message</th><th class="nosort">Review</th></tr>
     </thead>
     <tbody>
       {{range .Issues}}
@@ -171,6 +179,11 @@
           {{if .Data}}
           <details><summary>data</summary><pre>{{dataJSON .Data}}</pre></details>
           {{end}}
+        </td>
+        <td class="review">
+          <label><input type="checkbox" class="ck-resolved">Resolved</label>
+          <label><input type="checkbox" class="ck-nonissue">Non-issue</label>
+          <textarea class="note" rows="2" placeholder="Add a comment…"></textarea>
         </td>
       </tr>
       {{end}}
@@ -220,17 +233,59 @@
     '<select id="anSel"><option value="">All analyzers</option>'+
       anlist.map(function(a){return '<option value="'+a+'">'+a+'</option>';}).join('')+
     '</select>'+
+    '<label class="hidetog"><input type="checkbox" id="hideResolved">Hide resolved</label>'+
+    '<label class="hidetog"><input type="checkbox" id="hideNon">Hide non-issues</label>'+
+    '<button type="button" id="saveBtn" class="sevbtn active" title="Download this report with your review state baked in">Save to file</button>'+
     '<span class="count" id="count"></span>';
   var q=document.getElementById('q'),sel=document.getElementById('anSel'),ce=document.getElementById('count');
+  var hideResolved=document.getElementById('hideResolved'),hideNon=document.getElementById('hideNon');
   var on={error:true,warning:true,info:true};
   function apply(){
     var term=q.value.trim().toLowerCase(),an=sel.value,shown=0;
     for(var i=0;i<rows.length;i++){var r=rows[i],ok=on[r._sev]!==false;
       if(ok&&an&&r._an!==an){ok=false;}
       if(ok&&term&&r._t.indexOf(term)===-1){ok=false;}
+      if(ok&&hideResolved.checked&&r._resolved&&r._resolved.checked){ok=false;}
+      if(ok&&hideNon.checked&&r._nonissue&&r._nonissue.checked){ok=false;}
       r.style.display=ok?'':'none'; if(ok){shown++;}}
     ce.textContent='Showing '+shown.toLocaleString()+' of '+rows.length.toLocaleString()+' issues';
   }
+  // Review state: checkboxes + comment live in the DOM and are saved back into the file
+  // via the "Save to file" button, so a shared report carries its own state — no cookies,
+  // no localStorage, nothing to be cleared by the browser.
+  var dirty=false,saveBtn=document.getElementById('saveBtn');
+  function markDirty(){if(!dirty){dirty=true;saveBtn.textContent='Save to file *';}}
+  function refresh(r){
+    r.classList.toggle('reviewed',(r._resolved&&r._resolved.checked)||(r._nonissue&&r._nonissue.checked));
+  }
+  rows.forEach(function(r){
+    r._resolved=r.querySelector('.ck-resolved');
+    r._nonissue=r.querySelector('.ck-nonissue');
+    var note=r.querySelector('.note');
+    refresh(r);
+    function onToggle(){refresh(r);markDirty();apply();}
+    if(r._resolved){r._resolved.addEventListener('change',onToggle);}
+    if(r._nonissue){r._nonissue.addEventListener('change',onToggle);}
+    if(note){note.addEventListener('input',markDirty);}
+  });
+  function save(){
+    // Reflect live form state into HTML attributes/content so it serializes into the file.
+    Array.prototype.forEach.call(document.querySelectorAll('table.issues input[type=checkbox]'),function(cb){
+      if(cb.checked){cb.setAttribute('checked','checked');}else{cb.removeAttribute('checked');}
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('table.issues textarea.note'),function(ta){ta.textContent=ta.value;});
+    var html='<!doctype html>\n'+document.documentElement.outerHTML;
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+    a.download=(document.title||'gocrawl-report')+'.html';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    dirty=false;saveBtn.textContent='Save to file';
+  }
+  saveBtn.addEventListener('click',save);
+  window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';}});
+  hideResolved.addEventListener('change',apply);
+  hideNon.addEventListener('change',apply);
   var t; q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(apply,150);});
   sel.addEventListener('change',apply);
   Array.prototype.forEach.call(tb.querySelectorAll('.sevbtn'),function(btn){
@@ -238,6 +293,7 @@
   });
   var ths=table.tHead.rows[0].cells,st={c:-1,d:1};
   Array.prototype.forEach.call(ths,function(th,idx){
+    if(th.classList.contains('nosort')){return;}
     th.classList.add('sortable');
     th.addEventListener('click',function(){
       var d=(st.c===idx)?-st.d:1; st={c:idx,d:d};
