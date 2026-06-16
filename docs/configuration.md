@@ -28,6 +28,8 @@ default** (the value used when you set nothing).
 | `crawl.max_pages` | `--max-pages` | int | `500` | Hard cap on pages crawled (`0` = unlimited). |
 | `crawl.concurrency` | `--concurrency` | int | `4` | Parallel fetch workers (`<=0` is treated as 1). |
 | `crawl.rate_per_second` | `--rate` | float | `0` | Max requests/second across the crawl (`0` = unlimited). |
+| `crawl.adaptive_delay` | `--adaptive-delay` | bool | `true` | Automatically slow the crawl when the server responds with HTTP 429/503: the requests-per-second rate is halved on each trigger (down to one request every 10s), and any `Retry-After` header is honored. See below. |
+| `crawl.verbose` | `--verbose` / `-v` | bool | `false` | Log each fetch (URL, status, duration) and every rate-limit change to stderr while crawling. |
 | `crawl.user_agent` | `--user-agent` | string | `gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)` | `User-Agent` header sent on every request. |
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
@@ -99,6 +101,23 @@ report records a `notes` entry (printed as a `note:` line on the CLI) listing wh
 This is independent of the `enabled`/`disabled` lists: a query-dependent analyzer is skipped even
 if you explicitly enable it alongside `strip_query`.
 
+### Adaptive crawl delay (HTTP 429/503)
+
+`crawl.adaptive_delay` (on by default) makes the crawl back off automatically when a server
+signals it is overloaded. On any HTTP **429 Too Many Requests** or **503 Service Unavailable**
+response, the engine halves its effective requests-per-second and applies that new rate to all
+subsequent fetches. Repeated triggers keep halving the rate down to a floor of one request every
+10 seconds. If the crawl was running unrestricted (`rate_per_second: 0`), the first trigger drops
+it to 1 req/s before halving from there.
+
+A burst of 429s arriving close together (e.g. several concurrent workers) backs the crawl off
+once rather than collapsing straight to the floor — adjustments within 2 seconds of the last one
+are ignored. When the response carries a `Retry-After` header (delay-seconds or HTTP-date), the
+crawl never goes faster than it asks, even below the heuristic floor.
+
+Turn it off with `--adaptive-delay=false` if you want a fixed rate regardless of server
+responses. Pair it with `--verbose` to see each rate change logged as it happens.
+
 ### Specialized checks
 
 `analyzers.specialized` (or the `--specialized` flag) is independent of the allow/deny lists.
@@ -124,6 +143,7 @@ replaced by underscores. They override the YAML file and are overridden by CLI f
 | `crawl.max_pages` | `GOCRAWL_CRAWL_MAX_PAGES` |
 | `crawl.concurrency` | `GOCRAWL_CRAWL_CONCURRENCY` |
 | `crawl.rate_per_second` | `GOCRAWL_CRAWL_RATE_PER_SECOND` |
+| `crawl.adaptive_delay` | `GOCRAWL_CRAWL_ADAPTIVE_DELAY` |
 | `crawl.user_agent` | `GOCRAWL_CRAWL_USER_AGENT` |
 | `crawl.timeout` | `GOCRAWL_CRAWL_TIMEOUT` |
 | `crawl.max_body_bytes` | `GOCRAWL_CRAWL_MAX_BODY_BYTES` |
@@ -156,6 +176,7 @@ crawl:
   max_pages: 500         # hard cap on the number of pages crawled
   concurrency: 4         # number of parallel fetch workers
   rate_per_second: 0     # max requests/second across the crawl (0 = unlimited)
+  adaptive_delay: true   # slow down automatically on HTTP 429/503 responses
   user_agent: "gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)"
   timeout: "15s"         # per-request timeout
   max_body_bytes: 5242880  # 5 MiB cap on a single response body

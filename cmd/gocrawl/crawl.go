@@ -36,6 +36,8 @@ func newCrawlCmd() *cobra.Command {
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
 	f.Bool("strip-query", false, "ignore query strings, treating ?a=1 and ?a=2 as one URL (disables utm/tracking query analysis)")
+	f.BoolP("verbose", "v", false, "log each fetch and rate-limit change to stderr while crawling")
+	f.Bool("adaptive-delay", true, "automatically slow the crawl when the server returns HTTP 429/503")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
 	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes)")
 	return cmd
@@ -121,6 +123,12 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("strip-query") {
 		cfg.Crawl.StripQuery, _ = f.GetBool("strip-query")
+	}
+	if f.Changed("verbose") {
+		cfg.Crawl.Verbose, _ = f.GetBool("verbose")
+	}
+	if f.Changed("adaptive-delay") {
+		cfg.Crawl.AdaptiveDelay, _ = f.GetBool("adaptive-delay")
 	}
 	if f.Changed("analyzers") {
 		cfg.Analyzers.Enabled, _ = f.GetStringSlice("analyzers")

@@ -101,6 +101,12 @@ type Result struct {
 	Finished  time.Time              `json:"finished_at"`
 	Opts      Options                `json:"-"`
 
+	// ThrottleEvents counts how many times adaptive delay reduced the crawl rate after HTTP
+	// 429/503 responses. FinalRate is the requests-per-second in effect when the crawl ended;
+	// it is meaningful only when ThrottleEvents > 0.
+	ThrottleEvents int     `json:"throttle_events,omitempty"`
+	FinalRate      float64 `json:"final_rate,omitempty"`
+
 	index map[string]*Page // normalized URL -> page
 }
 
@@ -149,6 +155,11 @@ type Options struct {
 	Timeout      time.Duration
 	MaxBodyBytes int64
 	MaxRedirects int
+	// Verbose logs each fetch and every rate-limit change to stderr while crawling.
+	Verbose bool
+	// AdaptiveDelay automatically slows the crawl (halving requests-per-second, honoring any
+	// Retry-After header) when the server responds with HTTP 429 or 503.
+	AdaptiveDelay bool
 }
 
 // DefaultOptions returns conservative, polite defaults.
@@ -163,5 +174,6 @@ func DefaultOptions() Options {
 		Timeout:       15 * time.Second,
 		MaxBodyBytes:  5 << 20,
 		MaxRedirects:  10,
+		AdaptiveDelay: true,
 	}
 }

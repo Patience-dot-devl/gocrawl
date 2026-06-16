@@ -137,6 +137,9 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	if len(skipped) > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("strip_query is on, so query-dependent analyzers were skipped: %s", strings.Join(skipped, ", ")))
 	}
+	if result.ThrottleEvents > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("server returned HTTP 429/503: adaptive delay slowed the crawl %d time(s), down to %.3g req/s (disable with --adaptive-delay=false)", result.ThrottleEvents, result.FinalRate))
+	}
 	return rep, nil
 }
 

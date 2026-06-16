@@ -25,6 +25,7 @@ crawl:
   max_pages: 500        # hard cap on the number of pages crawled
   concurrency: 4        # number of parallel fetch workers
   rate_per_second: 0    # max requests/second across the crawl (0 = unlimited)
+  adaptive_delay: true  # slow down automatically on HTTP 429/503 responses
   user_agent: "gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)"
   timeout: "15s"        # per-request timeout
   max_body_bytes: 5242880  # 5 MiB cap on a single response body

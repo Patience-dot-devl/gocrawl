@@ -36,6 +36,8 @@ type CrawlConfig struct {
 	FollowExternal  bool          `mapstructure:"follow_external"`
 	FollowNofollow  bool          `mapstructure:"follow_nofollow"`
 	StripQuery      bool          `mapstructure:"strip_query"`
+	Verbose         bool          `mapstructure:"verbose"`
+	AdaptiveDelay   bool          `mapstructure:"adaptive_delay"`
 	Include         []string      `mapstructure:"include"`
 	Exclude         []string      `mapstructure:"exclude"`
 }
@@ -70,6 +72,7 @@ func Default() Config {
 			Timeout:       o.Timeout,
 			MaxBodyBytes:  o.MaxBodyBytes,
 			RespectRobots: o.RespectRobots,
+			AdaptiveDelay: o.AdaptiveDelay,
 		},
 		Output: OutputConfig{Format: "json"},
 	}
@@ -110,6 +113,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("crawl.timeout", d.Crawl.Timeout)
 	v.SetDefault("crawl.max_body_bytes", d.Crawl.MaxBodyBytes)
 	v.SetDefault("crawl.respect_robots", d.Crawl.RespectRobots)
+	v.SetDefault("crawl.adaptive_delay", d.Crawl.AdaptiveDelay)
 }
 
 // Validate checks for obviously invalid settings.
@@ -149,6 +153,8 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	o.FollowExternal = c.Crawl.FollowExternal
 	o.FollowNofollow = c.Crawl.FollowNofollow
 	o.StripQuery = c.Crawl.StripQuery
+	o.Verbose = c.Crawl.Verbose
+	o.AdaptiveDelay = c.Crawl.AdaptiveDelay
 
 	inc, err := compile(c.Crawl.Include)
 	if err != nil {
