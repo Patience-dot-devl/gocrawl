@@ -8,8 +8,8 @@ gocrawl ships twenty-one analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
 the technical/on-page set `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
 `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
-`content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `landing`, and
-the AI-search analyzers `aeo`, `geo`.
+`content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `datalayer`,
+`landing`, and the AI-search analyzers `aeo`, `geo`.
 
 List them at any time:
 
@@ -427,6 +427,51 @@ TikTok Pixel.
 > container (e.g. a `GTM-…` ID), so `no-tracking-tags` is informational rather than a warning.
 > A pixel installed via both a `<script>` and its standard `<noscript>` fallback with the same
 > ID counts as one install, not a duplicate.
+
+---
+
+## `datalayer` — GTM / dataLayer audit (SEA)
+
+Source: [`internal/analyze/datalayer/datalayer.go`](../internal/analyze/datalayer/datalayer.go).
+Where `tracking` answers "which tags are installed?", `datalayer` answers "are they wired up
+correctly and what are they actually measuring?". It runs two tiers on every HTML `200` page.
+
+**Static tier** (any mode — reads the HTML):
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `gtm-noscript-missing` | warning | A GTM container is present but its `<noscript>` `ns.html` iframe fallback is absent | `containers` |
+| `gtm-snippet-not-in-head` | info | The GTM container snippet/loader is not inside `<head>` | `containers` |
+| `datalayer-push-before-init` | warning | A `dataLayer.push` runs before the dataLayer is initialized (early pushes are lost) | — |
+| `datalayer-init-missing` | warning | A tag manager is present but no dataLayer is initialized in the HTML | — |
+| `gtag-config-id-mismatch` | warning | `gtag('config', X)` targets an ID with no matching `gtag/js` loader (and no GTM that could load it) | `config_id`, `loaded_ids` |
+| `consent-mode-present` | info | Google Consent Mode signals (`gtag('consent', …)`) detected | — |
+| `consent-mode-missing` | info | Analytics/ads tags present but no Consent Mode default found | — |
+
+**Runtime tier** (requires `--render headless` — reads the post-JS `window.dataLayer` and the
+page's network beacons):
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `datalayer-empty` | warning | A tag manager is present but `window.dataLayer` is empty/absent after rendering | — |
+| `datalayer-events` | info | Inventory of every event pushed, with per-event counts | `events` |
+| `page-view-missing` | warning | The dataLayer has events but no `page_view`/GTM lifecycle event, and no gtag config implying GA4 auto page_view | — |
+| `ecommerce-event-invalid` | warning | A GA4 e-commerce event (`purchase`, `add_to_cart`, …) is missing required parameters | `event`, `missing` |
+| `datalayer-param-type` | warning | An e-commerce parameter has the wrong type (`value` not numeric, `currency` not ISO-4217, `items` not a non-empty array) | `event`, `param`, `want`, `got` |
+| `duplicate-event` | warning | A conversion event (`purchase`, `generate_lead`, …) fired more than once | `event`, `count` |
+| `duplicate-transaction` | warning | The same purchase `transaction_id` fired more than once | `transaction_id`, `count` |
+| `datalayer-pii` | warning | An email (anywhere) or a phone-shaped value under a phone-like key was pushed into the dataLayer | `kind`, `key`, `value` (redacted) |
+| `tag-not-firing` | warning | A tag detected in the HTML issued no matching network beacon during render | `tag` |
+| `tags-firing` | info | Tags confirmed to have issued a network beacon | `tags` |
+| `datalayer-not-collected` | info | Emitted once when no page was rendered; runtime checks need `--render headless` | — |
+
+> **Why two tiers.** The dataLayer and the events pushed into it only exist after JavaScript
+> runs, so the event inventory, e-commerce validation, duplicate-conversion, PII, and
+> tag-firing checks need headless rendering. The wiring checks (noscript fallback, snippet
+> placement, push-before-init, Consent Mode) are visible in the static HTML and run in any
+> mode. gtag's `gtag('event', …)` arguments-object pushes are normalized alongside GTM
+> `{event: …}` pushes, so both styles are audited. Captured dataLayer entries are **never**
+> written to the report (they can contain PII) — only sanitized findings are.
 
 ---
 

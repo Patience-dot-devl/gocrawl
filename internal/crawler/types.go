@@ -5,6 +5,7 @@ package crawler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"regexp"
 	"time"
@@ -50,6 +51,18 @@ type RenderResult struct {
 	CLS         float64 `json:"cls,omitempty"`
 	TBT         float64 `json:"tbt_ms,omitempty"`
 	TTFB        float64 `json:"ttfb_ms,omitempty"`
+
+	// DataLayerPresent reports whether window.dataLayer was an array after the page rendered.
+	DataLayerPresent bool `json:"data_layer_present,omitempty"`
+	// DataLayer is the post-render snapshot of window.dataLayer, each element the raw JSON of
+	// one entry (a GTM event push or a gtag() arguments object). It is deliberately not
+	// serialized into reports: it can carry PII, so the datalayer analyzer emits sanitized
+	// findings from it instead. Nil in raw mode or when the page has no dataLayer.
+	DataLayer []json.RawMessage `json:"-"`
+	// Requests holds outbound request URLs observed during render, bounded to avoid unbounded
+	// growth. The datalayer analyzer uses it to confirm analytics/marketing tags actually
+	// fired a network beacon. Not serialized.
+	Requests []string `json:"-"`
 }
 
 // Page is the unit passed from the engine to analyzers.
