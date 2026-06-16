@@ -133,6 +133,8 @@ Key crawl options:
 | Max pages | `--max-pages` | Hard cap on pages crawled |
 | Concurrency | `--concurrency` | Parallel fetch workers |
 | Rate limit | `--rate` | Max requests/second (0 = unlimited) |
+| Adaptive delay | `--adaptive-delay` | Auto-slow the crawl on HTTP 429/503 (on by default; honors `Retry-After`) |
+| Verbose | `--verbose` / `-v` | Log each fetch and rate-limit change to stderr |
 | Rendering | `--render` | `raw` (default) or `headless` (chromedp — JS rendering + Core Web Vitals) |
 | Scope | `--include` / `--exclude` | URL regex filters |
 | Robots | `--respect-robots` | Obey `robots.txt` while crawling |
