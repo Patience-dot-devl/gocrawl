@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -24,11 +25,20 @@ type Config struct {
 
 // CrawlConfig controls crawl scope and politeness.
 type CrawlConfig struct {
-	MaxDepth        int           `mapstructure:"max_depth"`
-	MaxPages        int           `mapstructure:"max_pages"`
-	Concurrency     int           `mapstructure:"concurrency"`
-	RatePerSecond   float64       `mapstructure:"rate_per_second"`
-	UserAgent       string        `mapstructure:"user_agent"`
+	MaxDepth      int     `mapstructure:"max_depth"`
+	MaxPages      int     `mapstructure:"max_pages"`
+	Concurrency   int     `mapstructure:"concurrency"`
+	RatePerSecond float64 `mapstructure:"rate_per_second"`
+	UserAgent     string  `mapstructure:"user_agent"`
+	// UserAgents is an optional pool of User-Agent strings rotated across requests; it
+	// supersedes UserAgent when set. UserAgentRotation is off, round-robin, or random.
+	UserAgents        []string `mapstructure:"user_agents"`
+	UserAgentRotation string   `mapstructure:"user_agent_rotation"`
+	// Proxy is a single proxy URL; Proxies is a pool to rotate across (Proxy, if set, is
+	// prepended to the pool). ProxyRotation is off, round-robin, random, or sticky-host.
+	Proxy           string        `mapstructure:"proxy"`
+	Proxies         []string      `mapstructure:"proxies"`
+	ProxyRotation   string        `mapstructure:"proxy_rotation"`
 	Timeout         time.Duration `mapstructure:"timeout"`
 	MaxBodyBytes    int64         `mapstructure:"max_body_bytes"`
 	RespectRobots   bool          `mapstructure:"respect_robots"`
@@ -156,6 +166,30 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	o.Verbose = c.Crawl.Verbose
 	o.AdaptiveDelay = c.Crawl.AdaptiveDelay
 
+	if len(c.Crawl.UserAgents) > 0 {
+		o.UserAgents = c.Crawl.UserAgents
+	}
+	uaRot, err := crawler.ParseRotation(c.Crawl.UserAgentRotation)
+	if err != nil {
+		return o, fmt.Errorf("user_agent_rotation: %w", err)
+	}
+	o.UserAgentRotation = uaRot
+
+	proxies := c.Crawl.Proxies
+	if strings.TrimSpace(c.Crawl.Proxy) != "" {
+		proxies = append([]string{c.Crawl.Proxy}, proxies...)
+	}
+	parsedProxies, err := parseProxies(proxies)
+	if err != nil {
+		return o, err
+	}
+	o.Proxies = parsedProxies
+	proxyRot, err := crawler.ParseRotation(c.Crawl.ProxyRotation)
+	if err != nil {
+		return o, fmt.Errorf("proxy_rotation: %w", err)
+	}
+	o.ProxyRotation = proxyRot
+
 	inc, err := compile(c.Crawl.Include)
 	if err != nil {
 		return o, fmt.Errorf("include: %w", err)
@@ -167,6 +201,36 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	o.Include = inc
 	o.Exclude = exc
 	return o, nil
+}
+
+// parseProxies validates and parses proxy URL strings into *url.URL. A bare host:port is
+// assumed to be an http proxy. Supported schemes: http, https, socks5 (the schemes Go's
+// http.Transport routes through). Credentials in the URL (user:pass@host) are preserved.
+func parseProxies(raw []string) ([]*url.URL, error) {
+	var out []*url.URL
+	for _, p := range raw {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if !strings.Contains(p, "://") {
+			p = "http://" + p
+		}
+		u, err := url.Parse(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy %q: %w", p, err)
+		}
+		switch u.Scheme {
+		case "http", "https", "socks5":
+		default:
+			return nil, fmt.Errorf("unsupported proxy scheme %q in %q (want http, https, or socks5)", u.Scheme, p)
+		}
+		if u.Host == "" {
+			return nil, fmt.Errorf("proxy %q has no host", p)
+		}
+		out = append(out, u)
+	}
+	return out, nil
 }
 
 func compile(patterns []string) ([]*regexp.Regexp, error) {

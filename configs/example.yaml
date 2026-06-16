@@ -19,6 +19,18 @@ crawl:
   rate_per_second: 0    # max requests/second across the crawl (0 = unlimited)
   adaptive_delay: true  # slow down automatically on HTTP 429/503 responses
   user_agent: "gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)"
+  # Optional User-Agent rotation. When user_agents is set it supersedes user_agent and one is
+  # picked per request by user_agent_rotation (off, round-robin, or random).
+  user_agents: []
+  user_agent_rotation: "round-robin"
+  # Optional proxy / IP rotation. Set a single proxy with `proxy`, or a pool with `proxies`
+  # (the single `proxy`, if set, is prepended to the pool). Schemes: http, https, socks5;
+  # credentials may be embedded as user:pass@host (raw mode only). proxy_rotation is off,
+  # round-robin, random, or sticky-host (all requests to one host use the same proxy).
+  # Headless mode uses only the first proxy. Leave empty to honor HTTP(S)_PROXY env vars.
+  proxy: ""
+  proxies: []
+  proxy_rotation: "round-robin"
   timeout: "15s"        # per-request timeout
   max_body_bytes: 5242880  # 5 MiB cap on a single response body
   respect_robots: true  # obey robots.txt while crawling

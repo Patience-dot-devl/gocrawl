@@ -16,12 +16,15 @@ import (
 // redirect chain is recorded on the resulting Page.
 type HTTPFetcher struct {
 	client       *http.Client
-	userAgent    string
+	ua           *UAPool
 	maxBody      int64
 	maxRedirects int
 }
 
-// NewHTTPFetcher builds a fetcher from the given options.
+// NewHTTPFetcher builds a fetcher from the given options. When opts.Proxies is non-empty the
+// client routes each request through a proxy chosen by opts.ProxyRotation; otherwise Go's
+// default proxy behavior (environment variables) applies. The User-Agent header is chosen per
+// request from opts.UserAgents / opts.UserAgent via opts.UserAgentRotation.
 func NewHTTPFetcher(opts Options) *HTTPFetcher {
 	maxBody := opts.MaxBodyBytes
 	if maxBody <= 0 {
@@ -31,15 +34,24 @@ func NewHTTPFetcher(opts Options) *HTTPFetcher {
 	if maxRedirects <= 0 {
 		maxRedirects = 10
 	}
-	return &HTTPFetcher{
-		client: &http.Client{
-			Timeout: opts.Timeout,
-			// Never auto-follow; we follow manually to capture every hop.
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	client := &http.Client{
+		Timeout: opts.Timeout,
+		// Never auto-follow; we follow manually to capture every hop.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
-		userAgent:    opts.UserAgent,
+	}
+	if pp := newProxyPool(opts); pp != nil {
+		// Clone the default transport so connection-pool tuning is preserved, then swap in the
+		// rotating proxy selector. Connections are pooled per (proxy, target), so rotation works
+		// cleanly alongside keep-alive.
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = pp.proxyFunc()
+		client.Transport = transport
+	}
+	return &HTTPFetcher{
+		client:       client,
+		ua:           NewUAPool(opts),
 		maxBody:      maxBody,
 		maxRedirects: maxRedirects,
 	}
@@ -72,7 +84,9 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			page.Duration = time.Since(start)
 			return page, err
 		}
-		req.Header.Set("User-Agent", f.userAgent)
+		if ua := f.ua.Next(req.URL.Hostname()); ua != "" {
+			req.Header.Set("User-Agent", ua)
+		}
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 
 		resp, err := f.client.Do(req)

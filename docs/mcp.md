@@ -60,6 +60,12 @@ fields fall back to the built-in defaults:
 | `subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
 | `include` | string[] | *(none)* | Only crawl URLs matching at least one regex. |
 | `exclude` | string[] | *(none)* | Skip URLs matching any regex. |
+| `user_agent` | string | *(built-in)* | `User-Agent` header sent on every request. |
+| `user_agents` | string[] | *(none)* | Pool of `User-Agent` strings to rotate across; supersedes `user_agent`. |
+| `user_agent_rotation` | string | `round-robin` | `off`, `round-robin`, or `random`. |
+| `proxy` | string | *(none)* | Proxy URL (`http(s)://` or `socks5://`; supports `user:pass@host`). |
+| `proxies` | string[] | *(none)* | Pool of proxy URLs to rotate across. |
+| `proxy_rotation` | string | `round-robin` | `off`, `round-robin`, `random`, or `sticky-host`. |
 
 **Output** ([`CrawlOutput`](../internal/mcpserver/server.go)): `{ "report": <Report> }`, where
 `<Report>` is the full crawl report documented in the [Output reference](output.md).

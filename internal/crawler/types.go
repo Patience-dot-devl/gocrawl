@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"regexp"
 	"time"
 
@@ -151,11 +152,20 @@ func (r *Result) Reindex() {
 
 // Options controls crawl scope and politeness.
 type Options struct {
-	MaxDepth        int
-	MaxPages        int
-	Concurrency     int
-	RatePerSecond   float64
-	UserAgent       string
+	MaxDepth      int
+	MaxPages      int
+	Concurrency   int
+	RatePerSecond float64
+	UserAgent     string
+	// UserAgents is an optional pool of User-Agent strings to rotate across. When non-empty it
+	// supersedes UserAgent; UserAgentRotation picks one per request.
+	UserAgents        []string
+	UserAgentRotation RotationStrategy
+	// Proxies is an optional pool of proxy URLs (http, https, or socks5) to route requests
+	// through. When non-empty, ProxyRotation picks one per request. Empty leaves Go's default
+	// proxy behavior (honoring HTTP_PROXY/HTTPS_PROXY/NO_PROXY) in place.
+	Proxies         []*url.URL
+	ProxyRotation   RotationStrategy
 	Include         []*regexp.Regexp
 	Exclude         []*regexp.Regexp
 	RespectRobots   bool

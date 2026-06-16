@@ -31,6 +31,11 @@ default** (the value used when you set nothing).
 | `crawl.adaptive_delay` | `--adaptive-delay` | bool | `true` | Automatically slow the crawl when the server responds with HTTP 429/503: the requests-per-second rate is halved on each trigger (down to one request every 10s), and any `Retry-After` header is honored. See below. |
 | `crawl.verbose` | `--verbose` / `-v` | bool | `false` | Log each fetch (URL, status, duration) and every rate-limit change to stderr while crawling. |
 | `crawl.user_agent` | `--user-agent` | string | `gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)` | `User-Agent` header sent on every request. |
+| `crawl.user_agents` | `--user-agents` | list of string | *(none)* | Pool of `User-Agent` strings to rotate across; supersedes `user_agent` when set. See [Rotating proxies and User-Agents](#rotating-proxies-and-user-agents). |
+| `crawl.user_agent_rotation` | `--user-agent-rotation` | string | `round-robin` | How a multi-entry `user_agents` pool is picked: `off`, `round-robin`, or `random`. |
+| `crawl.proxy` | `--proxy` | string | *(none)* | Route requests through this proxy URL (`http(s)://` or `socks5://`; supports `user:pass@host`). Prepended to `proxies` when both are set. |
+| `crawl.proxies` | `--proxies` | list of string | *(none)* | Pool of proxy URLs to rotate across. See [Rotating proxies and User-Agents](#rotating-proxies-and-user-agents). |
+| `crawl.proxy_rotation` | `--proxy-rotation` | string | `round-robin` | How a multi-entry proxy pool is picked: `off`, `round-robin`, `random`, or `sticky-host`. |
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
 | `crawl.respect_robots` | `--respect-robots` | bool | `true` | Obey `robots.txt` while crawling. |
@@ -65,6 +70,61 @@ crawl:
   exclude:
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
 ```
+
+### Rotating proxies and User-Agents
+
+For large audits — or sites that throttle or block a single client IP / `User-Agent` — gocrawl
+can spread requests across a pool of proxies and/or `User-Agent` strings. This is meant for
+crawling sites you own or are authorized to audit; it does not change robots.txt or rate-limit
+behavior (see the note at the end).
+
+**User-Agents.** Set a pool with `user_agents` (or `--user-agents`). When non-empty it
+supersedes the single `user_agent`, and `user_agent_rotation` decides how one is chosen per
+request:
+
+- `off` — always use the first entry.
+- `round-robin` (default) — cycle through the list in order.
+- `random` — pick a uniformly random entry per request.
+
+```sh
+gocrawl crawl https://example.com \
+  --user-agents "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...,Mozilla/5.0 (Macintosh; ...)" \
+  --user-agent-rotation random
+```
+
+A common audit use is **cloaking detection** — crawl once with a Googlebot `User-Agent` and
+once with a browser one, then diff the reports to spot UA-conditional serving.
+
+**Proxies.** Set a single proxy with `proxy` / `--proxy`, or a pool with `proxies` /
+`--proxies` (the single `proxy`, if also set, is prepended to the pool). Each entry is an
+`http://`, `https://`, or `socks5://` URL; a bare `host:port` is treated as `http://`.
+Credentials may be embedded as `user:pass@host` (raw mode only). `proxy_rotation` selects one
+per request:
+
+- `off` — always use the first proxy.
+- `round-robin` (default) — cycle through the pool in order.
+- `random` — pick a uniformly random proxy per request.
+- `sticky-host` — map each target host to a fixed proxy (by hash), so every request to one host
+  leaves from the same IP. Useful to avoid a server seeing one session arrive from several IPs.
+
+```sh
+gocrawl crawl https://example.com \
+  --proxies "http://user:pass@gw1.proxy.net:8080,socks5://gw2.proxy.net:1080" \
+  --proxy-rotation sticky-host
+```
+
+When no proxy is configured, gocrawl honors the standard `HTTP_PROXY` / `HTTPS_PROXY` /
+`NO_PROXY` environment variables (Go's default behavior).
+
+**Headless mode caveats.** Under `--render headless`, `User-Agent` rotation still applies
+per page (via a CDP override), but Chromium accepts only one proxy per browser process, so
+headless mode uses the **first** proxy in the pool and proxy credentials are not sent. Run raw
+mode (the default) for full per-request proxy rotation.
+
+**This is not an evasion switch.** Rotation is independent of `respect_robots` and the rate
+limiter / adaptive delay, which remain per-crawl and stay in force. The intended use is keeping
+authorized audits from tripping WAF false-positives and testing UA/IP-conditional serving — not
+bypassing access controls.
 
 ## Selecting analyzers
 
