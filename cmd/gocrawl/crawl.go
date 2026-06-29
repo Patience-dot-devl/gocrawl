@@ -29,6 +29,8 @@ func newCrawlCmd() *cobra.Command {
 	f.String("render", "", "rendering mode: raw or headless")
 	f.StringP("out", "o", "", "output file (default: stdout)")
 	f.StringP("format", "f", "", "output format: json, csv, or html")
+	f.String("sitemap", "", "also write a standard sitemap.xml of crawled pages to this path")
+	f.String("site-tree", "", "also write an HTML site-map tree visualization to this path")
 	f.StringSlice("include", nil, "only crawl URLs matching these regexes")
 	f.StringSlice("exclude", nil, "skip URLs matching these regexes")
 	f.String("user-agent", "", "User-Agent header")
@@ -107,6 +109,12 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("format") {
 		cfg.Output.Format, _ = f.GetString("format")
+	}
+	if f.Changed("sitemap") {
+		cfg.Output.SitemapPath, _ = f.GetString("sitemap")
+	}
+	if f.Changed("site-tree") {
+		cfg.Output.SiteTreePath, _ = f.GetString("site-tree")
 	}
 	if f.Changed("include") {
 		cfg.Crawl.Include, _ = f.GetStringSlice("include")
