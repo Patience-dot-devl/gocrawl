@@ -140,7 +140,7 @@ Key crawl options:
 | Robots | `--respect-robots` | Obey `robots.txt` while crawling |
 | Subdomains | `--subdomains` | Follow links to subdomains of the seed |
 | Output | `--out` / `--format` | File path and `json` / `csv` / `html` |
-| Site map | `--sitemap` / `--site-tree` | Also write a `sitemap.xml` and/or a clickable HTML site tree showing issues per page |
+| Site map | `--sitemap` | Write a `sitemap.xml`; the HTML report also has a clickable Site map tab showing issues per page |
 | Analyzers | `--analyzers` | Comma-separated allow-list |
 | Specialized checks | `--specialized` | Enable opt-in checks: AI-search heuristics + WordPress security probes (off by default) |
 

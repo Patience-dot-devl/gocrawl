@@ -56,11 +56,10 @@ type CrawlConfig struct {
 type OutputConfig struct {
 	Format string `mapstructure:"format"`
 	Path   string `mapstructure:"path"`
-	// SitemapPath, when set, writes a standard sitemap.xml of the crawled pages to that path
-	// as a side output (independent of Format). SiteTreePath, when set, writes a self-contained
-	// HTML page visualizing the crawl as a collapsible site tree.
-	SitemapPath  string `mapstructure:"sitemap_path"`
-	SiteTreePath string `mapstructure:"site_tree_path"`
+	// SitemapPath, when set, writes a standard sitemap.xml of the crawled pages to that path as
+	// a side output (independent of Format). The crawled site is also always rendered as a "Site
+	// map" tab in the HTML report.
+	SitemapPath string `mapstructure:"sitemap_path"`
 }
 
 // AnalyzersConfig selects which analyzers run.

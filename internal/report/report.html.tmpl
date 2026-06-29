@@ -100,6 +100,48 @@
   table.issues tbody tr.reviewed { opacity:.5; }
   table.issues tbody tr.reviewed:hover { opacity:1; }
   table.issues tbody tr.reviewed td.url a { text-decoration:line-through; }
+  /* tabs */
+  .tabs { display:flex; gap:.25rem; margin:0 0 1.5rem; border-bottom:1px solid var(--border); }
+  .tabs .tab { appearance:none; border:0; background:none; font:inherit; font-weight:600; color:var(--muted); padding:.6rem .9rem; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .tabs .tab:hover { color:var(--fg); }
+  .tabs .tab.active { color:var(--info); border-bottom-color:var(--info); }
+  .tabpanel[hidden] { display:none; }
+  /* site-map tree */
+  #tab-sitemap .sm-meta { color:var(--muted); font-size:.9rem; margin-bottom:1rem; }
+  #tab-sitemap .sm-meta code { background:#eef1f4; padding:.1rem .45rem; border-radius:4px; }
+  #tab-sitemap ul.sm-tree, #tab-sitemap ul.sm-tree ul { list-style:none; margin:0; padding-left:1.25rem; border-left:1px solid var(--border); }
+  #tab-sitemap ul.sm-tree { padding-left:0; border-left:0; }
+  #tab-sitemap li { margin:.15rem 0; }
+  #tab-sitemap details.sm-tnode > summary, #tab-sitemap details.sm-issues > summary { cursor:pointer; list-style:none; }
+  #tab-sitemap details > summary::-webkit-details-marker { display:none; }
+  #tab-sitemap details.sm-tnode > summary::before { content:"\25B8"; display:inline-block; width:1em; color:var(--muted); transition:transform .1s; }
+  #tab-sitemap details.sm-tnode[open] > summary::before { transform:rotate(90deg); }
+  #tab-sitemap .sm-leaf { padding-left:1em; }
+  #tab-sitemap .sm-label { font-weight:600; color:var(--info); text-decoration:none; }
+  #tab-sitemap .sm-label:hover { text-decoration:underline; }
+  #tab-sitemap .sm-title { color:var(--muted); font-size:.85rem; margin-left:.4rem; }
+  #tab-sitemap .sm-st { display:inline-block; min-width:2.4em; text-align:center; font-size:.72rem; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:.5rem; vertical-align:middle; }
+  #tab-sitemap .st-ok { background:#e3f6e8; color:#1a7f37; }
+  #tab-sitemap .st-redirect { background:var(--warning-bg); color:var(--warning); }
+  #tab-sitemap .st-error { background:var(--error-bg); color:var(--error); }
+  #tab-sitemap .st-none { background:#eef1f4; color:var(--muted); }
+  #tab-sitemap .sm-sev { display:inline-block; min-width:1.6em; text-align:center; font-size:.72rem; font-weight:700; padding:1px 6px; border-radius:10px; margin-left:.35rem; vertical-align:middle; }
+  #tab-sitemap .sm-error { background:var(--error-bg); color:var(--error); }
+  #tab-sitemap .sm-warning { background:var(--warning-bg); color:var(--warning); }
+  #tab-sitemap .sm-info { background:var(--info-bg); color:var(--info); }
+  #tab-sitemap .sm-roll { opacity:.6; font-weight:600; margin-left:.5rem; color:var(--muted); }
+  #tab-sitemap .sm-roll::before { content:"\2211 "; }
+  #tab-sitemap details.sm-issues { margin:.1rem 0 .35rem 1.6em; }
+  #tab-sitemap details.sm-issues > summary { font-size:.8rem; color:var(--muted); }
+  #tab-sitemap ul.sm-issuelist { list-style:none; margin:.3rem 0 .6rem; padding-left:.5rem; border-left:2px solid var(--border); }
+  #tab-sitemap li.sm-issue { font-size:.82rem; margin:.25rem 0; display:flex; gap:.4rem; align-items:baseline; flex-wrap:wrap; }
+  #tab-sitemap .sm-dot { width:.55em; height:.55em; border-radius:50%; flex:none; align-self:center; }
+  #tab-sitemap .sm-issue.sev-error .sm-dot { background:var(--error); }
+  #tab-sitemap .sm-issue.sev-warning .sm-dot { background:var(--warning); }
+  #tab-sitemap .sm-issue.sev-info .sm-dot { background:var(--info); }
+  #tab-sitemap li.sm-issue code { background:#f0f3f6; padding:.1rem .4rem; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  #tab-sitemap .sm-an { color:var(--muted); }
+  #tab-sitemap .sm-muted { color:var(--muted); font-weight:400; font-size:.85rem; }
 </style>
 </head>
 <body>
@@ -111,7 +153,19 @@
     · started {{.StartedAt}} · finished {{.FinishedAt}}
   </div>
 </div></header>
+{{/* Recursive site-map tree partials (rendered in the Site map tab). severityClass/statusClass come from the FuncMap. */}}
+{{define "smbadges"}}{{if .Error}}<span class="sm-sev sm-error" title="errors">{{.Error}}</span>{{end}}{{if .Warning}}<span class="sm-sev sm-warning" title="warnings">{{.Warning}}</span>{{end}}{{if .Info}}<span class="sm-sev sm-info" title="info">{{.Info}}</span>{{end}}{{end}}
+{{define "smrow"}}{{if .URL}}<a href="{{.URL}}" class="sm-label">{{if .Label}}{{.Label}}{{else}}/{{end}}</a>{{else}}<span class="sm-label">{{.Label}}</span>{{end}}{{if .Status}}<span class="sm-st {{statusClass .Status}}">{{.Status}}</span>{{end}}{{template "smbadges" .Counts}}{{if .Title}}<span class="sm-title">{{.Title}}</span>{{end}}{{end}}
+{{define "smrollup"}}{{if and .Children (gt .Subtotal.Total .Counts.Total)}}<span class="sm-roll" title="issues in this branch">{{.Subtotal.Total}}</span>{{end}}{{end}}
+{{define "smissues"}}{{if .Issues}}<details class="sm-issues"><summary>{{len .Issues}} issue{{if ne (len .Issues) 1}}s{{end}} on this page</summary><ul class="sm-issuelist">{{range .Issues}}<li class="sm-issue {{severityClass .Severity}}"><span class="sm-dot"></span><code>{{.Code}}</code><span class="sm-an">{{.Analyzer}}</span><span class="sm-msg">{{.Message}}</span></li>{{end}}</ul></details>{{end}}{{end}}
+{{define "smnode"}}<li>{{if .Children}}<details class="sm-tnode" open><summary>{{template "smrow" .}}{{template "smrollup" .}}</summary>{{template "smissues" .}}<ul>{{range .Children}}{{template "smnode" .}}{{end}}</ul></details>{{else}}<div class="sm-leaf">{{template "smrow" .}}</div>{{template "smissues" .}}{{end}}</li>{{end}}
 <main>
+  <nav class="tabs">
+    <button type="button" class="tab active" data-tab="report">Issues &amp; summary</button>
+    {{if .SiteMap}}<button type="button" class="tab" data-tab="sitemap">Site map</button>{{end}}
+  </nav>
+
+  <section class="tabpanel" id="tab-report">
   <div class="tiles" id="tiles"></div>
 
   <h2>Summary</h2>
@@ -193,8 +247,38 @@
   {{else}}
   <p class="empty">No issues found.</p>
   {{end}}
+  </section>
+
+  {{if .SiteMap}}
+  <section class="tabpanel" id="tab-sitemap" hidden>
+    <div class="sm-meta">
+      <code>{{.SiteMap.Host}}</code> · {{len .SiteMap.Entries}} indexable page{{if ne (len .SiteMap.Entries) 1}}s{{end}}
+      {{if not .SiteMap.Totals.Empty}}· {{template "smbadges" .SiteMap.Totals}} total{{end}}
+    </div>
+    <ul class="sm-tree">
+      <li>
+        <div>{{template "smrow" .SiteMap.Root}}{{template "smrollup" .SiteMap.Root}}</div>
+        {{template "smissues" .SiteMap.Root}}
+        {{if .SiteMap.Root.Children}}<ul>{{range .SiteMap.Root.Children}}{{template "smnode" .}}{{end}}</ul>{{end}}
+      </li>
+    </ul>
+    {{if .SiteMap.SiteWide}}
+    <h3>Site-wide issues <span class="sm-muted">({{len .SiteMap.SiteWide}}, not tied to a single page)</span></h3>
+    <ul class="sm-issuelist">{{range .SiteMap.SiteWide}}<li class="sm-issue {{severityClass .Severity}}"><span class="sm-dot"></span><code>{{.Code}}</code><span class="sm-an">{{.Analyzer}}</span><span class="sm-msg">{{.Message}}</span></li>{{end}}</ul>
+    {{end}}
+  </section>
+  {{end}}
 </main>
 <script>
+(function(){
+  var tabs=document.querySelectorAll('.tabs .tab');
+  if(tabs.length<2){return;}
+  function show(name){
+    Array.prototype.forEach.call(document.querySelectorAll('.tabpanel'),function(p){p.hidden=(p.id!=='tab-'+name);});
+    Array.prototype.forEach.call(tabs,function(t){t.classList.toggle('active',t.getAttribute('data-tab')===name);});
+  }
+  Array.prototype.forEach.call(tabs,function(t){t.addEventListener('click',function(){show(t.getAttribute('data-tab'));});});
+})();
 (function(){
   var table=document.getElementById('issuesTable');
   if(!table){return;}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/sitemapgen"
 )
 
 //go:embed report.html.tmpl
@@ -29,6 +30,10 @@ type Report struct {
 	// Notes carries human-readable advisories about the run itself (e.g. analyzers skipped
 	// because of a conflicting option), not page findings. Omitted when empty.
 	Notes []string `json:"notes,omitempty"`
+	// SiteMap is the crawled site as a tree, annotated with the issues found on each page. It
+	// powers the "Site map" tab of the HTML report and the optional sitemap.xml side output.
+	// Not serialized to JSON/CSV (the structure is derivable from pages + issues).
+	SiteMap *sitemapgen.Map `json:"-"`
 }
 
 // Summary aggregates issue counts.
@@ -55,6 +60,7 @@ func Build(result *crawler.Result, issues []analyze.Issue) *Report {
 	for _, p := range result.Pages {
 		sum.ByStatus[fmt.Sprintf("%d", p.StatusCode)]++
 	}
+	sm := sitemapgen.Generate(result, issues, result.Finished)
 	return &Report{
 		Seed:         result.Seed,
 		StartedAt:    result.StartedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -62,6 +68,7 @@ func Build(result *crawler.Result, issues []analyze.Issue) *Report {
 		PagesCrawled: len(result.Pages),
 		Summary:      sum,
 		Issues:       issues,
+		SiteMap:      &sm,
 	}
 }
 
@@ -123,6 +130,7 @@ type HTMLReporter struct{}
 func (HTMLReporter) Write(w io.Writer, r *Report) error {
 	tmpl, err := template.New("report.html.tmpl").Funcs(template.FuncMap{
 		"severityClass": severityClass,
+		"statusClass":   statusClass,
 		"dataJSON":      dataJSON,
 		"explain":       explain,
 	}).ParseFS(htmlTemplateFS, "report.html.tmpl")
@@ -140,6 +148,20 @@ func severityClass(s string) string {
 		return "sev-warning"
 	default:
 		return "sev-info"
+	}
+}
+
+// statusClass maps an HTTP status to a CSS class for the site-map tree (0 = synthetic node).
+func statusClass(status int) string {
+	switch {
+	case status == 0:
+		return "st-none"
+	case status >= 200 && status < 300:
+		return "st-ok"
+	case status >= 300 && status < 400:
+		return "st-redirect"
+	default:
+		return "st-error"
 	}
 }
 

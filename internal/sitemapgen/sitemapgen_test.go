@@ -193,35 +193,3 @@ func TestSubtotalsAndSiteWide(t *testing.T) {
 		t.Errorf("Totals = %+v, want 5", m.Totals)
 	}
 }
-
-func TestWriteHTMLShowsIssues(t *testing.T) {
-	m := sitemapgen.Generate(sampleResult(t), sampleIssues(), time.Unix(0, 0).UTC())
-	var buf bytes.Buffer
-	if err := sitemapgen.WriteHTML(&buf, m); err != nil {
-		t.Fatalf("WriteHTML: %v", err)
-	}
-	out := buf.String()
-	for _, want := range []string{"missing-title", "No title", "issue on this page", "Site-wide issues", "no-robots"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("HTML missing %q", want)
-		}
-	}
-}
-
-func TestWriteHTML(t *testing.T) {
-	m := sitemapgen.Generate(sampleResult(t), nil, time.Unix(0, 0).UTC())
-	var buf bytes.Buffer
-	if err := sitemapgen.WriteHTML(&buf, m); err != nil {
-		t.Fatalf("WriteHTML: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "<!DOCTYPE html>") {
-		t.Error("not an HTML document")
-	}
-	if !strings.Contains(out, "Post 1") {
-		t.Error("page title missing from tree")
-	}
-	if !strings.Contains(out, "https://example.com/blog/post-1") {
-		t.Error("page link missing from tree")
-	}
-}

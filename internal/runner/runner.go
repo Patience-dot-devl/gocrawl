@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/aeo"
@@ -145,34 +144,15 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 		rep.Notes = append(rep.Notes, fmt.Sprintf("server returned HTTP 429/503: adaptive delay slowed the crawl %d time(s), down to %.3g req/s (disable with --adaptive-delay=false)", result.ThrottleEvents, result.FinalRate))
 	}
 
-	if err := writeSiteMap(result, issues, cfg.Output, rep); err != nil {
-		return nil, err
+	// The crawled site is rendered as a tab in the HTML report (report.Build attaches it). When
+	// --sitemap is set, also write it out as a standalone, machine-readable sitemap.xml.
+	if cfg.Output.SitemapPath != "" && rep.SiteMap != nil {
+		if err := sitemapgen.WriteXMLFile(cfg.Output.SitemapPath, *rep.SiteMap); err != nil {
+			return nil, fmt.Errorf("writing sitemap.xml: %w", err)
+		}
+		rep.Notes = append(rep.Notes, fmt.Sprintf("sitemap.xml written to %s (%d URLs)", cfg.Output.SitemapPath, len(rep.SiteMap.Entries)))
 	}
 	return rep, nil
-}
-
-// writeSiteMap writes the optional sitemap.xml and/or HTML site-tree side outputs when their
-// paths are configured, recording a note on the report for each file written. These are
-// generated from the same crawl result and issues that feed the report; nothing is fetched
-// here. The HTML tree annotates each page with the issues found on it.
-func writeSiteMap(result *crawler.Result, issues []analyze.Issue, out config.OutputConfig, rep *report.Report) error {
-	if out.SitemapPath == "" && out.SiteTreePath == "" {
-		return nil
-	}
-	sm := sitemapgen.Generate(result, issues, time.Now())
-	if out.SitemapPath != "" {
-		if err := sitemapgen.WriteXMLFile(out.SitemapPath, sm); err != nil {
-			return fmt.Errorf("writing sitemap.xml: %w", err)
-		}
-		rep.Notes = append(rep.Notes, fmt.Sprintf("sitemap.xml written to %s (%d URLs)", out.SitemapPath, len(sm.Entries)))
-	}
-	if out.SiteTreePath != "" {
-		if err := sitemapgen.WriteHTMLFile(out.SiteTreePath, sm); err != nil {
-			return fmt.Errorf("writing site tree: %w", err)
-		}
-		rep.Notes = append(rep.Notes, fmt.Sprintf("site tree written to %s", out.SiteTreePath))
-	}
-	return nil
 }
 
 // planAnalyzers selects the analyzers to run for the given config, and returns the names of any
