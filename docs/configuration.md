@@ -47,8 +47,7 @@ default** (the value used when you set nothing).
 | `crawl.exclude` | `--exclude` | list of regex | *(none)* | Skip URLs matching any pattern. |
 | `output.format` | `--format` / `-f` | string | `json` | `json`, `csv`, or `html`. |
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
-| `output.sitemap_path` | `--sitemap` | string | *(none)* | Also write a standard `sitemap.xml` of crawled pages here ([details](output.md#site-map-side-outputs)). |
-| `output.site_tree_path` | `--site-tree` | string | *(none)* | Also write an HTML site-map tree visualization here. |
+| `output.sitemap_path` | `--sitemap` | string | *(none)* | Also write a standard `sitemap.xml` of crawled pages here. The HTML report always includes a [Site map tab](output.md#site-map). |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
 | `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized checks: AI-search heuristics and WordPress security probes (see below). |
@@ -219,10 +218,9 @@ GOCRAWL_CRAWL_MAX_DEPTH=1 GOCRAWL_CRAWL_CONCURRENCY=8 gocrawl crawl https://exam
 
 > Environment overrides are wired for the core crawl options listed above (the ones with
 > built-in defaults in [`config.go`](../internal/config/config.go)). For options without a
-> built-in default — `seed`, `output.path`, `output.sitemap_path`, `output.site_tree_path`,
-> `crawl.allow_subdomains`, `crawl.follow_external`, `crawl.follow_nofollow`, `crawl.include`,
-> `crawl.exclude`, and the analyzer lists — set them in the YAML file or via CLI flags rather
-> than the environment.
+> built-in default — `seed`, `output.path`, `output.sitemap_path`, `crawl.allow_subdomains`,
+> `crawl.follow_external`, `crawl.follow_nofollow`, `crawl.include`, `crawl.exclude`, and the
+> analyzer lists — set them in the YAML file or via CLI flags rather than the environment.
 
 ## Example config file
 
@@ -255,7 +253,6 @@ output:
   format: "json"         # "json", "csv", or "html"
   path: ""               # file to write to; empty = stdout
   sitemap_path: ""       # also write a standard sitemap.xml here
-  site_tree_path: ""     # also write an HTML site-map tree here
 
 analyzers:
   enabled: []            # if non-empty, only these run
