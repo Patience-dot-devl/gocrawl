@@ -15,39 +15,40 @@ gocrawl crawl https://example.com --format csv  --out issues.csv
 gocrawl crawl https://example.com --format html --out report.html
 ```
 
-## Site-map side outputs
+## Site map
 
-A crawl can also emit two **site-map artifacts** alongside the report. These are independent
-of `--format`, so you can write them in the same run as any report. Source:
-[`internal/sitemapgen`](../internal/sitemapgen).
+Every crawl also produces a **site map** — the crawled site as a tree, annotated with the
+issues found on each page. It's built from the same crawl result and issues that feed the
+report (nothing is re-fetched). Source: [`internal/sitemapgen`](../internal/sitemapgen).
 
-| Flag | Config key | Output |
-| --- | --- | --- |
-| `--sitemap <path>` | `output.sitemap_path` | A standard [sitemaps.org](https://www.sitemaps.org/protocol.html) `sitemap.xml` (`urlset`). |
-| `--site-tree <path>` | `output.site_tree_path` | A self-contained, clickable HTML site map that visualizes the crawl as a collapsible tree, **annotated with the analyzer issues found on each page**. |
+### In the HTML report (a tab)
+
+The HTML report (`--format html`) carries the site map as a second tab next to **Issues &
+summary** — no extra flags. It doubles as an audit navigator:
+
+- Every page node carries colored severity pills (errors / warnings / info); clicking it
+  expands the full list of findings on that page (code, analyzer, message), sorted worst-first.
+- Collapsed branches show a muted roll-up (`∑ N`) of how many issues hide beneath them.
+- Findings that don't belong to a single crawled page (e.g. the `robots` analyzer's per-host
+  checks) are listed in a **Site-wide issues** section at the bottom.
+
+### As a standalone `sitemap.xml`
+
+To also emit a standard, machine-readable [sitemaps.org](https://www.sitemaps.org/protocol.html)
+`sitemap.xml` (a `urlset` you can host or submit to search engines), pass `--sitemap`
+(config key `output.sitemap_path`). This is independent of `--format`, so you can produce it
+alongside any report:
 
 ```sh
-# Crawl and produce a report, a sitemap.xml, and a visual site map in one run.
-gocrawl crawl https://example.com --depth 3 \
-  --out report.json \
-  --sitemap sitemap.xml \
-  --site-tree sitemap.html
+gocrawl crawl https://example.com --depth 3 --out report.html --format html --sitemap sitemap.xml
 ```
 
-Both are built from the same crawl result the analyzers consume — nothing is re-fetched. Only
-successful (HTTP 200) HTML pages on the seed host (or its subdomains) are included; redirects,
-errors, assets, and off-site pages are excluded, matching what belongs in a sitemap. URLs use
-the canonical (post-redirect) location, and `<lastmod>` is taken from each page's
-`Last-Modified` response header when present (crawl time is never used as a fallback, since it
-reflects when the page was fetched, not when its content changed). A note is added to the
-report for each file written.
-
-The HTML site tree doubles as an audit navigator: every page node carries colored severity
-pills (errors / warnings / info), and clicking it expands the full list of findings on that
-page (code, analyzer, message), sorted worst-first. Collapsed branches show a muted roll-up of
-how many issues hide beneath them, and findings that don't belong to a single crawled page
-(e.g. the `robots` analyzer's per-host checks) are listed in a **Site-wide issues** section at
-the bottom.
+Both the tab and `sitemap.xml` include only successful (HTTP 200) HTML pages on the seed host
+(or its subdomains); redirects, errors, assets, and off-site pages are excluded, matching what
+belongs in a sitemap. URLs use the canonical (post-redirect) location, and `<lastmod>` is
+taken from each page's `Last-Modified` response header when present (crawl time is never used
+as a fallback, since it reflects when the page was fetched, not when its content changed). A
+note is added to the report when `sitemap.xml` is written.
 
 ## JSON schema
 

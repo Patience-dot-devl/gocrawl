@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -122,6 +123,50 @@ func TestHTMLReporter(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("HTML output missing %q", want)
+		}
+	}
+}
+
+func TestHTMLReporterRendersSiteMapTab(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<html><head><title>Post One</title></head><body>x</body></html>"))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	startedAt := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
+	result := &crawler.Result{
+		Seed:      "https://example.com",
+		StartedAt: startedAt,
+		Finished:  startedAt,
+		Pages: []*crawler.Page{
+			{FinalURL: "https://example.com/blog/post-1", StatusCode: 200, ContentType: "text/html", Doc: doc},
+		},
+	}
+	issues := []analyze.Issue{
+		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "missing-h1", Message: "No H1 on page"},
+		{Analyzer: "robots", URL: "host example.com", Severity: analyze.Warning, Code: "no-robots", Message: "No robots.txt"},
+	}
+	r := report.Build(result, issues)
+
+	var buf bytes.Buffer
+	if err := (report.HTMLReporter{}).Write(&buf, r); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	out := buf.String()
+	if _, err := html.Parse(strings.NewReader(out)); err != nil {
+		t.Fatalf("html.Parse: %v", err)
+	}
+	for _, want := range []string{
+		`data-tab="sitemap"`, // the tab button
+		`id="tab-sitemap"`,   // the tab panel
+		"post-1",             // tree node label
+		"Post One",           // page <title> in the tree
+		"missing-h1",         // per-page issue code shown on its node
+		"issue on this page", // the clickable issue disclosure
+		"Site-wide issues",   // the host-level findings section
+		"no-robots",          // the site-wide issue code
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("HTML site-map tab missing %q", want)
 		}
 	}
 }
