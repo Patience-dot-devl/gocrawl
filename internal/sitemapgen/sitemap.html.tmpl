@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site map — {{.Host}}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 2rem; background: #fff; color: #1a1a1a; }
+  @media (prefers-color-scheme: dark) { body { background: #16181d; color: #e6e6e6; } a { color: #6db3f2; } }
+  header { margin-bottom: 1.25rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; }
+  .meta { color: #777; font-size: .85rem; }
+  a { color: #1257a0; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 1.25rem; border-left: 1px solid #ddd; }
+  ul.tree { padding-left: 0; border-left: none; }
+  @media (prefers-color-scheme: dark) { ul.tree ul { border-left-color: #333; } }
+  li { margin: .15rem 0; }
+  details.tree-node > summary, details.issues > summary { cursor: pointer; list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details.tree-node > summary::before { content: "\25B8"; display: inline-block; width: 1em; color: #999; transition: transform .1s; }
+  details.tree-node[open] > summary::before { transform: rotate(90deg); }
+  .leaf { padding-left: 1em; }
+  .label { font-weight: 600; }
+  .title { color: #888; font-size: .85rem; margin-left: .4rem; }
+  /* status badge */
+  .badge { display: inline-block; min-width: 2.4em; text-align: center; font-size: .72rem; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-left: .5rem; vertical-align: middle; }
+  .st-ok { background: #e3f6e8; color: #1d7a3a; }
+  .st-redirect { background: #fff4d6; color: #946200; }
+  .st-error { background: #fde2e2; color: #b3261e; }
+  .st-none { background: #eee; color: #888; }
+  /* severity pills */
+  .sev { display: inline-block; min-width: 1.6em; text-align: center; font-size: .72rem; font-weight: 700; padding: 1px 5px; border-radius: 10px; margin-left: .35rem; vertical-align: middle; }
+  .sev-error { background: #fde2e2; color: #b3261e; }
+  .sev-warning { background: #fff4d6; color: #946200; }
+  .sev-info { background: #e6eefb; color: #2d5fa6; }
+  .roll { opacity: .55; font-weight: 600; }
+  .roll::before { content: "\2211"; margin-left: .5rem; margin-right: .15rem; color: #999; }
+  /* issue list */
+  details.issues { margin: .1rem 0 .25rem 1.6em; }
+  details.issues > summary { font-size: .8rem; color: #777; }
+  ul.issuelist { list-style: none; margin: .25rem 0 .5rem; padding-left: .5rem; border-left: 2px solid #eee; }
+  @media (prefers-color-scheme: dark) { ul.issuelist { border-left-color: #333; } }
+  li.issue { font-size: .82rem; margin: .2rem 0; display: flex; gap: .4rem; align-items: baseline; flex-wrap: wrap; }
+  .dot { width: .55em; height: .55em; border-radius: 50%; flex: none; align-self: center; }
+  .issue.sev-error .dot { background: #d2342b; }
+  .issue.sev-warning .dot { background: #d99100; }
+  .issue.sev-info .dot { background: #2d5fa6; }
+  li.issue code { background: rgba(127,127,127,.15); padding: 0 4px; border-radius: 3px; font-size: .95em; }
+  .an { color: #888; }
+  .msg { color: #444; }
+  @media (prefers-color-scheme: dark) { .msg { color: #c8c8c8; } .st-ok { background:#14361f; color:#6fd391; } .st-redirect { background:#3a2f10; color:#e2bd5a; } .st-error,.sev-error { background:#3a1716; color:#f08a84; } .st-none { background:#2a2d33; color:#999; } .sev-warning { background:#3a2f10; color:#e2bd5a; } .sev-info { background:#1c2c44; color:#8fb6f0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Site map — {{.Host}}</h1>
+  <div class="meta">
+    Seed: {{.Seed}} · {{len .Entries}} indexable page{{if ne (len .Entries) 1}}s{{end}}
+    {{if not .Totals.Empty}}· {{template "sevbadges" .Totals}} total{{end}}
+    · generated {{.Generated.Format "2006-01-02 15:04 MST"}}
+  </div>
+</header>
+
+{{/* severity pills for a SevCounts */}}
+{{define "sevbadges"}}{{if .Error}}<span class="sev sev-error" title="errors">{{.Error}}</span>{{end}}{{if .Warning}}<span class="sev sev-warning" title="warnings">{{.Warning}}</span>{{end}}{{if .Info}}<span class="sev sev-info" title="info">{{.Info}}</span>{{end}}{{end}}
+
+{{/* the row label: link/segment + status + this page's issue pills + title */}}
+{{define "rowlabel"}}{{if .URL}}<a href="{{.URL}}" class="label">{{if .Label}}{{.Label}}{{else}}/{{end}}</a>{{else}}<span class="label">{{.Label}}</span>{{end}}{{if .Status}}<span class="badge {{statusClass .Status}}">{{.Status}}</span>{{end}}{{template "sevbadges" .Counts}}{{if .Title}}<span class="title">{{.Title}}</span>{{end}}{{end}}
+
+{{/* a muted subtree roll-up shown on collapsible parents that hide issues */}}
+{{define "rollup"}}{{if and .Children (gt .Subtotal.Total .Counts.Total)}}<span class="roll" title="issues in this branch">{{.Subtotal.Total}}</span>{{end}}{{end}}
+
+{{/* the clickable per-page issue list */}}
+{{define "issuepanel"}}{{if .Issues}}<details class="issues"><summary>{{len .Issues}} issue{{if ne (len .Issues) 1}}s{{end}} on this page</summary><ul class="issuelist">{{range .Issues}}<li class="issue {{severityClass .Severity}}"><span class="dot"></span><code>{{.Code}}</code><span class="an">{{.Analyzer}}</span><span class="msg">{{.Message}}</span></li>{{end}}</ul></details>{{end}}{{end}}
+
+{{define "node"}}
+<li>
+  {{if .Children}}
+  <details class="tree-node" open>
+    <summary>{{template "rowlabel" .}}{{template "rollup" .}}</summary>
+    {{template "issuepanel" .}}
+    <ul>{{range .Children}}{{template "node" .}}{{end}}</ul>
+  </details>
+  {{else}}
+  <div class="leaf">{{template "rowlabel" .}}</div>
+  {{template "issuepanel" .}}
+  {{end}}
+</li>
+{{end}}
+
+<ul class="tree">
+  <li>
+    <div>{{template "rowlabel" .Root}}{{template "rollup" .Root}}</div>
+    {{template "issuepanel" .Root}}
+    {{if .Root.Children}}<ul>{{range .Root.Children}}{{template "node" .}}{{end}}</ul>{{end}}
+  </li>
+</ul>
+
+{{if .SiteWide}}
+<h2>Site-wide issues <span class="meta">({{len .SiteWide}}, not tied to a single page)</span></h2>
+<ul class="issuelist">
+  {{range .SiteWide}}<li class="issue {{severityClass .Severity}}"><span class="dot"></span><code>{{.Code}}</code><span class="an">{{.Analyzer}}</span><span class="msg">{{.Message}}</span></li>{{end}}
+</ul>
+{{end}}
+</body>
+</html>

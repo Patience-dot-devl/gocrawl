@@ -15,6 +15,40 @@ gocrawl crawl https://example.com --format csv  --out issues.csv
 gocrawl crawl https://example.com --format html --out report.html
 ```
 
+## Site-map side outputs
+
+A crawl can also emit two **site-map artifacts** alongside the report. These are independent
+of `--format`, so you can write them in the same run as any report. Source:
+[`internal/sitemapgen`](../internal/sitemapgen).
+
+| Flag | Config key | Output |
+| --- | --- | --- |
+| `--sitemap <path>` | `output.sitemap_path` | A standard [sitemaps.org](https://www.sitemaps.org/protocol.html) `sitemap.xml` (`urlset`). |
+| `--site-tree <path>` | `output.site_tree_path` | A self-contained, clickable HTML site map that visualizes the crawl as a collapsible tree, **annotated with the analyzer issues found on each page**. |
+
+```sh
+# Crawl and produce a report, a sitemap.xml, and a visual site map in one run.
+gocrawl crawl https://example.com --depth 3 \
+  --out report.json \
+  --sitemap sitemap.xml \
+  --site-tree sitemap.html
+```
+
+Both are built from the same crawl result the analyzers consume — nothing is re-fetched. Only
+successful (HTTP 200) HTML pages on the seed host (or its subdomains) are included; redirects,
+errors, assets, and off-site pages are excluded, matching what belongs in a sitemap. URLs use
+the canonical (post-redirect) location, and `<lastmod>` is taken from each page's
+`Last-Modified` response header when present (crawl time is never used as a fallback, since it
+reflects when the page was fetched, not when its content changed). A note is added to the
+report for each file written.
+
+The HTML site tree doubles as an audit navigator: every page node carries colored severity
+pills (errors / warnings / info), and clicking it expands the full list of findings on that
+page (code, analyzer, message), sorted worst-first. Collapsed branches show a muted roll-up of
+how many issues hide beneath them, and findings that don't belong to a single crawled page
+(e.g. the `robots` analyzer's per-host checks) are listed in a **Site-wide issues** section at
+the bottom.
+
 ## JSON schema
 
 The top-level [`Report`](../internal/report/report.go):
