@@ -30,7 +30,7 @@ default** (the value used when you set nothing).
 | `crawl.rate_per_second` | `--rate` | float | `0` | Max requests/second across the crawl (`0` = unlimited). |
 | `crawl.adaptive_delay` | `--adaptive-delay` | bool | `true` | Automatically slow the crawl when the server responds with HTTP 429/503: the requests-per-second rate is halved on each trigger (down to one request every 10s), and any `Retry-After` header is honored. See below. |
 | `crawl.verbose` | `--verbose` / `-v` | bool | `false` | Log each fetch (URL, status, duration) and every rate-limit change to stderr while crawling. |
-| `crawl.user_agent` | `--user-agent` | string | `gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)` | `User-Agent` header sent on every request. |
+| `crawl.user_agent` | `--user-agent` | string | `gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)` | `User-Agent` header sent on every request. Useful when a site allow-lists a specific UA to exempt the crawler from a CAPTCHA. The bare `gocrawl` command also accepts `--user-agent` to pre-fill the interactive menu, and the menu has a User-Agent field. |
 | `crawl.user_agents` | `--user-agents` | list of string | *(none)* | Pool of `User-Agent` strings to rotate across; supersedes `user_agent` when set. See [Rotating proxies and User-Agents](#rotating-proxies-and-user-agents). |
 | `crawl.user_agent_rotation` | `--user-agent-rotation` | string | `round-robin` | How a multi-entry `user_agents` pool is picked: `off`, `round-robin`, or `random`. |
 | `crawl.proxy` | `--proxy` | string | *(none)* | Route requests through this proxy URL (`http(s)://` or `socks5://`; supports `user:pass@host`). Prepended to `proxies` when both are set. |
