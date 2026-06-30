@@ -21,6 +21,14 @@ type Config struct {
 	Crawl     CrawlConfig     `mapstructure:"crawl"`
 	Output    OutputConfig    `mapstructure:"output"`
 	Analyzers AnalyzersConfig `mapstructure:"analyzers"`
+	Store     StoreConfig     `mapstructure:"store"`
+}
+
+// StoreConfig controls the on-disk crawl store used by `--save`, `gocrawl history`, and
+// `gocrawl compare`.
+type StoreConfig struct {
+	// Dir is the store root; empty means store.DefaultRoot() (~/.gocrawl/crawls).
+	Dir string `mapstructure:"dir"`
 }
 
 // CrawlConfig controls crawl scope and politeness.
@@ -128,6 +136,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("crawl.max_body_bytes", d.Crawl.MaxBodyBytes)
 	v.SetDefault("crawl.respect_robots", d.Crawl.RespectRobots)
 	v.SetDefault("crawl.adaptive_delay", d.Crawl.AdaptiveDelay)
+	// Registered (with an empty default) so GOCRAWL_STORE_DIR is picked up by AutomaticEnv.
+	v.SetDefault("store.dir", d.Store.Dir)
 }
 
 // Validate checks for obviously invalid settings.

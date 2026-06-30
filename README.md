@@ -67,6 +67,13 @@ gocrawl render report.json --out report.html
 # Only run specific analyzers
 gocrawl crawl https://example.com --analyzers seo,links,redirects
 
+# Save a crawl, then track progress over time
+gocrawl crawl https://example.com --save           # store this crawl
+gocrawl history                                     # list saved crawls
+# ...fix some issues, recrawl with --save, then:
+gocrawl compare example.com/<earlier> latest        # what's new / resolved
+gocrawl compare before.json after.json --fail-on-new  # CI gate on regressions
+
 # List every available analyzer
 gocrawl analyzers list
 

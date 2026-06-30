@@ -10,7 +10,7 @@ import (
 )
 
 // version is overridable at build time via -ldflags "-X main.version=...".
-var version = "0.2.2"
+var version = "0.3.0-beta.1"
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -38,6 +38,8 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newAnalyzersCmd())
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newRenderCmd())
+	root.AddCommand(newHistoryCmd())
+	root.AddCommand(newCompareCmd())
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newPathCmd())
 	return root

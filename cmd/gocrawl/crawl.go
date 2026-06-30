@@ -12,6 +12,7 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
+	"github.com/Patience-dot-devl/gocrawl/internal/store"
 )
 
 func newCrawlCmd() *cobra.Command {
@@ -46,6 +47,8 @@ func newCrawlCmd() *cobra.Command {
 	f.Bool("adaptive-delay", true, "automatically slow the crawl when the server returns HTTP 429/503")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
 	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes)")
+	f.Bool("save", false, "also save the crawl to the store for later `gocrawl history` / `gocrawl compare`")
+	f.String("store-dir", "", "store directory for --save (default: ~/.gocrawl/crawls)")
 	return cmd
 }
 
@@ -76,6 +79,13 @@ func runCrawl(cmd *cobra.Command, args []string) error {
 
 	if err := writeReport(cfg, rep); err != nil {
 		return err
+	}
+	if save, _ := cmd.Flags().GetBool("save"); save {
+		id, err := store.New(cfg.Store.Dir).Save(rep)
+		if err != nil {
+			return fmt.Errorf("saving crawl to store: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Saved crawl %s\n", id)
 	}
 	for _, note := range rep.Notes {
 		fmt.Fprintln(os.Stderr, "note:", note)
@@ -159,6 +169,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("specialized") {
 		cfg.Analyzers.Specialized, _ = f.GetBool("specialized")
+	}
+	if f.Changed("store-dir") {
+		cfg.Store.Dir, _ = f.GetString("store-dir")
 	}
 }
 

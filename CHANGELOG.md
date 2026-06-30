@@ -6,6 +6,25 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0-beta.1] - 2026-06-30
+
+### Added
+
+- **Persistent crawl storage (`gocrawl crawl --save`).** Crawls can now be saved to an on-disk
+  store (default `~/.gocrawl/crawls`, configurable via `store.dir`, `--store-dir`, or
+  `GOCRAWL_STORE_DIR`). Each crawl is keyed by a sortable, readable `<host>/<timestamp>` ID.
+  The store is a thin layer over the existing JSON report, so saved crawls are the same
+  artifact `gocrawl render` already consumes.
+- **List saved crawls (`gocrawl history [host]`).** Shows saved crawls newest-first as a table
+  (or `--format json`), with page counts and issue counts by severity. Pass a host to scope to
+  one site.
+- **Compare two crawls (`gocrawl compare <base> <current>`).** Diffs an earlier crawl against a
+  later one into **new** / **resolved** / **persisting** issues, plus page-set and summary
+  deltas, as text or JSON. Each argument is a crawl reference: a report file path, a stored
+  crawl ID, the word `latest`, or a bare host name (that site's newest crawl). `--fail-on-new`
+  exits non-zero when the current crawl introduces any new issue, for use as a CI regression
+  gate. See [docs/storage.md](docs/storage.md).
+
 ## [0.2.2] - 2026-06-30
 
 ### Added
