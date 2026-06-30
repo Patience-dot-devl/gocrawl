@@ -8,6 +8,10 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- **User-Agent in the interactive menu.** The bare `gocrawl` command now accepts
+  `--user-agent` (e.g. `gocrawl --user-agent endeavour-bot`) to pre-fill the menu, and the
+  menu has a User-Agent field — handy when a site allow-lists a specific UA to exempt the
+  crawler from a CAPTCHA. `gocrawl crawl --user-agent` is unchanged.
 - **Crawl coverage signal** — the report now reports whether the crawl actually reached the
   whole site. When a depth or page limit leaves in-scope URLs un-fetched, a `coverage` object
   is emitted, a `notes` advisory names the limit, and the HTML report shows a prominent

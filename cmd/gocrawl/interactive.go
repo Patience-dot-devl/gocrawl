@@ -37,6 +37,7 @@ func runInteractive(cmd *cobra.Command) error {
 		respectRobots   = cfg.Crawl.RespectRobots
 		allowSubdomains = cfg.Crawl.AllowSubdomains
 		followExternal  = cfg.Crawl.FollowExternal
+		userAgent       = cfg.Crawl.UserAgent
 
 		render     = cfg.Render
 		format     = cfg.Output.Format
@@ -49,6 +50,12 @@ func runInteractive(cmd *cobra.Command) error {
 	}
 	if format == "" {
 		format = "json"
+	}
+	// A --user-agent passed to the bare `gocrawl` command pre-fills the menu field, so
+	// `gocrawl --user-agent endeavour-bot` opens the menu with the UA set and still prompts
+	// for everything else.
+	if cmd.Flags().Changed("user-agent") {
+		userAgent, _ = cmd.Flags().GetString("user-agent")
 	}
 
 	// Analyzer multi-select: options come from the live registry; default to all selected.
@@ -92,6 +99,10 @@ func runInteractive(cmd *cobra.Command) error {
 				Description("raw = HTTP fetch (fast); headless = Chrome render (JS + Core Web Vitals).").
 				Options(huh.NewOption("Raw (HTTP)", "raw"), huh.NewOption("Headless (Chrome)", "headless")).
 				Value(&render),
+			huh.NewInput().
+				Title("User-Agent").
+				Description("Sent on every request. Blank = default; set a specific UA if the site allow-lists one (e.g. a CAPTCHA exemption).").
+				Value(&userAgent),
 		),
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
@@ -131,6 +142,7 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Crawl.RespectRobots = respectRobots
 	cfg.Crawl.AllowSubdomains = allowSubdomains
 	cfg.Crawl.FollowExternal = followExternal
+	cfg.Crawl.UserAgent = strings.TrimSpace(userAgent)
 	cfg.Render = render
 	cfg.Output.Format = format
 	cfg.Output.Path = strings.TrimSpace(outputPath)

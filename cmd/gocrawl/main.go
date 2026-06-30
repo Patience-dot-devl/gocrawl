@@ -30,6 +30,9 @@ func newRootCmd() *cobra.Command {
 		},
 	}
 	root.PersistentFlags().StringP("config", "c", "", "path to a YAML config file")
+	// Pre-fills the User-Agent field of the interactive menu, e.g. when a site allow-lists a
+	// specific UA to exempt the crawler from a CAPTCHA. `gocrawl crawl` has its own --user-agent.
+	root.Flags().String("user-agent", "", "User-Agent for the interactive crawl (pre-fills the menu)")
 
 	root.AddCommand(newCrawlCmd())
 	root.AddCommand(newAnalyzersCmd())
