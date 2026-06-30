@@ -8,6 +8,12 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- **`botwall` analyzer — CAPTCHA / bot-challenge detection.** Flags pages that served a
+  reCAPTCHA, hCaptcha, Turnstile, or a Cloudflare / DataDome / AWS WAF / PerimeterX / Imperva
+  challenge wall instead of the real content, so a silently-blocked crawl isn't mistaken for a
+  successful audit. Emits `bot-challenge` (warning) for walls and `captcha-widget` (info) for
+  a CAPTCHA legitimately embedded on a real page. Scans the body, response headers, and (in
+  headless mode) captured request URLs.
 - **Crawl coverage signal** — the report now reports whether the crawl actually reached the
   whole site. When a depth or page limit leaves in-scope URLs un-fetched, a `coverage` object
   is emitted, a `notes` advisory names the limit, and the HTML report shows a prominent
