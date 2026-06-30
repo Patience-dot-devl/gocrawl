@@ -147,8 +147,9 @@ seo,warning,long-title,https://example.com/about,Title may be truncated in SERPs
 ## HTML report
 
 The HTML form ([`HTMLReporter`](../internal/report/report.go)) renders the same `Report`
-struct as a **self-contained HTML page** — inline CSS, no external assets, no JavaScript.
-That makes it easy to share as an artifact, attach to a ticket, or host as a static file.
+struct as a **self-contained HTML page** — inline CSS and a small inline script for the
+interactive toolbar, with no external assets or network calls. That makes it easy to share
+as an artifact, attach to a ticket, or host as a static file.
 
 The page has three blocks:
 
@@ -157,7 +158,12 @@ The page has three blocks:
   same fields as the JSON [`summary`](#summary)).
 - **Issues table** — one row per issue with a severity badge, analyzer, code, clickable URL,
   and message. When an issue has a `data` map, a `<details>` toggle reveals it as
-  pretty-printed JSON.
+  pretty-printed JSON. A toolbar above the table lets you full-text search, toggle
+  severities, filter by analyzer, and **multi-select issue codes** — uncheck codes in the
+  *Codes* dropdown to hide them (e.g. hide `meta-noindex` / `x-robots-noindex` noise when
+  auditing a staging site that is deliberately noindexed). You can also mark rows
+  resolved / non-issue, add comments, and **Save to file** to bake that review state back
+  into a shareable copy.
 
 Untrusted strings from crawled pages (URLs, titles, analyzer messages) are escaped through
 Go's `html/template`, so HTML in a crawled page can't break the report layout. Open the file
