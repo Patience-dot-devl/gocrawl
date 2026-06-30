@@ -22,7 +22,7 @@ func newCrawlCmd() *cobra.Command {
 		RunE:  runCrawl,
 	}
 	f := cmd.Flags()
-	f.IntP("depth", "d", 0, "max link depth from the seed (0 = seed only)")
+	f.IntP("depth", "d", 0, "max link hops from the seed (0 = unlimited; the crawl is bounded by --max-pages)")
 	f.Int("max-pages", 0, "max pages to crawl")
 	f.Int("concurrency", 0, "parallel fetch workers")
 	f.Float64("rate", 0, "max requests per second (0 = unlimited)")

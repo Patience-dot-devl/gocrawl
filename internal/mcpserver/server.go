@@ -18,7 +18,7 @@ import (
 // CrawlInput is the MCP "crawl" tool input. Optional fields override the defaults.
 type CrawlInput struct {
 	URL           string   `json:"url" jsonschema:"Seed URL to crawl (e.g. https://example.com)"`
-	Depth         *int     `json:"depth,omitempty" jsonschema:"Maximum link depth from the seed (default 2; 0 = seed only)"`
+	Depth         *int     `json:"depth,omitempty" jsonschema:"Maximum link hops from the seed (default 0 = unlimited; the crawl is bounded by max_pages)"`
 	MaxPages      *int     `json:"max_pages,omitempty" jsonschema:"Hard cap on the number of pages crawled (default 500)"`
 	Concurrency   *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
 	Render        string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`

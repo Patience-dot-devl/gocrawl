@@ -99,6 +99,81 @@ func TestEngineMaxPages(t *testing.T) {
 	}
 }
 
+func TestEngineCoverageCompleteByDefault(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+
+	// Default options: unlimited depth, bounded only by the (ample) page budget. Every
+	// in-scope URL is reachable, so coverage should be complete.
+	opts := DefaultOptions()
+	if opts.MaxDepth != 0 {
+		t.Fatalf("expected default MaxDepth 0 (unlimited), got %d", opts.MaxDepth)
+	}
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+	if !result.Coverage.Complete || result.Coverage.DiscoveredNotCrawled != 0 {
+		t.Errorf("expected complete coverage, got %+v", result.Coverage)
+	}
+}
+
+func TestEngineCoveragePartialOnPageLimit(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.MaxPages = 2
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+	if result.Coverage.Complete {
+		t.Error("expected partial coverage when the page limit is hit")
+	}
+	if !result.Coverage.PageLimitReached {
+		t.Error("expected PageLimitReached to be set")
+	}
+	if result.Coverage.DiscoveredNotCrawled == 0 {
+		t.Error("expected DiscoveredNotCrawled > 0")
+	}
+}
+
+func TestEngineCoveragePartialOnDepthLimit(t *testing.T) {
+	// A chain /a -> /b: at MaxDepth 1 we crawl / and /a but decline /b, a real coverage gap.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><body><a href="/a">a</a></body></html>`)
+	})
+	mux.HandleFunc("/a", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><body><a href="/b">b</a></body></html>`)
+	})
+	mux.HandleFunc("/b", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><body>leaf</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.MaxDepth = 1
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+	if result.Coverage.Complete {
+		t.Error("expected partial coverage when the depth limit hides /b")
+	}
+	if !result.Coverage.DepthLimitReached {
+		t.Error("expected DepthLimitReached to be set")
+	}
+	if _, ok := result.Page(ts.URL + "/b"); ok {
+		t.Error("/b should not have been crawled at MaxDepth 1")
+	}
+}
+
 func countItemsPages(result *Result) int {
 	n := 0
 	for _, p := range result.Pages {

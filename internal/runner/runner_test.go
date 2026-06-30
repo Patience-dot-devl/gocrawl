@@ -2,6 +2,7 @@ package runner
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -77,5 +78,19 @@ func TestPlanAnalyzersStripQuerySkipsExplicitlyEnabled(t *testing.T) {
 	}
 	if len(skipped) != 1 || skipped[0] != "utm" {
 		t.Errorf("expected skipped=[utm], got %v", skipped)
+	}
+}
+
+func TestCoverageNote(t *testing.T) {
+	// Page limit → message names --max-pages and warns about incomplete findings.
+	n := coverageNote(crawler.Coverage{DiscoveredNotCrawled: 12, PageLimitReached: true, MaxPages: 100})
+	for _, want := range []string{"partial coverage", "12 in-scope", "--max-pages 100", "broken links"} {
+		if !strings.Contains(n, want) {
+			t.Errorf("page-limit note missing %q: %s", want, n)
+		}
+	}
+	// Depth limit → message names --depth.
+	if d := coverageNote(crawler.Coverage{DiscoveredNotCrawled: 3, DepthLimitReached: true, MaxDepth: 2}); !strings.Contains(d, "--depth 2") {
+		t.Errorf("depth-limit note missing --depth: %s", d)
 	}
 }

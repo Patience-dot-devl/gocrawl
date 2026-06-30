@@ -70,7 +70,8 @@ The top-level [`Report`](../internal/report/report.go):
 | `pages_crawled` | int | Number of pages fetched. |
 | `summary` | object | Aggregated counts — see [Summary](#summary). |
 | `issues` | array | Every [Issue](#issue) emitted by the analyzers. |
-| `notes` | array | Advisories about the run itself (e.g. analyzers skipped because `strip_query` is on), not page findings. Omitted when empty. |
+| `notes` | array | Advisories about the run itself (e.g. analyzers skipped because `strip_query` is on, or [partial coverage](#coverage)), not page findings. Omitted when empty. |
+| `coverage` | object | Whether the crawl reached every in-scope URL it found — see [Coverage](#coverage). Omitted only when re-rendering an older report that predates the field. |
 | `site_map` | object | The crawled site as a tree (the same structure the HTML Site map tab draws), with issues attached to each page node. Serialized so a JSON report is a complete artifact that [`gocrawl render`](#re-rendering-a-saved-report) can turn back into HTML without recrawling. Omitted when empty. |
 
 ### Summary
@@ -95,6 +96,27 @@ Each entry in `issues` is an [`Issue`](../internal/analyze/analyze.go):
 | `code` | string | Stable machine-readable code (e.g. `missing-title`). See the [Analyzer reference](analyzers.md). |
 | `message` | string | Human-readable description. |
 | `data` | object | Optional analyzer-specific details; omitted when empty. |
+
+### Coverage
+
+`coverage` reports whether the crawl actually fetched every in-scope URL it discovered, so
+that **"0 broken links" can't be mistaken for "no broken links"** when the crawl simply didn't
+reach them. Broken-link detection only flags a dead link whose target the crawler fetched, so
+coverage is the context you need to trust that result.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `complete` | bool | `true` when no in-scope, robots-allowed URL was left un-fetched because of a limit. |
+| `discovered_not_crawled` | int | Count of distinct in-scope URLs discovered but never fetched. Omitted when 0. |
+| `page_limit_reached` | bool | The `--max-pages` budget cut the crawl short. Omitted when false. |
+| `depth_limit_reached` | bool | The `--depth` limit cut the crawl short. Omitted when false. |
+| `max_pages` / `max_depth` | int | The limits in effect (`0` = unlimited). |
+
+When `complete` is false, a `notes` entry spells out which limit was hit and how to lift it,
+and the **HTML report shows a prominent banner** at the top of the page. By default the crawl
+is bounded by `--max-pages` (500) with unlimited depth, so it walks the whole site up to that
+budget rather than stopping at a shallow depth — re-crawl with a higher `--max-pages` (or `0`)
+when you see the partial-coverage banner.
 
 ### Example JSON report
 
@@ -126,7 +148,8 @@ Each entry in `issues` is an [`Issue`](../internal/analyze/analyze.go):
       "message": "Title may be truncated in SERPs",
       "data": { "length": 73, "title": "About our company — …" }
     }
-  ]
+  ],
+  "coverage": { "complete": true, "max_pages": 500 }
 }
 ```
 

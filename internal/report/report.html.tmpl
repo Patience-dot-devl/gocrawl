@@ -26,6 +26,15 @@
   header.hero h1 { margin:0; font-size:1.6rem; letter-spacing:-.01em; }
   header.hero .sub { margin-top:.5rem; color:#aeb7c2; font-size:.9rem; }
   header.hero .sub code { background:rgba(255,255,255,.12); padding:.1rem .45rem; border-radius:4px; color:#e6edf3; }
+  .cov-banner {
+    display:flex; gap:.75rem; align-items:flex-start; margin:0 0 1.5rem;
+    background:var(--warning-bg); border:1px solid var(--warning);
+    border-left:4px solid var(--warning); border-radius:10px; padding:.85rem 1.1rem; color:#6b4e00;
+  }
+  .cov-banner .ico { font-size:1.1rem; line-height:1.3; flex:none; }
+  .cov-banner .body { font-size:.9rem; }
+  .cov-banner strong { color:#7a4f00; }
+  .cov-banner code { background:rgba(154,103,0,.14); padding:.1rem .4rem; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:1rem; margin-bottom:1.75rem; }
   .tile { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem 1.15rem; box-shadow:var(--shadow); }
   .tile .n { font-size:2rem; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; }
@@ -218,6 +227,16 @@
 {{define "smbox"}}<div class="sm-box {{if .URL}}{{if .Counts.Error}}sm-h-error{{else if .Counts.Warning}}sm-h-warning{{else if .Counts.Info}}sm-h-info{{else}}sm-h-ok{{end}}{{else}}sm-h-none{{end}}{{if .Issues}} sm-haspop{{end}}"><div class="sm-box-head">{{if .Children}}<button type="button" class="sm-box-toggle" title="collapse / expand subtree">&#8722;</button>{{end}}{{if .URL}}<a href="{{.URL}}" class="sm-box-label" title="{{.URL}}">{{if .Label}}{{.Label}}{{else}}/{{end}}</a>{{else}}<span class="sm-box-label">{{.Label}}</span>{{end}}{{if .Status}}<span class="sm-st {{statusClass .Status}}">{{.Status}}</span>{{end}}</div>{{if .Title}}<div class="sm-box-title" title="{{.Title}}">{{.Title}}</div>{{end}}<div class="sm-box-foot">{{template "smbadges" .Counts}}{{template "smrollup" .}}</div>{{template "smissues" .}}</div>{{end}}
 {{define "smchartnode"}}<li class="sm-li{{if .Children}} sm-haskids{{end}}">{{template "smbox" .}}{{if .Children}}<ul>{{range .Children}}{{template "smchartnode" .}}{{end}}</ul>{{end}}</li>{{end}}
 <main>
+  {{if .Coverage}}{{if not .Coverage.Complete}}
+  <div class="cov-banner" role="alert">
+    <span class="ico">&#9888;&#65039;</span>
+    <div class="body">
+      <strong>Partial coverage — this crawl did not reach the whole site.</strong>
+      {{.Coverage.DiscoveredNotCrawled}} in-scope URL{{if ne .Coverage.DiscoveredNotCrawled 1}}s were{{else}} was{{end}} discovered but not crawled{{if .Coverage.PageLimitReached}}, because the page limit (<code>--max-pages {{.Coverage.MaxPages}}</code>) was reached{{end}}{{if .Coverage.DepthLimitReached}}{{if .Coverage.PageLimitReached}} and{{else}}, because{{end}} the depth limit (<code>--depth {{.Coverage.MaxDepth}}</code>) was reached{{end}}.
+      Page-level findings — <strong>broken links especially</strong> — may be incomplete. Re-crawl with a higher limit (or <code>0</code> for unlimited) for full coverage.
+    </div>
+  </div>
+  {{end}}{{end}}
   <nav class="tabs">
     <button type="button" class="tab active" data-tab="report">Issues &amp; summary</button>
     {{if .SiteMap}}<button type="button" class="tab" data-tab="sitemap">Site map</button>{{end}}

@@ -78,7 +78,7 @@ func runInteractive(cmd *cobra.Command) error {
 				}),
 		),
 		huh.NewGroup(
-			huh.NewInput().Title("Max depth").Description("Link hops from the seed (0 = seed only).").Value(&depth).Validate(validInt),
+			huh.NewInput().Title("Max depth").Description("Link hops from the seed (0 = unlimited; the page cap bounds the crawl).").Value(&depth).Validate(validInt),
 			huh.NewInput().Title("Max pages").Description("Hard cap on pages crawled (0 = unlimited).").Value(&maxPages).Validate(validInt),
 			huh.NewInput().Title("Concurrency").Description("Parallel fetch workers.").Value(&concurrency).Validate(validInt),
 			huh.NewInput().Title("Rate limit").Description("Max requests per second (0 = unlimited).").Value(&rate).Validate(validFloat),

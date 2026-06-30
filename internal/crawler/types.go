@@ -121,7 +121,30 @@ type Result struct {
 	ThrottleEvents int     `json:"throttle_events,omitempty"`
 	FinalRate      float64 `json:"final_rate,omitempty"`
 
+	// Coverage reports whether the crawl visited every in-scope URL it discovered, or stopped
+	// at a configured limit. When not Complete, findings that depend on fetching a page —
+	// broken links above all — may be incomplete.
+	Coverage Coverage `json:"coverage"`
+
 	index map[string]*Page // normalized URL -> page
+}
+
+// Coverage summarizes how much of the in-scope site the crawl actually fetched. It exists so
+// the report can warn that "0 broken links" might mean "the broken ones weren't reached"
+// rather than "the site is clean".
+type Coverage struct {
+	// Complete is true when no in-scope, robots-allowed URL was left un-fetched because of a
+	// depth or page-count limit.
+	Complete bool `json:"complete"`
+	// DiscoveredNotCrawled is the number of distinct in-scope URLs that were discovered but
+	// never fetched because a limit was reached.
+	DiscoveredNotCrawled int `json:"discovered_not_crawled,omitempty"`
+	// PageLimitReached / DepthLimitReached record which configured limit cut the crawl short.
+	PageLimitReached  bool `json:"page_limit_reached,omitempty"`
+	DepthLimitReached bool `json:"depth_limit_reached,omitempty"`
+	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
+	MaxPages int `json:"max_pages,omitempty"`
+	MaxDepth int `json:"max_depth,omitempty"`
 }
 
 // Page looks up a crawled page by URL (matched against requested and final URLs after
@@ -185,10 +208,13 @@ type Options struct {
 	AdaptiveDelay bool
 }
 
-// DefaultOptions returns conservative, polite defaults.
+// DefaultOptions returns conservative, polite defaults. By default the crawl is bounded by
+// the total page budget (MaxPages), not by link depth (MaxDepth = 0 = unlimited): a shallow
+// depth cap silently hides whole sections of a site — and the broken links in them — whereas
+// a page budget walks the site breadth-first and stops at a predictable, reported size.
 func DefaultOptions() Options {
 	return Options{
-		MaxDepth:      2,
+		MaxDepth:      0,
 		MaxPages:      500,
 		Concurrency:   4,
 		RatePerSecond: 0,

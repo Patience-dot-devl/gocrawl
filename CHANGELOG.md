@@ -4,6 +4,23 @@ All notable changes to `gocrawl` are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Crawl coverage signal** — the report now reports whether the crawl actually reached the
+  whole site. When a depth or page limit leaves in-scope URLs un-fetched, a `coverage` object
+  is emitted, a `notes` advisory names the limit, and the HTML report shows a prominent
+  **"Partial coverage"** banner. This stops `0 broken links` from being misread as a clean
+  site when the broken links simply weren't reached.
+
+### Changed
+
+- **The crawl is now bounded by total pages, not link depth, by default.** `--depth`/`max_depth`
+  defaults to `0` (unlimited) and `--max-pages` (500) is the primary bound, so a default crawl
+  walks the whole site up to the page budget instead of stopping shallow at depth 2.
+  **Breaking:** `--depth 0` now means *unlimited* (it previously meant *seed only*).
+
 ## [0.2.0] - 2026-06-30
 
 ### Added
@@ -33,5 +50,6 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Patience-dot-devl/gocrawl/releases/tag/v0.1.0

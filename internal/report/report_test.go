@@ -228,6 +228,32 @@ func TestReportJSONRoundTripPreservesSiteMap(t *testing.T) {
 	}
 }
 
+func TestHTMLReporterShowsCoverageBanner(t *testing.T) {
+	startedAt := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
+	mk := func(cov crawler.Coverage) string {
+		result := &crawler.Result{Seed: "https://example.com", StartedAt: startedAt, Finished: startedAt, Coverage: cov}
+		var buf bytes.Buffer
+		if err := (report.HTMLReporter{}).Write(&buf, report.Build(result, nil)); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		return buf.String()
+	}
+
+	// Partial coverage → the banner appears and names the limit. ("cov-banner" alone isn't a
+	// reliable signal — the class is always defined in the stylesheet; check banner text.)
+	partial := mk(crawler.Coverage{Complete: false, DiscoveredNotCrawled: 12, PageLimitReached: true, MaxPages: 100})
+	for _, want := range []string{"Partial coverage", "--max-pages 100", "broken links"} {
+		if !strings.Contains(partial, want) {
+			t.Errorf("partial-coverage HTML missing %q", want)
+		}
+	}
+
+	// Complete coverage → no banner.
+	if got := mk(crawler.Coverage{Complete: true}); strings.Contains(got, "Partial coverage") {
+		t.Error("coverage banner shown for a complete crawl")
+	}
+}
+
 func TestHTMLReporterRendersExplanations(t *testing.T) {
 	r := fixtureReport()
 	var buf bytes.Buffer
