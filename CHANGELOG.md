@@ -8,6 +8,12 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- **`botwall` analyzer — CAPTCHA / bot-challenge detection.** Flags pages that served a
+  reCAPTCHA, hCaptcha, Turnstile, or a Cloudflare / DataDome / AWS WAF / PerimeterX / Imperva
+  challenge wall instead of the real content, so a silently-blocked crawl isn't mistaken for a
+  successful audit. Emits `bot-challenge` (warning) for walls and `captcha-widget` (info) for
+  a CAPTCHA legitimately embedded on a real page. Scans the body, response headers, and (in
+  headless mode) captured request URLs.
 - **User-Agent in the interactive menu.** The bare `gocrawl` command now accepts
   `--user-agent` (e.g. `gocrawl --user-agent endeavour-bot`) to pre-fill the menu, and the
   menu has a User-Agent field — handy when a site allow-lists a specific UA to exempt the
@@ -24,6 +30,14 @@ All notable changes to `gocrawl` are documented here. The format is based on
   defaults to `0` (unlimited) and `--max-pages` (500) is the primary bound, so a default crawl
   walks the whole site up to the page budget instead of stopping shallow at depth 2.
   **Breaking:** `--depth 0` now means *unlimited* (it previously meant *seed only*).
+
+### Fixed
+
+- **Headless rendering no longer reports false `missing-h1` / `missing-*` / `thin-content`
+  on slow pages.** When a page is snapshotted before it finishes rendering, the rendered DOM
+  comes back far thinner than the raw HTML; the renderer now detects this and analyzes the
+  raw HTML instead, and emits a `render-incomplete` warning marking that page's Core Web
+  Vitals as unreliable.
 
 ## [0.2.0] - 2026-06-30
 

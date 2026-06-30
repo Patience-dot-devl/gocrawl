@@ -94,6 +94,18 @@ var explanations = map[string]Explanation{
 		Fix:    "Review whether the page needs more depth, or confirm the short length is intentional (e.g. a contact page).",
 	},
 
+	// --- botwall: CAPTCHA / bot-protection challenge detection ---
+	"bot-challenge": {
+		What:   "The page served a CAPTCHA or bot-protection challenge (e.g. reCAPTCHA, Turnstile, Cloudflare, DataDome) instead of the real content. Challenge walls often return HTTP 200, so the crawl looks successful while the body is just the wall.",
+		Impact: "Every other finding on this page is unreliable — the analyzers audited the challenge HTML, not your page. If many pages are blocked, the whole crawl is compromised.",
+		Fix:    "Crawl from an allow-listed IP/User-Agent, lower concurrency and rate, or coordinate with whoever manages the WAF/bot rules. For staging, allow-list the crawler. Re-crawl once access is granted.",
+	},
+	"captcha-widget": {
+		What:   "The page embeds a CAPTCHA widget (reCAPTCHA, hCaptcha, or Turnstile) within otherwise-normal content — typically on a form, not a block page.",
+		Impact: "Informational. The page was crawled fine; this just notes a CAPTCHA is present (which can add third-party scripts and affect form-completion metrics).",
+		Fix:    "No action needed unless the widget is unexpected. Ensure it loads only where required to limit third-party script weight.",
+	},
+
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {
 		What:   "The page body is identical to one or more other crawled pages.",
@@ -320,6 +332,11 @@ var explanations = map[string]Explanation{
 		What:   "Core Web Vitals were measured in lab mode (LCP, FCP, CLS, TBT, TTFB).",
 		Impact: "Informational. These lab metrics approximate field performance.",
 		Fix:    "No action needed. Review the individual metric findings for any that need improvement.",
+	},
+	"render-incomplete": {
+		What:   "In headless mode the rendered DOM came back much smaller than the raw HTML, so the page had likely not finished rendering when it was snapshotted. gocrawl analyzed the raw HTML for this page instead, so structural checks (H1, meta tags, content) are still accurate.",
+		Impact: "The page's Core Web Vitals for this run are unreliable. Without the raw-HTML fallback this would also cause false 'missing H1', 'missing meta description', and 'thin content' findings.",
+		Fix:    "Usually harmless. If you need trustworthy CWV for slow pages, re-run headless with a longer settle / fewer concurrent workers, or crawl the page on its own. For SEO structure, raw mode (the default) is reliable.",
 	},
 	"lcp-needs-improvement": {
 		What:   "Largest Contentful Paint is above the 'good' threshold (2.5s).",

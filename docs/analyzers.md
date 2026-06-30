@@ -164,6 +164,10 @@ Runs in two modes depending on how the crawl was fetched:
 - **Headless mode (`--render headless`).** Reads lab-mode Core Web Vitals captured by the
   chromedp renderer (`PerformanceObserver` for LCP / FCP / CLS / long-task TBT, Navigation
   Timing for TTFB) and emits per-page findings against [Google's CWV thresholds][cwv].
+  If a page is snapshotted before it finishes rendering, the rendered DOM comes back far
+  thinner than the raw HTML; the renderer detects this, **analyzes the raw HTML instead** (so
+  structural checks like the H1 aren't false-negatives) and emits a `render-incomplete`
+  warning marking that page's CWV as unreliable.
 - **Raw mode.** Falls back to a single `cwv-not-collected` notice and a per-page
   `response-time` proxy from the raw fetch's TTFB.
 
@@ -194,6 +198,7 @@ Runs in two modes depending on how the crawl was fetched:
 | `tbt-needs-improvement` / `tbt-poor` | warning / error | TBT above the band | `value_ms`, `threshold_ms` |
 | `ttfb-needs-improvement` / `ttfb-poor` | warning / error | TTFB above the band | `value_ms`, `threshold_ms` |
 | `cwv-render-failed` | info | Headless rendering errored on a page; CWV unavailable for it | `note` |
+| `render-incomplete` | warning | The rendered DOM came back far thinner than the raw HTML (page not finished rendering); gocrawl analyzed the raw HTML instead, and this page's CWV are unreliable | `rendered_bytes`, `raw_bytes` |
 | `cwv-not-collected` | info | Raw-mode fallback (once on the seed) — reminds to enable `--render headless` | — |
 | `response-time` | info | Raw-mode per-page TTFB proxy from raw fetch duration | `duration_ms` |
 
@@ -326,6 +331,30 @@ the crawl's mean.
 
 > `thin-content` uses an absolute 100-word floor; `low-content` is relative to the crawl
 > average and is suppressed on pages already flagged as thin, so the two never double-report.
+
+---
+
+## `botwall` — CAPTCHA / bot-protection challenge detection
+
+Source: [`internal/analyze/botwall/botwall.go`](../internal/analyze/botwall/botwall.go). Flags
+pages that served a CAPTCHA or bot-protection wall instead of the real content — so a crawl
+that was silently blocked isn't mistaken for a successful audit (challenge pages usually
+return HTTP `200`, then trip a page's worth of false "missing title / thin content" findings).
+
+It scans each page's body, **response headers** (catches `cf-mitigated`, `x-datadome`,
+challenge cookies), and — in headless mode — the **outbound request URLs** the renderer
+captured, against signatures for: Cloudflare (challenge + Turnstile), Google reCAPTCHA,
+hCaptcha, AWS WAF, DataDome, PerimeterX/HUMAN, and Imperva Incapsula.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `bot-challenge` | warning | A vendor interstitial marker matched, or a CAPTCHA-widget marker matched on a page that looks like a wall (blocking status `401/403/429/503`, a challenge-style `<title>`, or almost no other content). A challenge-style title on a blocking status with no known vendor is reported as `provider: "Unknown"`. | `provider`, `signals`, `status` |
+| `captcha-widget` | info | A reCAPTCHA / hCaptcha / Turnstile widget is embedded in an otherwise-normal page (e.g. a contact form) — present, but not a block | `provider`, `providers`, `signals` |
+
+> The widget-vs-wall distinction is deliberate: a reCAPTCHA on a full contact page is `info`,
+> while the same widget on a thin/blocking page is a `bot-challenge`. When you see
+> `bot-challenge`, treat that page's other findings as unreliable and re-crawl from an
+> allow-listed IP/User-Agent or at a lower rate.
 
 ---
 
