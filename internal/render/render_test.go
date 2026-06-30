@@ -88,3 +88,24 @@ func TestHeadlessFetchCapturesCWV(t *testing.T) {
 		t.Error("expected parsed Doc")
 	}
 }
+
+func TestUnderRendered(t *testing.T) {
+	cases := []struct {
+		name          string
+		rendered, raw int
+		want          bool
+	}{
+		{"render lost most of the page", 1_000, 100_000, true}, // the staging-site bug
+		{"render matches raw (SSR)", 100_000, 100_000, false},
+		{"render richer than raw (SPA hydration)", 200_000, 10_000, false},
+		{"tiny raw is ignored", 10, 1_500, false},          // below the minimum-raw guard
+		{"just over half is fine", 60_000, 100_000, false}, // 60% of a big page
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := underRendered(c.rendered, c.raw); got != c.want {
+				t.Errorf("underRendered(%d, %d) = %v, want %v", c.rendered, c.raw, got, c.want)
+			}
+		})
+	}
+}

@@ -164,6 +164,10 @@ Runs in two modes depending on how the crawl was fetched:
 - **Headless mode (`--render headless`).** Reads lab-mode Core Web Vitals captured by the
   chromedp renderer (`PerformanceObserver` for LCP / FCP / CLS / long-task TBT, Navigation
   Timing for TTFB) and emits per-page findings against [Google's CWV thresholds][cwv].
+  If a page is snapshotted before it finishes rendering, the rendered DOM comes back far
+  thinner than the raw HTML; the renderer detects this, **analyzes the raw HTML instead** (so
+  structural checks like the H1 aren't false-negatives) and emits a `render-incomplete`
+  warning marking that page's CWV as unreliable.
 - **Raw mode.** Falls back to a single `cwv-not-collected` notice and a per-page
   `response-time` proxy from the raw fetch's TTFB.
 
@@ -194,6 +198,7 @@ Runs in two modes depending on how the crawl was fetched:
 | `tbt-needs-improvement` / `tbt-poor` | warning / error | TBT above the band | `value_ms`, `threshold_ms` |
 | `ttfb-needs-improvement` / `ttfb-poor` | warning / error | TTFB above the band | `value_ms`, `threshold_ms` |
 | `cwv-render-failed` | info | Headless rendering errored on a page; CWV unavailable for it | `note` |
+| `render-incomplete` | warning | The rendered DOM came back far thinner than the raw HTML (page not finished rendering); gocrawl analyzed the raw HTML instead, and this page's CWV are unreliable | `rendered_bytes`, `raw_bytes` |
 | `cwv-not-collected` | info | Raw-mode fallback (once on the seed) — reminds to enable `--render headless` | — |
 | `response-time` | info | Raw-mode per-page TTFB proxy from raw fetch duration | `duration_ms` |
 

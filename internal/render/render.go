@@ -257,30 +257,25 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		return nil, err
 	}
 	dlPresent, dlEntries := parseDataLayer(dlJSON)
+	rawBody := <-rawCh
 
 	p := &crawler.Page{
 		RequestedURL: rawURL,
 		FetchedAt:    start,
 		Duration:     time.Since(start),
 		Body:         []byte(htmlBody),
-		RawBody:      <-rawCh,
+		RawBody:      rawBody,
 		Redirects:    state.redirects,
 	}
 	state.mu.Lock()
 	p.FinalURL = state.current
 	p.StatusCode = state.status
 	p.Header = headersToHTTP(state.headers)
-	state.mu.Unlock()
-	p.ContentType = p.Header.Get("Content-Type")
-	if p.ContentType == "" || isHTMLContentType(p.ContentType) {
-		if doc, derr := goquery.NewDocumentFromReader(strings.NewReader(htmlBody)); derr == nil {
-			p.Doc = doc
-		}
-	}
-	state.mu.Lock()
 	reqs := append([]string(nil), state.requests...)
 	state.mu.Unlock()
-	p.Render = &crawler.RenderResult{
+	p.ContentType = p.Header.Get("Content-Type")
+
+	render := &crawler.RenderResult{
 		Implemented:      true,
 		LCP:              metrics.LCP,
 		FCP:              metrics.FCP,
@@ -291,7 +286,39 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		DataLayer:        dlEntries,
 		Requests:         reqs,
 	}
+
+	// Safety net: a rendered DOM far thinner than the raw HTML means the page was snapshotted
+	// before it finished rendering (slow pages outrun the fixed settle). Analyze the raw HTML
+	// instead, so server-rendered content (H1, meta tags, …) isn't reported as missing. The
+	// CWV metrics stay attached but are flagged unreliable for this page.
+	bodyForDoc := htmlBody
+	if len(rawBody) > 0 && underRendered(len(htmlBody), len(rawBody)) {
+		render.RawFallback = true
+		render.RenderedBytes = len(htmlBody)
+		render.RawBytes = len(rawBody)
+		bodyForDoc = string(rawBody)
+		p.Body = rawBody
+	}
+	if p.ContentType == "" || isHTMLContentType(p.ContentType) {
+		if doc, derr := goquery.NewDocumentFromReader(strings.NewReader(bodyForDoc)); derr == nil {
+			p.Doc = doc
+		}
+	}
+	p.Render = render
 	return p, nil
+}
+
+// underRendered reports whether a headless snapshot is suspiciously smaller than the raw HTML,
+// which happens when the DOM is captured before the page finishes rendering. The thresholds
+// are conservative so a legitimately JS-light render isn't second-guessed: it only trips when
+// the raw document is non-trivial and the rendered HTML is under half its size.
+func underRendered(renderedBytes, rawBytes int) bool {
+	const minRawBytes = 2048
+	const maxFraction = 0.5
+	if rawBytes < minRawBytes {
+		return false
+	}
+	return float64(renderedBytes) < float64(rawBytes)*maxFraction
 }
 
 type cwvJS struct {

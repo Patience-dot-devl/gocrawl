@@ -21,6 +21,14 @@ All notable changes to `gocrawl` are documented here. The format is based on
   walks the whole site up to the page budget instead of stopping shallow at depth 2.
   **Breaking:** `--depth 0` now means *unlimited* (it previously meant *seed only*).
 
+### Fixed
+
+- **Headless rendering no longer reports false `missing-h1` / `missing-*` / `thin-content`
+  on slow pages.** When a page is snapshotted before it finishes rendering, the rendered DOM
+  comes back far thinner than the raw HTML; the renderer now detects this and analyzes the
+  raw HTML instead, and emits a `render-incomplete` warning marking that page's Core Web
+  Vitals as unreliable.
+
 ## [0.2.0] - 2026-06-30
 
 ### Added
