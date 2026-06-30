@@ -90,10 +90,14 @@ func runInteractive(cmd *cobra.Command) error {
 			huh.NewInput().Title("Concurrency").Description("Parallel fetch workers.").Value(&concurrency).Validate(validInt),
 			huh.NewInput().Title("Rate limit").Description("Max requests per second (0 = unlimited).").Value(&rate).Validate(validFloat),
 		),
+		// Scope toggles kept in their own group: huh renders every field of a group on one
+		// screen, so an overcrowded group overflows a short terminal and clips the top fields.
 		huh.NewGroup(
 			huh.NewConfirm().Title("Respect robots.txt?").Value(&respectRobots),
 			huh.NewConfirm().Title("Follow links to subdomains?").Value(&allowSubdomains),
 			huh.NewConfirm().Title("Crawl links that leave the seed host?").Value(&followExternal),
+		),
+		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Rendering mode").
 				Description("raw = HTTP fetch (fast); headless = Chrome render (JS + Core Web Vitals).").
