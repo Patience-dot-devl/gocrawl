@@ -53,6 +53,26 @@ func TestAnalyzeGoodMetricsEmitOnlyMeasured(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRawFallbackEmitsRenderIncomplete(t *testing.T) {
+	result := &crawler.Result{Seed: "https://example.com", Pages: []*crawler.Page{
+		htmlPage("https://example.com/slow", &crawler.RenderResult{
+			Implemented: true, RawFallback: true, RenderedBytes: 1200, RawBytes: 90000,
+			LCP: 1500, FCP: 1000,
+		}),
+	}}
+	issues := New().Analyze(context.Background(), result)
+	if !contains(codes(issues), "render-incomplete") {
+		t.Errorf("expected render-incomplete issue, got %v", codes(issues))
+	}
+	// A normal render must not emit it.
+	ok := &crawler.Result{Seed: "https://example.com", Pages: []*crawler.Page{
+		htmlPage("https://example.com/a", &crawler.RenderResult{Implemented: true, LCP: 1500}),
+	}}
+	if contains(codes(New().Analyze(context.Background(), ok)), "render-incomplete") {
+		t.Error("render-incomplete emitted for a normal render")
+	}
+}
+
 func TestAnalyzeNeedsImprovementAndPoorBands(t *testing.T) {
 	result := &crawler.Result{Seed: "https://example.com", Pages: []*crawler.Page{
 		htmlPage("https://example.com/ni", &crawler.RenderResult{

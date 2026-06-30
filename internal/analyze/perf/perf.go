@@ -65,6 +65,14 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 			continue
 		}
 
+		if r.RawFallback {
+			issues = append(issues, analyze.Issue{
+				Analyzer: "perf", URL: p.FinalURL, Severity: analyze.Warning,
+				Code: "render-incomplete", Message: "Headless render finished thinner than the raw HTML, so the page likely had not finished rendering; the raw HTML was analyzed instead and Core Web Vitals may be unreliable for this page",
+				Data: map[string]any{"rendered_bytes": r.RenderedBytes, "raw_bytes": r.RawBytes},
+			})
+		}
+
 		issues = append(issues, analyze.Issue{
 			Analyzer: "perf", URL: p.FinalURL, Severity: analyze.Info,
 			Code: "cwv-measured", Message: "Core Web Vitals measured (lab mode)",
