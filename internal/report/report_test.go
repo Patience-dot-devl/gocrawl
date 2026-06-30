@@ -171,6 +171,63 @@ func TestHTMLReporterRendersSiteMapTab(t *testing.T) {
 	}
 }
 
+// The JSON report must be a complete artifact: `gocrawl render` reads it back and rebuilds
+// the HTML, including the Site map tab, so the site-map tree has to survive a JSON round-trip.
+func TestReportJSONRoundTripPreservesSiteMap(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<html><head><title>Post One</title></head><body>x</body></html>"))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	startedAt := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
+	result := &crawler.Result{
+		Seed:      "https://example.com",
+		StartedAt: startedAt,
+		Finished:  startedAt,
+		Pages: []*crawler.Page{
+			{FinalURL: "https://example.com/blog/post-1", StatusCode: 200, ContentType: "text/html", Doc: doc},
+		},
+	}
+	issues := []analyze.Issue{
+		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "missing-h1", Message: "No H1 on page"},
+	}
+	orig := report.Build(result, issues)
+	if orig.SiteMap == nil {
+		t.Fatal("Build produced no SiteMap")
+	}
+
+	data, err := json.Marshal(orig)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got report.Report
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.SiteMap == nil {
+		t.Fatal("SiteMap lost in JSON round-trip")
+	}
+	if got.SiteMap.Root == nil || got.SiteMap.Root.Label != "/" {
+		t.Fatalf("SiteMap root not preserved: %+v", got.SiteMap.Root)
+	}
+	// The post-1 leaf and its issue must come back, and the round-tripped report must render
+	// the same HTML site-map tab as the original.
+	var origHTML, gotHTML bytes.Buffer
+	if err := (report.HTMLReporter{}).Write(&origHTML, orig); err != nil {
+		t.Fatalf("write orig: %v", err)
+	}
+	if err := (report.HTMLReporter{}).Write(&gotHTML, &got); err != nil {
+		t.Fatalf("write round-tripped: %v", err)
+	}
+	if origHTML.String() != gotHTML.String() {
+		t.Error("HTML rendered from the round-tripped report differs from the original")
+	}
+	for _, want := range []string{"post-1", "missing-h1", "sm-chart"} {
+		if !strings.Contains(gotHTML.String(), want) {
+			t.Errorf("round-tripped HTML missing %q", want)
+		}
+	}
+}
+
 func TestHTMLReporterRendersExplanations(t *testing.T) {
 	r := fixtureReport()
 	var buf bytes.Buffer

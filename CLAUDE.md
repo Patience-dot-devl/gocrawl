@@ -51,7 +51,7 @@ hands everything to the report builder.
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd/gocrawl` | CLI (Cobra): `crawl`, `analyzers list`, `init`, `mcp`, interactive mode. |
+| `cmd/gocrawl` | CLI (Cobra): `crawl`, `render` (re-emit a saved JSON report as HTML/CSV without recrawling), `analyzers list`, `init`, `mcp`, interactive mode. |
 | `internal/config` | Layered config (defaults → YAML → env → flags) compiled into `crawler.Options`. |
 | `internal/crawler` | Concurrent crawl engine, HTTP fetcher, robots.txt, URL normalization, scope rules, link extraction. Defines `Page`, `Link`, `Redirect`, `Result`, `Options`, `Fetcher`. |
 | `internal/render` | Render-mode fetcher selection; headless rendering via chromedp (Core Web Vitals). |

@@ -133,41 +133,71 @@
   .tabs .tab:hover { color:var(--fg); }
   .tabs .tab.active { color:var(--info); border-bottom-color:var(--info); }
   .tabpanel[hidden] { display:none; }
-  /* site-map tree */
-  #tab-sitemap .sm-meta { color:var(--muted); font-size:.9rem; margin-bottom:1rem; }
+  /* site-map: node-link (org-chart) diagram */
+  #tab-sitemap .sm-meta { color:var(--muted); font-size:.9rem; margin-bottom:.75rem; }
   #tab-sitemap .sm-meta code { background:#eef1f4; padding:.1rem .45rem; border-radius:4px; }
-  #tab-sitemap ul.sm-tree, #tab-sitemap ul.sm-tree ul { list-style:none; margin:0; padding-left:1.25rem; border-left:1px solid var(--border); }
-  #tab-sitemap ul.sm-tree { padding-left:0; border-left:0; }
-  #tab-sitemap li { margin:.15rem 0; }
-  #tab-sitemap details.sm-tnode > summary, #tab-sitemap details.sm-issues > summary { cursor:pointer; list-style:none; }
-  #tab-sitemap details > summary::-webkit-details-marker { display:none; }
-  #tab-sitemap details.sm-tnode > summary::before { content:"\25B8"; display:inline-block; width:1em; color:var(--muted); transition:transform .1s; }
-  #tab-sitemap details.sm-tnode[open] > summary::before { transform:rotate(90deg); }
-  #tab-sitemap .sm-leaf { padding-left:1em; }
-  #tab-sitemap .sm-label { font-weight:600; color:var(--info); text-decoration:none; }
-  #tab-sitemap .sm-label:hover { text-decoration:underline; }
-  #tab-sitemap .sm-title { color:var(--muted); font-size:.85rem; margin-left:.4rem; }
-  #tab-sitemap .sm-st { display:inline-block; min-width:2.4em; text-align:center; font-size:.72rem; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:.5rem; vertical-align:middle; }
+  #tab-sitemap .sm-controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.75rem; }
+  #tab-sitemap .sm-controls button { cursor:pointer; border:1px solid var(--border); background:#fff; color:var(--fg); padding:.4rem .7rem; border-radius:8px; font-size:.82rem; font-weight:600; font-family:inherit; }
+  #tab-sitemap .sm-controls button:hover { border-color:var(--muted); }
+  #tab-sitemap .sm-controls .sm-hint { color:var(--muted); font-size:.82rem; }
+  #tab-sitemap .sm-chartwrap { overflow:auto; background:var(--panel); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); padding:1.5rem 1rem 2rem; }
+  /* nested flex lists + elbow connectors = a top-down org chart */
+  #tab-sitemap ul.sm-chart, #tab-sitemap ul.sm-chart ul { display:flex; justify-content:center; list-style:none; margin:0; padding:0; padding-top:1.4rem; position:relative; }
+  #tab-sitemap ul.sm-chart { padding-top:0; min-width:max-content; }
+  #tab-sitemap .sm-chart li { display:flex; flex-direction:column; align-items:center; position:relative; padding:1.4rem .55rem 0; }
+  #tab-sitemap .sm-chart li::before, #tab-sitemap .sm-chart li::after { content:""; position:absolute; top:0; right:50%; width:50%; height:1.4rem; border-top:2px solid var(--border); }
+  #tab-sitemap .sm-chart li::after { right:auto; left:50%; border-left:2px solid var(--border); }
+  #tab-sitemap .sm-chart li:only-child { padding-top:0; }
+  #tab-sitemap .sm-chart li:only-child::before, #tab-sitemap .sm-chart li:only-child::after { display:none; }
+  #tab-sitemap .sm-chart li:first-child::before, #tab-sitemap .sm-chart li:last-child::after { border:0; }
+  #tab-sitemap .sm-chart li:last-child::before { border-right:2px solid var(--border); border-radius:0 6px 0 0; }
+  #tab-sitemap .sm-chart li:first-child::after { border-radius:6px 0 0 0; }
+  #tab-sitemap .sm-chart ul::before { content:""; position:absolute; top:0; left:50%; width:0; height:1.4rem; border-left:2px solid var(--border); }
+  #tab-sitemap li.sm-collapsed > ul { display:none; }
+  /* node card, colored by page health */
+  #tab-sitemap .sm-box { position:relative; min-width:7rem; max-width:13rem; background:#fff; border:1px solid var(--border); border-top:3px solid var(--border); border-radius:8px; padding:.45rem .6rem; box-shadow:var(--shadow); text-align:left; }
+  #tab-sitemap .sm-box.sm-h-error { border-top-color:var(--error); }
+  #tab-sitemap .sm-box.sm-h-warning { border-top-color:var(--warning); }
+  #tab-sitemap .sm-box.sm-h-info { border-top-color:var(--info); }
+  #tab-sitemap .sm-box.sm-h-ok { border-top-color:#1a7f37; }
+  #tab-sitemap .sm-box.sm-h-none { border-top-color:var(--border); background:#fafbfc; }
+  #tab-sitemap .sm-box.sm-haspop { cursor:pointer; }
+  #tab-sitemap .sm-box.sm-haspop:hover { border-color:var(--info); }
+  #tab-sitemap .sm-box.sm-sel { box-shadow:0 0 0 2px var(--info); }
+  #tab-sitemap .sm-box-head { display:flex; align-items:center; gap:.35rem; }
+  #tab-sitemap .sm-box-toggle { cursor:pointer; flex:none; width:1.15rem; height:1.15rem; line-height:1; text-align:center; border:1px solid var(--border); border-radius:5px; background:#fff; color:var(--muted); font-weight:700; font-size:.85rem; padding:0; font-family:inherit; }
+  #tab-sitemap .sm-box-toggle:hover { color:var(--fg); border-color:var(--muted); }
+  #tab-sitemap .sm-box-label { font-weight:700; color:var(--info); text-decoration:none; word-break:break-word; font-size:.85rem; }
+  #tab-sitemap .sm-box-label:hover { text-decoration:underline; }
+  #tab-sitemap .sm-box-title { color:var(--muted); font-size:.74rem; margin-top:.15rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #tab-sitemap .sm-box-foot { display:flex; flex-wrap:wrap; align-items:center; gap:.25rem; margin-top:.35rem; }
+  #tab-sitemap .sm-box-foot:empty { display:none; }
+  /* status + severity pills (shared with the issues popover and site-wide list) */
+  #tab-sitemap .sm-st { display:inline-block; min-width:2.2em; text-align:center; font-size:.68rem; font-weight:700; padding:1px 5px; border-radius:4px; vertical-align:middle; }
   #tab-sitemap .st-ok { background:#e3f6e8; color:#1a7f37; }
   #tab-sitemap .st-redirect { background:var(--warning-bg); color:var(--warning); }
   #tab-sitemap .st-error { background:var(--error-bg); color:var(--error); }
   #tab-sitemap .st-none { background:#eef1f4; color:var(--muted); }
-  #tab-sitemap .sm-sev { display:inline-block; min-width:1.6em; text-align:center; font-size:.72rem; font-weight:700; padding:1px 6px; border-radius:10px; margin-left:.35rem; vertical-align:middle; }
+  #tab-sitemap .sm-sev { display:inline-block; min-width:1.5em; text-align:center; font-size:.68rem; font-weight:700; padding:1px 5px; border-radius:10px; vertical-align:middle; }
   #tab-sitemap .sm-error { background:var(--error-bg); color:var(--error); }
   #tab-sitemap .sm-warning { background:var(--warning-bg); color:var(--warning); }
   #tab-sitemap .sm-info { background:var(--info-bg); color:var(--info); }
-  #tab-sitemap .sm-roll { opacity:.6; font-weight:600; margin-left:.5rem; color:var(--muted); }
-  #tab-sitemap .sm-roll::before { content:"\2211 "; }
-  #tab-sitemap details.sm-issues { margin:.1rem 0 .35rem 1.6em; }
-  #tab-sitemap details.sm-issues > summary { font-size:.8rem; color:var(--muted); }
-  #tab-sitemap ul.sm-issuelist { list-style:none; margin:.3rem 0 .6rem; padding-left:.5rem; border-left:2px solid var(--border); }
-  #tab-sitemap li.sm-issue { font-size:.82rem; margin:.25rem 0; display:flex; gap:.4rem; align-items:baseline; flex-wrap:wrap; }
+  #tab-sitemap .sm-roll { opacity:.75; font-weight:700; color:var(--muted); font-size:.72rem; }
+  #tab-sitemap .sm-roll::before { content:"\2211"; margin-right:1px; }
+  /* issues popover (opens below a node when clicked) */
+  #tab-sitemap .sm-pop { position:absolute; top:calc(100% + .3rem); left:0; z-index:15; min-width:15rem; max-width:24rem; text-align:left; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 6px 18px rgba(27,31,36,.16); padding:.5rem .6rem; white-space:normal; }
+  #tab-sitemap .sm-pop[hidden] { display:none; }
+  #tab-sitemap .sm-pop-h { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin-bottom:.35rem; }
+  #tab-sitemap ul.sm-issuelist { list-style:none; margin:0; padding:0; }
+  #tab-sitemap li.sm-issue { font-size:.8rem; margin:.25rem 0; display:flex; gap:.4rem; align-items:baseline; flex-wrap:wrap; }
   #tab-sitemap .sm-dot { width:.55em; height:.55em; border-radius:50%; flex:none; align-self:center; }
   #tab-sitemap .sm-issue.sev-error .sm-dot { background:var(--error); }
   #tab-sitemap .sm-issue.sev-warning .sm-dot { background:var(--warning); }
   #tab-sitemap .sm-issue.sev-info .sm-dot { background:var(--info); }
   #tab-sitemap li.sm-issue code { background:#f0f3f6; padding:.1rem .4rem; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   #tab-sitemap .sm-an { color:var(--muted); }
+  #tab-sitemap h3 { margin:1.5rem 0 .6rem; font-size:1rem; }
+  #tab-sitemap h3 + ul.sm-issuelist { background:var(--panel); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); padding:.6rem .9rem; }
   #tab-sitemap .sm-muted { color:var(--muted); font-weight:400; font-size:.85rem; }
 </style>
 </head>
@@ -180,12 +210,13 @@
     · started {{.StartedAt}} · finished {{.FinishedAt}}
   </div>
 </div></header>
-{{/* Recursive site-map tree partials (rendered in the Site map tab). severityClass/statusClass come from the FuncMap. */}}
+{{/* Recursive site-map partials: an org-chart of node cards (rendered in the Site map tab).
+     severityClass/statusClass come from the FuncMap; collapse + popover behavior is wired in JS. */}}
 {{define "smbadges"}}{{if .Error}}<span class="sm-sev sm-error" title="errors">{{.Error}}</span>{{end}}{{if .Warning}}<span class="sm-sev sm-warning" title="warnings">{{.Warning}}</span>{{end}}{{if .Info}}<span class="sm-sev sm-info" title="info">{{.Info}}</span>{{end}}{{end}}
-{{define "smrow"}}{{if .URL}}<a href="{{.URL}}" class="sm-label">{{if .Label}}{{.Label}}{{else}}/{{end}}</a>{{else}}<span class="sm-label">{{.Label}}</span>{{end}}{{if .Status}}<span class="sm-st {{statusClass .Status}}">{{.Status}}</span>{{end}}{{template "smbadges" .Counts}}{{if .Title}}<span class="sm-title">{{.Title}}</span>{{end}}{{end}}
 {{define "smrollup"}}{{if and .Children (gt .Subtotal.Total .Counts.Total)}}<span class="sm-roll" title="issues in this branch">{{.Subtotal.Total}}</span>{{end}}{{end}}
-{{define "smissues"}}{{if .Issues}}<details class="sm-issues"><summary>{{len .Issues}} issue{{if ne (len .Issues) 1}}s{{end}} on this page</summary><ul class="sm-issuelist">{{range .Issues}}<li class="sm-issue {{severityClass .Severity}}"><span class="sm-dot"></span><code>{{.Code}}</code><span class="sm-an">{{.Analyzer}}</span><span class="sm-msg">{{.Message}}</span></li>{{end}}</ul></details>{{end}}{{end}}
-{{define "smnode"}}<li>{{if .Children}}<details class="sm-tnode" open><summary>{{template "smrow" .}}{{template "smrollup" .}}</summary>{{template "smissues" .}}<ul>{{range .Children}}{{template "smnode" .}}{{end}}</ul></details>{{else}}<div class="sm-leaf">{{template "smrow" .}}</div>{{template "smissues" .}}{{end}}</li>{{end}}
+{{define "smissues"}}{{if .Issues}}<div class="sm-pop" hidden><div class="sm-pop-h">{{len .Issues}} issue{{if ne (len .Issues) 1}}s{{end}} on this page</div><ul class="sm-issuelist">{{range .Issues}}<li class="sm-issue {{severityClass .Severity}}"><span class="sm-dot"></span><code>{{.Code}}</code><span class="sm-an">{{.Analyzer}}</span><span class="sm-msg">{{.Message}}</span></li>{{end}}</ul></div>{{end}}{{end}}
+{{define "smbox"}}<div class="sm-box {{if .URL}}{{if .Counts.Error}}sm-h-error{{else if .Counts.Warning}}sm-h-warning{{else if .Counts.Info}}sm-h-info{{else}}sm-h-ok{{end}}{{else}}sm-h-none{{end}}{{if .Issues}} sm-haspop{{end}}"><div class="sm-box-head">{{if .Children}}<button type="button" class="sm-box-toggle" title="collapse / expand subtree">&#8722;</button>{{end}}{{if .URL}}<a href="{{.URL}}" class="sm-box-label" title="{{.URL}}">{{if .Label}}{{.Label}}{{else}}/{{end}}</a>{{else}}<span class="sm-box-label">{{.Label}}</span>{{end}}{{if .Status}}<span class="sm-st {{statusClass .Status}}">{{.Status}}</span>{{end}}</div>{{if .Title}}<div class="sm-box-title" title="{{.Title}}">{{.Title}}</div>{{end}}<div class="sm-box-foot">{{template "smbadges" .Counts}}{{template "smrollup" .}}</div>{{template "smissues" .}}</div>{{end}}
+{{define "smchartnode"}}<li class="sm-li{{if .Children}} sm-haskids{{end}}">{{template "smbox" .}}{{if .Children}}<ul>{{range .Children}}{{template "smchartnode" .}}{{end}}</ul>{{end}}</li>{{end}}
 <main>
   <nav class="tabs">
     <button type="button" class="tab active" data-tab="report">Issues &amp; summary</button>
@@ -282,13 +313,14 @@
       <code>{{.SiteMap.Host}}</code> · {{len .SiteMap.Entries}} indexable page{{if ne (len .SiteMap.Entries) 1}}s{{end}}
       {{if not .SiteMap.Totals.Empty}}· {{template "smbadges" .SiteMap.Totals}} total{{end}}
     </div>
-    <ul class="sm-tree">
-      <li>
-        <div>{{template "smrow" .SiteMap.Root}}{{template "smrollup" .SiteMap.Root}}</div>
-        {{template "smissues" .SiteMap.Root}}
-        {{if .SiteMap.Root.Children}}<ul>{{range .SiteMap.Root.Children}}{{template "smnode" .}}{{end}}</ul>{{end}}
-      </li>
-    </ul>
+    <div class="sm-controls">
+      <button type="button" class="sm-expand-all">Expand all</button>
+      <button type="button" class="sm-collapse-all">Collapse all</button>
+      <span class="sm-hint">Click a node to see its issues · click a label to open the page · &#8722;/+ collapses a branch</span>
+    </div>
+    <div class="sm-chartwrap">
+      <ul class="sm-chart">{{template "smchartnode" .SiteMap.Root}}</ul>
+    </div>
     {{if .SiteMap.SiteWide}}
     <h3>Site-wide issues <span class="sm-muted">({{len .SiteMap.SiteWide}}, not tied to a single page)</span></h3>
     <ul class="sm-issuelist">{{range .SiteMap.SiteWide}}<li class="sm-issue {{severityClass .Severity}}"><span class="sm-dot"></span><code>{{.Code}}</code><span class="sm-an">{{.Analyzer}}</span><span class="sm-msg">{{.Message}}</span></li>{{end}}</ul>
@@ -457,6 +489,57 @@
     });
   });
   apply();
+})();
+(function(){
+  // Site-map org chart: collapse/expand branches and pop up a node's issues on click.
+  var smp=document.getElementById('tab-sitemap'); if(!smp){return;}
+  var chart=smp.querySelector('.sm-chart'); if(!chart){return;}
+  var lis=Array.prototype.slice.call(smp.querySelectorAll('li.sm-li'));
+  var MINUS='−';
+  function syncToggle(li){
+    var t=li.querySelector('.sm-box-toggle');
+    if(t){t.textContent=li.classList.contains('sm-collapsed')?'+':MINUS;}
+  }
+  function depth(li){
+    var d=0,p=li.parentElement;
+    while(p&&p!==chart){if(p.tagName==='LI'){d++;}p=p.parentElement;}
+    return d;
+  }
+  // Default view: keep the chart compact by collapsing branches deeper than two levels.
+  lis.forEach(function(li){
+    if(li.classList.contains('sm-haskids')&&depth(li)>=2){li.classList.add('sm-collapsed');}
+    syncToggle(li);
+  });
+  Array.prototype.forEach.call(smp.querySelectorAll('.sm-box-toggle'),function(tog){
+    tog.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      var li=tog.closest('li.sm-li'); if(!li){return;}
+      li.classList.toggle('sm-collapsed'); syncToggle(li);
+    });
+  });
+  function closePops(except){
+    Array.prototype.forEach.call(smp.querySelectorAll('.sm-pop'),function(p){
+      if(p!==except){p.hidden=true;p.parentElement.classList.remove('sm-sel');}
+    });
+  }
+  Array.prototype.forEach.call(smp.querySelectorAll('.sm-box.sm-haspop'),function(box){
+    box.addEventListener('click',function(e){
+      if(e.target.closest('a')||e.target.closest('.sm-box-toggle')){return;}
+      var pop=box.querySelector('.sm-pop'); if(!pop){return;}
+      e.stopPropagation();
+      var willOpen=pop.hidden; closePops(willOpen?pop:null);
+      pop.hidden=!willOpen; box.classList.toggle('sm-sel',willOpen);
+    });
+  });
+  Array.prototype.forEach.call(smp.querySelectorAll('.sm-pop'),function(p){
+    p.addEventListener('click',function(e){e.stopPropagation();}); // clicks inside stay open (links still navigate)
+  });
+  document.addEventListener('click',function(){closePops(null);});
+  var ea=smp.querySelector('.sm-expand-all'),ca=smp.querySelector('.sm-collapse-all');
+  if(ea){ea.addEventListener('click',function(){lis.forEach(function(li){li.classList.remove('sm-collapsed');syncToggle(li);});});}
+  if(ca){ca.addEventListener('click',function(){lis.forEach(function(li){
+    if(li.classList.contains('sm-haskids')&&depth(li)>=1){li.classList.add('sm-collapsed');}syncToggle(li);
+  });});}
 })();
 </script>
 </body>
