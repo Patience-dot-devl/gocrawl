@@ -30,19 +30,19 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		if !data.Found {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "robots", URL: base, Severity: analyze.Info,
-				Code: "no-robots", Message: "No robots.txt found", Data: map[string]any{"status": data.Status},
+				Code: "robots-missing", Message: "No robots.txt found", Data: map[string]any{"status": data.Status},
 			})
 			continue
 		}
 		if len(data.Sitemaps) == 0 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "robots", URL: base, Severity: analyze.Info,
-				Code: "no-sitemap-declared", Message: "robots.txt declares no Sitemap",
+				Code: "robots-no-sitemap-declared", Message: "robots.txt declares no Sitemap",
 			})
 		} else {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "robots", URL: base, Severity: analyze.Info,
-				Code: "sitemaps-declared", Message: "robots.txt declares sitemaps",
+				Code: "robots-sitemaps-declared", Message: "robots.txt declares sitemaps",
 				Data: map[string]any{"sitemaps": data.Sitemaps},
 			})
 		}
@@ -72,7 +72,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		if !data.TestAgent(path, ua) {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "robots", URL: ref, Severity: analyze.Warning,
-				Code: "crawled-disallowed", Message: "Crawled a URL disallowed by robots.txt",
+				Code: "robots-crawled-disallowed", Message: "Crawled a URL disallowed by robots.txt",
 			})
 		}
 	}

@@ -40,7 +40,7 @@ func TestThinContent(t *testing.T) {
 		htmlPage(t, "https://example.com/thin", body(20)),
 	}}
 	got := codesFor(content.New().Analyze(context.Background(), res), "https://example.com/thin")
-	if !got["thin-content"] {
+	if !got["content-thin"] {
 		t.Error("expected thin-content issue")
 	}
 }
@@ -55,15 +55,15 @@ func TestLowContentBelowAverage(t *testing.T) {
 	issues := content.New().Analyze(context.Background(), res)
 
 	low := codesFor(issues, "https://example.com/low")
-	if !low["low-content"] {
+	if !low["content-low"] {
 		t.Error("expected low-content on the below-average page")
 	}
-	if low["thin-content"] {
+	if low["content-thin"] {
 		t.Error("did not expect thin-content on a 120-word page")
 	}
 
 	normal := codesFor(issues, "https://example.com/long1")
-	if normal["low-content"] || normal["thin-content"] {
+	if normal["content-low"] || normal["content-thin"] {
 		t.Error("did not expect any content issue on a normal page")
 	}
 }

@@ -159,6 +159,7 @@ Key crawl options:
 | `sitemap` | `sitemap.xml` discovery/parsing and crawl-coverage cross-check |
 | `structured` | JSON-LD extraction and schema.org `@type` reporting |
 | `perf` | Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) against Google's thresholds — populated with `--render headless` |
+| `botwall` | **Crawl integrity** — detects CAPTCHA / bot-challenge walls (reCAPTCHA, hCaptcha, Turnstile, Cloudflare/DataDome/AWS WAF/PerimeterX/Imperva) served instead of real content, so a silently-blocked crawl isn't mistaken for a clean audit |
 | `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
 | `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
 | `datalayer` | **SEA** — GTM/dataLayer audit: snippet wiring, Consent Mode, event inventory, GA4 e-commerce validation, duplicate conversions, PII; runtime checks need `--render headless` |

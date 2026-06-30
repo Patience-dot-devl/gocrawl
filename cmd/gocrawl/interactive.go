@@ -38,6 +38,7 @@ func runInteractive(cmd *cobra.Command) error {
 		allowSubdomains = cfg.Crawl.AllowSubdomains
 		followExternal  = cfg.Crawl.FollowExternal
 		userAgent       = cfg.Crawl.UserAgent
+		keepAwake       = false
 
 		render     = cfg.Render
 		format     = cfg.Output.Format
@@ -70,6 +71,20 @@ func runInteractive(cmd *cobra.Command) error {
 	}
 	selected := make([]string, 0, len(all))
 
+	// Scope/behavior toggles. The keep-awake toggle is only meaningful where caffeinate(8)
+	// exists (macOS), so it's appended conditionally rather than shown as a dead option.
+	scopeFields := []huh.Field{
+		huh.NewConfirm().Title("Respect robots.txt?").Value(&respectRobots),
+		huh.NewConfirm().Title("Follow links to subdomains?").Value(&allowSubdomains),
+		huh.NewConfirm().Title("Crawl links that leave the seed host?").Value(&followExternal),
+	}
+	if caffeinateSupported() {
+		scopeFields = append(scopeFields, huh.NewConfirm().
+			Title("Keep this Mac awake while crawling?").
+			Description("Holds a power assertion (caffeinate) so a locked screen or idle sleep doesn't pause a long crawl.").
+			Value(&keepAwake))
+	}
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -92,11 +107,7 @@ func runInteractive(cmd *cobra.Command) error {
 		),
 		// Scope toggles kept in their own group: huh renders every field of a group on one
 		// screen, so an overcrowded group overflows a short terminal and clips the top fields.
-		huh.NewGroup(
-			huh.NewConfirm().Title("Respect robots.txt?").Value(&respectRobots),
-			huh.NewConfirm().Title("Follow links to subdomains?").Value(&allowSubdomains),
-			huh.NewConfirm().Title("Crawl links that leave the seed host?").Value(&followExternal),
-		),
+		huh.NewGroup(scopeFields...),
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Rendering mode").
@@ -162,6 +173,11 @@ func runInteractive(cmd *cobra.Command) error {
 	seed = strings.TrimSpace(seed)
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
+	}
+
+	// Keep the machine awake for the duration of the crawl + report write when requested.
+	if keepAwake {
+		defer startCaffeinate()()
 	}
 
 	rep, err := runner.Run(context.Background(), cfg, seed)

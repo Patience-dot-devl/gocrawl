@@ -107,7 +107,7 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 		if declared {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "sitemap", URL: smURL, Severity: analyze.Warning,
-				Code: "invalid-sitemap", Message: "Could not parse sitemap as urlset or index",
+				Code: "sitemap-invalid", Message: "Could not parse sitemap as urlset or index",
 			})
 		}
 	}
@@ -119,7 +119,7 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	if parsed == 0 {
 		issues = append(issues, analyze.Issue{
 			Analyzer: "sitemap", URL: base, Severity: analyze.Warning,
-			Code: "no-sitemap", Message: "No sitemap found at robots.txt or conventional locations",
+			Code: "sitemap-missing", Message: "No sitemap found at robots.txt or conventional locations",
 		})
 		return issues
 	}

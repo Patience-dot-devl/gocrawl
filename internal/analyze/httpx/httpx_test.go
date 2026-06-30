@@ -15,7 +15,7 @@ func TestClientErrorReportsReferrer(t *testing.T) {
 	var foundOn any
 	gotClientError := false
 	for _, iss := range New().Analyze(context.Background(), result) {
-		if iss.Code == "client-error" {
+		if iss.Code == "http-client-error" {
 			gotClientError = true
 			foundOn = iss.Data["found_on"]
 		}
@@ -43,17 +43,17 @@ func TestTrailingSlashRedirectIsNotLoop(t *testing.T) {
 	var codes []string
 	for _, iss := range New().Analyze(context.Background(), result) {
 		codes = append(codes, iss.Code)
-		if iss.Code == "redirect-loop" {
+		if iss.Code == "http-redirect-loop" {
 			t.Errorf("trailing-slash 301 reported as redirect-loop; chain=%v", iss.Data["chain"])
 		}
-		if iss.Code == "redirect-chain" {
+		if iss.Code == "http-redirect-chain" {
 			t.Errorf("single-hop trailing-slash 301 reported as redirect-chain; chain=%v", iss.Data["chain"])
 		}
 	}
 
 	gotRedirect := false
 	for _, c := range codes {
-		if c == "redirect" {
+		if c == "http-redirect" {
 			gotRedirect = true
 		}
 	}
@@ -77,7 +77,7 @@ func TestRealRedirectLoopDetected(t *testing.T) {
 
 	gotLoop := false
 	for _, iss := range New().Analyze(context.Background(), result) {
-		if iss.Code == "redirect-loop" {
+		if iss.Code == "http-redirect-loop" {
 			gotLoop = true
 		}
 	}
@@ -92,7 +92,7 @@ func TestErrorWithoutReferrerOmitsFoundOn(t *testing.T) {
 	}}
 
 	for _, iss := range New().Analyze(context.Background(), result) {
-		if iss.Code == "client-error" {
+		if iss.Code == "http-client-error" {
 			if _, ok := iss.Data["found_on"]; ok {
 				t.Error("found_on should be absent when the page has no referrer")
 			}

@@ -51,7 +51,7 @@ func analyzePage(p *crawler.Page) []analyze.Issue {
 
 func codeFor(issues []analyze.Issue) string {
 	for _, is := range issues {
-		if is.Code == "bot-challenge" || is.Code == "captcha-widget" {
+		if is.Code == "botwall-challenge" || is.Code == "botwall-captcha-widget" {
 			return is.Code
 		}
 	}
@@ -69,7 +69,7 @@ func TestRecaptchaChallengePage(t *testing.T) {
 		<div class="g-recaptcha"></div>
 		<script src="https://www.google.com/recaptcha/api.js"></script></body></html>`
 	issues := analyzePage(mkPage(t, html))
-	if got := codeFor(issues); got != "bot-challenge" {
+	if got := codeFor(issues); got != "botwall-challenge" {
 		t.Fatalf("expected bot-challenge, got %q (%+v)", got, issues)
 	}
 }
@@ -78,7 +78,7 @@ func TestCloudflareInterstitial(t *testing.T) {
 	html := `<html><head><title>Just a moment...</title></head><body>
 		<script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script></body></html>`
 	issues := analyzePage(mkPage(t, html, withStatus(403)))
-	is := find(issues, "bot-challenge")
+	is := find(issues, "botwall-challenge")
 	if is == nil {
 		t.Fatalf("expected bot-challenge, got %+v", issues)
 	}
@@ -90,7 +90,7 @@ func TestCloudflareInterstitial(t *testing.T) {
 func TestDataDomeOn403(t *testing.T) {
 	html := `<html><head><title>Access to this page has been denied</title></head><body>
 		<script src="https://geo.captcha-delivery.com/captcha/"></script></body></html>`
-	if got := codeFor(analyzePage(mkPage(t, html, withStatus(403)))); got != "bot-challenge" {
+	if got := codeFor(analyzePage(mkPage(t, html, withStatus(403)))); got != "botwall-challenge" {
 		t.Fatalf("expected bot-challenge for DataDome, got %q", got)
 	}
 }
@@ -100,11 +100,11 @@ func TestRecaptchaWidgetOnRealPageIsNotABlock(t *testing.T) {
 	html := `<html><head><title>Contact us</title></head><body><main><h1>Contact</h1><p>` +
 		longText() + `</p><form><div class="g-recaptcha"></div></form></main></body></html>`
 	issues := analyzePage(mkPage(t, html))
-	if got := codeFor(issues); got != "captcha-widget" {
+	if got := codeFor(issues); got != "botwall-captcha-widget" {
 		t.Fatalf("expected captcha-widget (info), got %q (%+v)", got, issues)
 	}
 	for _, is := range issues {
-		if is.Code == "bot-challenge" {
+		if is.Code == "botwall-challenge" {
 			t.Error("a legit embedded reCAPTCHA must not be flagged as a block")
 		}
 	}
@@ -122,7 +122,7 @@ func TestTurnstileViaHeadlessRequests(t *testing.T) {
 	html := `<html><head><title>Just a moment...</title></head><body></body></html>`
 	p := mkPage(t, html, withStatus(403),
 		withRequests("https://challenges.cloudflare.com/turnstile/v0/api.js"))
-	if got := codeFor(analyzePage(p)); got != "bot-challenge" {
+	if got := codeFor(analyzePage(p)); got != "botwall-challenge" {
 		t.Fatalf("expected bot-challenge from captured Turnstile request, got %q", got)
 	}
 }
@@ -132,7 +132,7 @@ func TestCloudflareViaResponseHeader(t *testing.T) {
 	// headers even when the body is an empty JS shell.
 	html := `<html><head><title>Just a moment...</title></head><body></body></html>`
 	p := mkPage(t, html, withStatus(403), withHeader("Cf-Mitigated", "challenge"))
-	if got := codeFor(analyzePage(p)); got != "bot-challenge" {
+	if got := codeFor(analyzePage(p)); got != "botwall-challenge" {
 		t.Fatalf("expected bot-challenge from cf-mitigated header, got %q", got)
 	}
 }
@@ -140,7 +140,7 @@ func TestCloudflareViaResponseHeader(t *testing.T) {
 func TestUnknownChallengeOnBlockingStatus(t *testing.T) {
 	// No known vendor, but a challenge-style title on a 429 → flagged as Unknown.
 	html := `<html><head><title>Checking your browser before access</title></head><body>x</body></html>`
-	is := find(analyzePage(mkPage(t, html, withStatus(429))), "bot-challenge")
+	is := find(analyzePage(mkPage(t, html, withStatus(429))), "botwall-challenge")
 	if is == nil {
 		t.Fatal("expected an Unknown bot-challenge on a blocking status")
 	}

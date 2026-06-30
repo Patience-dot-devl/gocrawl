@@ -89,7 +89,7 @@ func TestMetaPixelNoFalseDuplicate(t *testing.T) {
 	if ids := idsForTag(is, "Meta Pixel"); len(ids) != 1 || ids[0] != "123456789012345" {
 		t.Errorf("Meta ids = %v (inline + noscript with same id should collapse to one)", ids)
 	}
-	if _, dup := find(issues, "duplicate-tracking-tag"); dup {
+	if _, dup := find(issues, "tracking-duplicate-tag"); dup {
 		t.Error("did not expect duplicate-tracking-tag for one pixel installed via script + noscript")
 	}
 }
@@ -98,7 +98,7 @@ func TestDuplicateGTM(t *testing.T) {
 	res := page(t, `<html><head><script>
 		dataLayer GTM-AAA111 ... GTM-BBB222
 	</script></head><body></body></html>`)
-	is, ok := find(run(res), "duplicate-tracking-tag")
+	is, ok := find(run(res), "tracking-duplicate-tag")
 	if !ok {
 		t.Fatal("expected duplicate-tracking-tag for two GTM containers")
 	}
@@ -109,7 +109,7 @@ func TestDuplicateGTM(t *testing.T) {
 
 func TestNoTags(t *testing.T) {
 	res := page(t, `<html><head><title>Plain</title></head><body><p>hi</p></body></html>`)
-	if _, ok := find(run(res), "no-tracking-tags"); !ok {
+	if _, ok := find(run(res), "tracking-none"); !ok {
 		t.Error("expected no-tracking-tags")
 	}
 }
@@ -117,7 +117,7 @@ func TestNoTags(t *testing.T) {
 // An image filename like IMG-12345 must not be misread as a GA4 "G-12345" measurement ID.
 func TestImageFilenameNotGA4(t *testing.T) {
 	res := page(t, `<html><head><title>Gallery</title></head><body><img src="https://cdn.example.com/IMG-12345.png"></body></html>`)
-	if _, ok := find(run(res), "no-tracking-tags"); !ok {
+	if _, ok := find(run(res), "tracking-none"); !ok {
 		t.Error("expected no-tracking-tags; IMG- filename should not register as GA4")
 	}
 }
@@ -127,7 +127,7 @@ func TestMixedGAVersions(t *testing.T) {
 		<script src="https://www.google-analytics.com/analytics.js"></script>
 		<script>ga('create','UA-12345-1','auto'); gtag('config','G-XXXX1234');</script>
 	</head><body></body></html>`)
-	if _, ok := find(run(res), "mixed-ga-versions"); !ok {
+	if _, ok := find(run(res), "tracking-mixed-ga-versions"); !ok {
 		t.Error("expected mixed-ga-versions")
 	}
 }

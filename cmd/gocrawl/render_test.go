@@ -16,7 +16,7 @@ const sampleReportJSON = `{
   "pages_crawled": 2,
   "summary": {"by_severity":{"error":1},"by_analyzer":{"seo":1},"pages_by_status":{"200":2}},
   "issues": [
-    {"analyzer":"seo","url":"https://example.com/blog/post-1","severity":"error","code":"missing-h1","message":"No H1 on page"}
+    {"analyzer":"seo","url":"https://example.com/blog/post-1","severity":"error","code":"seo-missing-h1","message":"No H1 on page"}
   ],
   "site_map": {
     "seed":"https://example.com","host":"example.com","generated":"2026-06-30T10:01:00Z",
@@ -27,7 +27,7 @@ const sampleReportJSON = `{
         {"label":"blog","url":"https://example.com/blog","status":200,"subtotal":{"error":1},
           "children":[
             {"label":"post-1","url":"https://example.com/blog/post-1","title":"First post","status":200,"counts":{"error":1},"subtotal":{"error":1},
-              "issues":[{"severity":"error","code":"missing-h1","analyzer":"seo","message":"No H1 on page"}]}
+              "issues":[{"severity":"error","code":"seo-missing-h1","analyzer":"seo","message":"No H1 on page"}]}
           ]}
       ]}
   }
@@ -63,7 +63,7 @@ func TestRenderToHTML(t *testing.T) {
 		`id="tab-sitemap"`,    // site-map tab panel
 		`ul class="sm-chart"`, // the org-chart container
 		"post-1",              // a leaf node from the serialized tree
-		"missing-h1",          // its issue, shown in the node popover
+		"seo-missing-h1",      // its issue, shown in the node popover
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered HTML missing %q", want)
@@ -84,7 +84,7 @@ func TestRenderToCSV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
-	if !strings.Contains(string(got), "missing-h1") {
+	if !strings.Contains(string(got), "seo-missing-h1") {
 		t.Errorf("CSV missing the issue row:\n%s", got)
 	}
 }

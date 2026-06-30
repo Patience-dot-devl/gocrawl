@@ -47,10 +47,10 @@ func TestGuessedIndexSoft404NotFlagged(t *testing.T) {
 	res := &crawler.Result{Seed: "https://example.com/"}
 	issues := sitemap.New(ff).Analyze(context.Background(), res)
 
-	if is, ok := find(issues, "invalid-sitemap"); ok {
+	if is, ok := find(issues, "sitemap-invalid"); ok {
 		t.Errorf("guessed soft-404 path should not be flagged invalid-sitemap, got URL %q", is.URL)
 	}
-	if _, ok := find(issues, "no-sitemap"); ok {
+	if _, ok := find(issues, "sitemap-missing"); ok {
 		t.Error("a real /sitemap.xml exists; should not report no-sitemap")
 	}
 	if _, ok := find(issues, "sitemap-coverage"); !ok {
@@ -68,7 +68,7 @@ func TestDeclaredBrokenSitemapFlagged(t *testing.T) {
 		Seed:   "https://example.com/",
 		Robots: map[string]*crawler.RobotsData{"example.com": {Sitemaps: []string{"https://example.com/broken.xml"}}},
 	}
-	if _, ok := find(sitemap.New(ff).Analyze(context.Background(), res), "invalid-sitemap"); !ok {
+	if _, ok := find(sitemap.New(ff).Analyze(context.Background(), res), "sitemap-invalid"); !ok {
 		t.Error("a declared sitemap that won't parse should be flagged invalid-sitemap")
 	}
 }
@@ -81,10 +81,10 @@ func TestNoSitemapWhenOnlySoft404s(t *testing.T) {
 	}}
 	res := &crawler.Result{Seed: "https://example.com/"}
 	issues := sitemap.New(ff).Analyze(context.Background(), res)
-	if _, ok := find(issues, "no-sitemap"); !ok {
+	if _, ok := find(issues, "sitemap-missing"); !ok {
 		t.Error("expected no-sitemap when all candidates are HTML soft-404s")
 	}
-	if _, ok := find(issues, "invalid-sitemap"); ok {
+	if _, ok := find(issues, "sitemap-invalid"); ok {
 		t.Error("guessed soft-404 paths should not be flagged invalid-sitemap")
 	}
 }

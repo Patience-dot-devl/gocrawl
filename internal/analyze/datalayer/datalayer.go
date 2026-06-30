@@ -175,14 +175,14 @@ func staticChecks(url string, s domSignals) []analyze.Issue {
 		if !s.gtmNoscript {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "datalayer", URL: url, Severity: analyze.Warning,
-				Code: "gtm-noscript-missing", Message: "GTM container present but the <noscript> fallback iframe is missing (no tracking for JS-disabled clients)",
+				Code: "datalayer-gtm-noscript-missing", Message: "GTM container present but the <noscript> fallback iframe is missing (no tracking for JS-disabled clients)",
 				Data: map[string]any{"containers": s.gtmIDs},
 			})
 		}
 		if !s.gtmInHead {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "datalayer", URL: url, Severity: analyze.Info,
-				Code: "gtm-snippet-not-in-head", Message: "GTM container snippet is not in <head>; Google recommends placing it as high in the head as possible",
+				Code: "datalayer-gtm-snippet-not-in-head", Message: "GTM container snippet is not in <head>; Google recommends placing it as high in the head as possible",
 				Data: map[string]any{"containers": s.gtmIDs},
 			})
 		}
@@ -212,7 +212,7 @@ func staticChecks(url string, s domSignals) []analyze.Issue {
 			if !loaded[id] {
 				issues = append(issues, analyze.Issue{
 					Analyzer: "datalayer", URL: url, Severity: analyze.Warning,
-					Code: "gtag-config-id-mismatch", Message: "gtag('config') targets an ID with no matching gtag/js loader on the page",
+					Code: "datalayer-gtag-config-id-mismatch", Message: "gtag('config') targets an ID with no matching gtag/js loader on the page",
 					Data: map[string]any{"config_id": id, "loaded_ids": s.gtagLoaderID},
 				})
 			}
@@ -224,12 +224,12 @@ func staticChecks(url string, s domSignals) []analyze.Issue {
 		if s.consent {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "datalayer", URL: url, Severity: analyze.Info,
-				Code: "consent-mode-present", Message: "Google Consent Mode signals detected",
+				Code: "datalayer-consent-mode-present", Message: "Google Consent Mode signals detected",
 			})
 		} else if s.hasGA4 || s.hasAds || hasGTM {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "datalayer", URL: url, Severity: analyze.Info,
-				Code: "consent-mode-missing", Message: "Analytics/ads tags present but no Google Consent Mode default was found",
+				Code: "datalayer-consent-mode-missing", Message: "Analytics/ads tags present but no Google Consent Mode default was found",
 			})
 		}
 	}
@@ -282,7 +282,7 @@ func runtimeChecks(url string, s domSignals, r *crawler.RenderResult) []analyze.
 	if !hasPageLoad(names, s) && len(entries) > 0 {
 		issues = append(issues, analyze.Issue{
 			Analyzer: "datalayer", URL: url, Severity: analyze.Warning,
-			Code: "page-view-missing", Message: "No page_view or GTM lifecycle event found in the dataLayer",
+			Code: "datalayer-page-view-missing", Message: "No page_view or GTM lifecycle event found in the dataLayer",
 		})
 	}
 
@@ -375,7 +375,7 @@ func ecommerceChecks(url string, entries []dlEntry) []analyze.Issue {
 		if len(missing) > 0 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "datalayer", URL: url, Severity: analyze.Warning,
-				Code: "ecommerce-event-invalid", Message: fmt.Sprintf("%q event is missing required parameters", e.event),
+				Code: "datalayer-ecommerce-event-invalid", Message: fmt.Sprintf("%q event is missing required parameters", e.event),
 				Data: map[string]any{"event": e.event, "missing": missing},
 			})
 		}
@@ -439,7 +439,7 @@ func duplicateConversionChecks(url string, entries []dlEntry) []analyze.Issue {
 		if n > 1 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "datalayer", URL: url, Severity: analyze.Warning,
-				Code: "duplicate-event", Message: fmt.Sprintf("Conversion event %q fired %d times (risks double-counting)", name, n),
+				Code: "datalayer-duplicate-event", Message: fmt.Sprintf("Conversion event %q fired %d times (risks double-counting)", name, n),
 				Data: map[string]any{"event": name, "count": n},
 			})
 		}
@@ -448,7 +448,7 @@ func duplicateConversionChecks(url string, entries []dlEntry) []analyze.Issue {
 		if n > 1 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "datalayer", URL: url, Severity: analyze.Warning,
-				Code: "duplicate-transaction", Message: "Same purchase transaction_id fired more than once",
+				Code: "datalayer-duplicate-transaction", Message: "Same purchase transaction_id fired more than once",
 				Data: map[string]any{"transaction_id": tid, "count": n},
 			})
 		}
@@ -523,7 +523,7 @@ func tagFiringChecks(url string, s domSignals, r *crawler.RenderResult) []analyz
 		}
 		issues = append(issues, analyze.Issue{
 			Analyzer: "datalayer", URL: url, Severity: analyze.Warning,
-			Code: "tag-not-firing", Message: fmt.Sprintf("%s is installed but issued no network beacon during render (could be a broken tag, consent gating, or ad-blocking)", b.tag),
+			Code: "datalayer-tag-not-firing", Message: fmt.Sprintf("%s is installed but issued no network beacon during render (could be a broken tag, consent gating, or ad-blocking)", b.tag),
 			Data: map[string]any{"tag": b.tag},
 		})
 	}
@@ -531,7 +531,7 @@ func tagFiringChecks(url string, s domSignals, r *crawler.RenderResult) []analyz
 		sort.Strings(fired)
 		issues = append(issues, analyze.Issue{
 			Analyzer: "datalayer", URL: url, Severity: analyze.Info,
-			Code: "tags-firing", Message: "Tags confirmed firing a network beacon",
+			Code: "datalayer-tags-firing", Message: "Tags confirmed firing a network beacon",
 			Data: map[string]any{"tags": fired},
 		})
 	}

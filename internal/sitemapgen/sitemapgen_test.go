@@ -121,13 +121,13 @@ func TestWriteXML(t *testing.T) {
 
 func sampleIssues() []analyze.Issue {
 	return []analyze.Issue{
-		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "missing-title", Message: "No title"},
+		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "seo-missing-title", Message: "No title"},
 		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Warning, Code: "short-desc", Message: "Short description"},
 		{Analyzer: "images", URL: "https://example.com/about/", Severity: analyze.Info, Code: "img-alt", Message: "Missing alt"},
 		// Trailing-slash variant must still match the home page node.
 		{Analyzer: "seo", URL: "https://example.com", Severity: analyze.Warning, Code: "h1-missing", Message: "No H1"},
 		// Site-wide: the robots analyzer's per-host finding names no crawled page.
-		{Analyzer: "robots", URL: "host example.com", Severity: analyze.Warning, Code: "no-robots", Message: "No robots.txt"},
+		{Analyzer: "robots", URL: "host example.com", Severity: analyze.Warning, Code: "robots-missing", Message: "No robots.txt"},
 	}
 }
 
@@ -185,7 +185,7 @@ func TestSubtotalsAndSiteWide(t *testing.T) {
 		t.Errorf("blog subtotal = %d, want 2", blog.Subtotal.Total())
 	}
 	// One issue names no crawled page -> SiteWide.
-	if len(m.SiteWide) != 1 || m.SiteWide[0].Code != "no-robots" {
+	if len(m.SiteWide) != 1 || m.SiteWide[0].Code != "robots-missing" {
 		t.Errorf("SiteWide = %+v, want the robots finding", m.SiteWide)
 	}
 	// Totals span every issue (tree + site-wide).

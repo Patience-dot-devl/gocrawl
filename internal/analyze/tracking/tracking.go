@@ -108,7 +108,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	if len(detected) == 0 {
 		return []analyze.Issue{{
 			Analyzer: "tracking", URL: url, Severity: analyze.Info,
-			Code: "no-tracking-tags", Message: "No analytics or marketing tags detected (tags loaded via a tag manager may not be visible in static HTML)",
+			Code: "tracking-none", Message: "No analytics or marketing tags detected (tags loaded via a tag manager may not be visible in static HTML)",
 		}}
 	}
 
@@ -119,7 +119,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		if len(d.ids) >= 2 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "tracking", URL: url, Severity: analyze.Warning,
-				Code: "duplicate-tracking-tag", Message: "Multiple installs of the same tag (risks double-counting)",
+				Code: "tracking-duplicate-tag", Message: "Multiple installs of the same tag (risks double-counting)",
 				Data: map[string]any{"tag": d.tag, "ids": d.ids, "count": len(d.ids)},
 			})
 		}
@@ -132,7 +132,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	if uaPresent && ga4Present {
 		issues = append(issues, analyze.Issue{
 			Analyzer: "tracking", URL: url, Severity: analyze.Info,
-			Code: "mixed-ga-versions", Message: "Both Universal Analytics and GA4 are present",
+			Code: "tracking-mixed-ga-versions", Message: "Both Universal Analytics and GA4 are present",
 			Data: map[string]any{"ua_ids": idsFor(detected, familyUA), "ga4_ids": idsFor(detected, familyGA4)},
 		})
 	}

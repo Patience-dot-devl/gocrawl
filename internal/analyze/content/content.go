@@ -52,7 +52,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		if pw.words < thinThreshold {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "content", URL: pw.url, Severity: analyze.Warning,
-				Code: "thin-content", Message: "Page has very little textual content",
+				Code: "content-thin", Message: "Page has very little textual content",
 				Data: map[string]any{"words": pw.words},
 			})
 			continue
@@ -60,7 +60,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		if len(pages) >= 3 && mean > 0 && float64(pw.words) < mean*0.5 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "content", URL: pw.url, Severity: analyze.Info,
-				Code: "low-content", Message: "Page word count is well below the site average",
+				Code: "content-low", Message: "Page word count is well below the site average",
 				Data: map[string]any{"words": pw.words, "site_average": roundedMean},
 			})
 		}

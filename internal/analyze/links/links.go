@@ -49,7 +49,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 					case target.StatusCode >= 400:
 						issues = append(issues, analyze.Issue{
 							Analyzer: "links", URL: p.FinalURL, Severity: analyze.Error,
-							Code: "broken-link", Message: "Internal link points to an error page",
+							Code: "link-broken", Message: "Internal link points to an error page",
 							Data: map[string]any{"target": link.URL, "status": target.StatusCode, "anchor": link.Anchor},
 						})
 					case len(target.Redirects) > 0:
@@ -65,7 +65,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		if empty > 0 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "links", URL: p.FinalURL, Severity: analyze.Info,
-				Code: "empty-anchor", Message: "Links with empty anchor text",
+				Code: "link-empty-anchor", Message: "Links with empty anchor text",
 				Data: map[string]any{"count": empty},
 			})
 		}
@@ -89,7 +89,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		}
 		issues = append(issues, analyze.Issue{
 			Analyzer: "links", URL: p.FinalURL, Severity: analyze.Info,
-			Code: "inbound-links", Message: "Internal inbound link count",
+			Code: "link-inbound", Message: "Internal inbound link count",
 			Data: map[string]any{"count": count, "anchors": anchors},
 		})
 	}

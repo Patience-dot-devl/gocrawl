@@ -21,7 +21,7 @@ Select a subset with `--analyzers` or the `analyzers.enabled` / `analyzers.disab
 keys — see [Selecting analyzers](configuration.md#selecting-analyzers).
 
 > **Severity is a classification, not a pass/fail.** Several analyzers emit `info` issues
-> (e.g. `link-summary`, `sitemap-coverage`, `response-time`) that report findings rather than
+> (e.g. `link-summary`, `sitemap-coverage`, `perf-response-time`) that report findings rather than
 > problems. Filter on `severity == "error"` / `"warning"` for actionable items.
 
 ---
@@ -33,25 +33,25 @@ page that returned `200`.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `missing-title` | error | No `<title>` in `<head>` | — |
-| `short-title` | warning | Title shorter than 10 chars | `length`, `title` |
-| `long-title` | warning | Title longer than 60 chars (may truncate in SERPs) | `length`, `title` |
-| `missing-meta-description` | warning | No `<meta name="description">` (or empty) | — |
-| `short-meta-description` | info | Description shorter than 50 chars | `length` |
-| `long-meta-description` | info | Description longer than 160 chars | `length` |
-| `meta-noindex` | warning | `<meta name="robots">` contains `noindex` | `robots` |
-| `meta-nofollow` | info | `<meta name="robots">` contains `nofollow` | `robots` |
-| `x-robots-noindex` | warning | The `X-Robots-Tag` HTTP header contains `noindex` | `x_robots_tag` |
-| `x-robots-nofollow` | info | The `X-Robots-Tag` HTTP header contains `nofollow` | `x_robots_tag` |
-| `meta-refresh` | warning | Page uses a `<meta http-equiv="refresh">` redirect (prefer an HTTP 3xx) | `content` |
-| `multiple-canonical` | warning | More than one `<link rel="canonical">` | — |
-| `missing-canonical` | info | No canonical link | — |
-| `missing-h1` | warning | No `<h1>` element | — |
-| `multiple-h1` | info | More than one `<h1>` | `count` |
-| `missing-lang` | info | `<html>` has no `lang` attribute | — |
-| `missing-viewport` | info | No `<meta name="viewport">` (mobile-friendliness) | — |
-| `missing-charset` | info | No `<meta charset>` and no `content-type` http-equiv | — |
-| `missing-opengraph` | info | No `<meta property="og:*">` tags | — |
+| `seo-missing-title` | error | No `<title>` in `<head>` | — |
+| `seo-short-title` | warning | Title shorter than 10 chars | `length`, `title` |
+| `seo-long-title` | warning | Title longer than 60 chars (may truncate in SERPs) | `length`, `title` |
+| `seo-missing-meta-description` | warning | No `<meta name="description">` (or empty) | — |
+| `seo-short-meta-description` | info | Description shorter than 50 chars | `length` |
+| `seo-long-meta-description` | info | Description longer than 160 chars | `length` |
+| `seo-meta-noindex` | warning | `<meta name="robots">` contains `noindex` | `robots` |
+| `seo-meta-nofollow` | info | `<meta name="robots">` contains `nofollow` | `robots` |
+| `seo-x-robots-noindex` | warning | The `X-Robots-Tag` HTTP header contains `noindex` | `x_robots_tag` |
+| `seo-x-robots-nofollow` | info | The `X-Robots-Tag` HTTP header contains `nofollow` | `x_robots_tag` |
+| `seo-meta-refresh` | warning | Page uses a `<meta http-equiv="refresh">` redirect (prefer an HTTP 3xx) | `content` |
+| `seo-multiple-canonical` | warning | More than one `<link rel="canonical">` | — |
+| `seo-missing-canonical` | info | No canonical link | — |
+| `seo-missing-h1` | warning | No `<h1>` element | — |
+| `seo-multiple-h1` | info | More than one `<h1>` | `count` |
+| `seo-missing-lang` | info | `<html>` has no `lang` attribute | — |
+| `seo-missing-viewport` | info | No `<meta name="viewport">` (mobile-friendliness) | — |
+| `seo-missing-charset` | info | No `<meta charset>` and no `content-type` http-equiv | — |
+| `seo-missing-opengraph` | info | No `<meta property="og:*">` tags | — |
 
 **Thresholds:** title 10–60 chars, meta description 50–160 chars.
 
@@ -64,14 +64,14 @@ every page. (The analyzer's internal package is `httpx`; its registered name is 
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `fetch-error` | error | The page failed to fetch | — |
-| `server-error` | error | Status `>= 500` | `status` |
-| `client-error` | error | Status `400`–`499` | `status` |
-| `redirect-loop` | error | A URL repeats in the redirect chain | `chain` |
-| `redirect-chain` | warning | More than one redirect before the final URL | `hops`, `chain` |
-| `redirect` | info | A single redirect | `to`, `status` |
-| `slow-response` | warning | Response slower than the threshold (default **2s**) | `duration_ms` |
-| `mixed-content` | warning | HTTPS page loads `http://` subresources | `count`, `examples` |
+| `http-fetch-error` | error | The page failed to fetch | — |
+| `http-server-error` | error | Status `>= 500` | `status` |
+| `http-client-error` | error | Status `400`–`499` | `status` |
+| `http-redirect-loop` | error | A URL repeats in the redirect chain | `chain` |
+| `http-redirect-chain` | warning | More than one redirect before the final URL | `hops`, `chain` |
+| `http-redirect` | info | A single redirect | `to`, `status` |
+| `http-slow-response` | warning | Response slower than the threshold (default **2s**) | `duration_ms` |
+| `http-mixed-content` | warning | HTTPS page loads `http://` subresources | `count`, `examples` |
 
 **Threshold:** slow-response fires above 2 seconds. Mixed-content reports up to 5 example
 URLs.
@@ -85,13 +85,13 @@ references each page's outbound links against the crawled page set.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `broken-link` | error | Internal link points to a crawled page with status `>= 400` | `target`, `status`, `anchor` |
+| `link-broken` | error | Internal link points to a crawled page with status `>= 400` | `target`, `status`, `anchor` |
 | `link-to-redirect` | warning | Internal link points to a crawled page that redirects | `target`, `final` |
-| `empty-anchor` | info | The page has links with empty anchor text | `count` |
+| `link-empty-anchor` | info | The page has links with empty anchor text | `count` |
 | `link-summary` | info | Per-page link counts (always emitted when a page has links) | `total`, `external`, `nofollow` |
-| `inbound-links` | info | Per-page count of internal inbound links (emitted for every HTML `200` page) | `count`, `anchors` |
+| `link-inbound` | info | Per-page count of internal inbound links (emitted for every HTML `200` page) | `count`, `anchors` |
 
-> `inbound-links` counts internal links pointing **at** each page from other crawled pages
+> `link-inbound` counts internal links pointing **at** each page from other crawled pages
 > and samples up to ten distinct inbound anchor texts. A count of `0` flags a page nothing
 > internally links to (a possible orphan, subject to crawl scope).
 
@@ -108,12 +108,12 @@ Reports per host. Issue `url` is `host <hostname>` for the per-host findings.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `no-robots` | info | No `robots.txt` found for the host | `status` |
-| `no-sitemap-declared` | info | `robots.txt` declares no `Sitemap:` | — |
-| `sitemaps-declared` | info | `robots.txt` declares one or more sitemaps | `sitemaps` |
-| `crawled-disallowed` | warning | A crawled URL is disallowed by `robots.txt` | — |
+| `robots-missing` | info | No `robots.txt` found for the host | `status` |
+| `robots-no-sitemap-declared` | info | `robots.txt` declares no `Sitemap:` | — |
+| `robots-sitemaps-declared` | info | `robots.txt` declares one or more sitemaps | `sitemaps` |
+| `robots-crawled-disallowed` | warning | A crawled URL is disallowed by `robots.txt` | — |
 
-> `crawled-disallowed` can only occur when you crawled with `--respect-robots=false`; with
+> `robots-crawled-disallowed` can only occur when you crawled with `--respect-robots=false`; with
 > the default `true`, disallowed URLs are never fetched.
 
 ---
@@ -126,8 +126,8 @@ Looks for sitemaps declared in `robots.txt` plus the conventional `/sitemap.xml`
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `invalid-sitemap` | warning | A fetched sitemap parsed as neither a `urlset` nor an index | — |
-| `no-sitemap` | warning | No sitemap found at any candidate location | — |
+| `sitemap-invalid` | warning | A fetched sitemap parsed as neither a `urlset` nor an index | — |
+| `sitemap-missing` | warning | No sitemap found at any candidate location | — |
 | `sitemap-coverage` | info | Cross-check of sitemap URLs vs. crawled pages | `sitemap_urls`, `crawled_pages`, `crawled_not_in_sitemap`, `in_sitemap_not_crawled` |
 
 The coverage `data` lets you spot pages that are crawlable but missing from the sitemap
@@ -144,8 +144,8 @@ blocks and reports their schema.org `@type` values (descending into `@graph` and
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `invalid-jsonld` | warning | A JSON-LD block is not valid JSON | `error` |
-| `no-structured-data` | info | The page has no JSON-LD blocks | — |
+| `structured-invalid-jsonld` | warning | A JSON-LD block is not valid JSON | `error` |
+| `structured-none` | info | The page has no JSON-LD blocks | — |
 | `structured-data` | info | JSON-LD found; lists the de-duplicated `@type`s | `types` |
 | `structured-missing-required` | warning | A typed object of a recognized schema.org type omits a required field | `type`, `missing` |
 
@@ -166,10 +166,10 @@ Runs in two modes depending on how the crawl was fetched:
   Timing for TTFB) and emits per-page findings against [Google's CWV thresholds][cwv].
   If a page is snapshotted before it finishes rendering, the rendered DOM comes back far
   thinner than the raw HTML; the renderer detects this, **analyzes the raw HTML instead** (so
-  structural checks like the H1 aren't false-negatives) and emits a `render-incomplete`
+  structural checks like the H1 aren't false-negatives) and emits a `perf-render-incomplete`
   warning marking that page's CWV as unreliable.
-- **Raw mode.** Falls back to a single `cwv-not-collected` notice and a per-page
-  `response-time` proxy from the raw fetch's TTFB.
+- **Raw mode.** Falls back to a single `perf-cwv-not-collected` notice and a per-page
+  `perf-response-time` proxy from the raw fetch's TTFB.
 
 > **INP is field-only.** It requires real user interactions and cannot be measured in a
 > synthetic crawl. gocrawl reports **TBT (Total Blocking Time)** as a lab-mode proxy for
@@ -191,16 +191,16 @@ Runs in two modes depending on how the crawl was fetched:
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `cwv-measured` | info | Per rendered `200` HTML page — all five metrics in one record | `lcp_ms`, `fcp_ms`, `cls`, `tbt_ms`, `ttfb_ms` |
-| `lcp-needs-improvement` / `lcp-poor` | warning / error | LCP above the band | `value_ms`, `threshold_ms` |
-| `fcp-needs-improvement` / `fcp-poor` | warning / error | FCP above the band | `value_ms`, `threshold_ms` |
-| `cls-needs-improvement` / `cls-poor` | warning / error | CLS above the band | `value`, `threshold` |
-| `tbt-needs-improvement` / `tbt-poor` | warning / error | TBT above the band | `value_ms`, `threshold_ms` |
-| `ttfb-needs-improvement` / `ttfb-poor` | warning / error | TTFB above the band | `value_ms`, `threshold_ms` |
-| `cwv-render-failed` | info | Headless rendering errored on a page; CWV unavailable for it | `note` |
-| `render-incomplete` | warning | The rendered DOM came back far thinner than the raw HTML (page not finished rendering); gocrawl analyzed the raw HTML instead, and this page's CWV are unreliable | `rendered_bytes`, `raw_bytes` |
-| `cwv-not-collected` | info | Raw-mode fallback (once on the seed) — reminds to enable `--render headless` | — |
-| `response-time` | info | Raw-mode per-page TTFB proxy from raw fetch duration | `duration_ms` |
+| `perf-cwv-measured` | info | Per rendered `200` HTML page — all five metrics in one record | `lcp_ms`, `fcp_ms`, `cls`, `tbt_ms`, `ttfb_ms` |
+| `perf-lcp-needs-improvement` / `perf-lcp-poor` | warning / error | LCP above the band | `value_ms`, `threshold_ms` |
+| `perf-fcp-needs-improvement` / `perf-fcp-poor` | warning / error | FCP above the band | `value_ms`, `threshold_ms` |
+| `perf-cls-needs-improvement` / `perf-cls-poor` | warning / error | CLS above the band | `value`, `threshold` |
+| `perf-tbt-needs-improvement` / `perf-tbt-poor` | warning / error | TBT above the band | `value_ms`, `threshold_ms` |
+| `perf-ttfb-needs-improvement` / `perf-ttfb-poor` | warning / error | TTFB above the band | `value_ms`, `threshold_ms` |
+| `perf-cwv-render-failed` | info | Headless rendering errored on a page; CWV unavailable for it | `note` |
+| `perf-render-incomplete` | warning | The rendered DOM came back far thinner than the raw HTML (page not finished rendering); gocrawl analyzed the raw HTML instead, and this page's CWV are unreliable | `rendered_bytes`, `raw_bytes` |
+| `perf-cwv-not-collected` | info | Raw-mode fallback (once on the seed) — reminds to enable `--render headless` | — |
+| `perf-response-time` | info | Raw-mode per-page TTFB proxy from raw fetch duration | `duration_ms` |
 
 ---
 
@@ -242,13 +242,13 @@ captured; the form check still runs.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `missing-hsts` | warning | An HTTPS page sends no `Strict-Transport-Security` header | — |
-| `missing-csp` | info | The page sends no `Content-Security-Policy` header | — |
-| `missing-x-content-type-options` | info | No `X-Content-Type-Options: nosniff` header | — |
-| `insecure-form` | warning | An HTTPS page has a `<form>` posting to an `http://` action | `action` |
+| `security-missing-hsts` | warning | An HTTPS page sends no `Strict-Transport-Security` header | — |
+| `security-missing-csp` | info | The page sends no `Content-Security-Policy` header | — |
+| `security-missing-x-content-type-options` | info | No `X-Content-Type-Options: nosniff` header | — |
+| `security-insecure-form` | warning | An HTTPS page has a `<form>` posting to an `http://` action | `action` |
 
 > Mixed subresource content is reported separately by the [`redirects`](#redirects--http-status-redirects-slow-responses-mixed-content)
-> analyzer (`mixed-content`); `security` focuses on response headers and form targets.
+> analyzer (`http-mixed-content`); `security` focuses on response headers and form targets.
 
 ---
 
@@ -326,10 +326,10 @@ the crawl's mean.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `thin-content` | warning | The page has fewer than 100 words | `words` |
-| `low-content` | info | The page has fewer than half the site-average word count (≥ 3 pages crawled; not already thin) | `words`, `site_average` |
+| `content-thin` | warning | The page has fewer than 100 words | `words` |
+| `content-low` | info | The page has fewer than half the site-average word count (≥ 3 pages crawled; not already thin) | `words`, `site_average` |
 
-> `thin-content` uses an absolute 100-word floor; `low-content` is relative to the crawl
+> `content-thin` uses an absolute 100-word floor; `content-low` is relative to the crawl
 > average and is suppressed on pages already flagged as thin, so the two never double-report.
 
 ---
@@ -348,12 +348,12 @@ hCaptcha, AWS WAF, DataDome, PerimeterX/HUMAN, and Imperva Incapsula.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `bot-challenge` | warning | A vendor interstitial marker matched, or a CAPTCHA-widget marker matched on a page that looks like a wall (blocking status `401/403/429/503`, a challenge-style `<title>`, or almost no other content). A challenge-style title on a blocking status with no known vendor is reported as `provider: "Unknown"`. | `provider`, `signals`, `status` |
-| `captcha-widget` | info | A reCAPTCHA / hCaptcha / Turnstile widget is embedded in an otherwise-normal page (e.g. a contact form) — present, but not a block | `provider`, `providers`, `signals` |
+| `botwall-challenge` | warning | A vendor interstitial marker matched, or a CAPTCHA-widget marker matched on a page that looks like a wall (blocking status `401/403/429/503`, a challenge-style `<title>`, or almost no other content). A challenge-style title on a blocking status with no known vendor is reported as `provider: "Unknown"`. | `provider`, `signals`, `status` |
+| `botwall-captcha-widget` | info | A reCAPTCHA / hCaptcha / Turnstile widget is embedded in an otherwise-normal page (e.g. a contact form) — present, but not a block | `provider`, `providers`, `signals` |
 
 > The widget-vs-wall distinction is deliberate: a reCAPTCHA on a full contact page is `info`,
-> while the same widget on a thin/blocking page is a `bot-challenge`. When you see
-> `bot-challenge`, treat that page's other findings as unreliable and re-crawl from an
+> while the same widget on a thin/blocking page is a `botwall-challenge`. When you see
+> `botwall-challenge`, treat that page's other findings as unreliable and re-crawl from an
 > allow-listed IP/User-Agent or at a lower rate.
 
 ---
@@ -448,12 +448,12 @@ TikTok Pixel.
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
 | `tracking-tags` | info | One or more tags detected; lists each tag and its IDs | `tags` |
-| `no-tracking-tags` | info | HTML page with no detectable tags | — |
-| `duplicate-tracking-tag` | warning | The same tag family is installed with two or more distinct IDs (double-counting risk) | `tag`, `ids`, `count` |
-| `mixed-ga-versions` | info | Both Universal Analytics and GA4 are present | `ua_ids`, `ga4_ids` |
+| `tracking-none` | info | HTML page with no detectable tags | — |
+| `tracking-duplicate-tag` | warning | The same tag family is installed with two or more distinct IDs (double-counting risk) | `tag`, `ids`, `count` |
+| `tracking-mixed-ga-versions` | info | Both Universal Analytics and GA4 are present | `ua_ids`, `ga4_ids` |
 
 > **Static detection.** Tags injected at runtime by a tag manager are only visible via their
-> container (e.g. a `GTM-…` ID), so `no-tracking-tags` is informational rather than a warning.
+> container (e.g. a `GTM-…` ID), so `tracking-none` is informational rather than a warning.
 > A pixel installed via both a `<script>` and its standard `<noscript>` fallback with the same
 > ID counts as one install, not a duplicate.
 
@@ -469,13 +469,13 @@ correctly and what are they actually measuring?". It runs two tiers on every HTM
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `gtm-noscript-missing` | warning | A GTM container is present but its `<noscript>` `ns.html` iframe fallback is absent | `containers` |
-| `gtm-snippet-not-in-head` | info | The GTM container snippet/loader is not inside `<head>` | `containers` |
+| `datalayer-gtm-noscript-missing` | warning | A GTM container is present but its `<noscript>` `ns.html` iframe fallback is absent | `containers` |
+| `datalayer-gtm-snippet-not-in-head` | info | The GTM container snippet/loader is not inside `<head>` | `containers` |
 | `datalayer-push-before-init` | warning | A `dataLayer.push` runs before the dataLayer is initialized (early pushes are lost) | — |
 | `datalayer-init-missing` | warning | A tag manager is present but no dataLayer is initialized in the HTML | — |
-| `gtag-config-id-mismatch` | warning | `gtag('config', X)` targets an ID with no matching `gtag/js` loader (and no GTM that could load it) | `config_id`, `loaded_ids` |
-| `consent-mode-present` | info | Google Consent Mode signals (`gtag('consent', …)`) detected | — |
-| `consent-mode-missing` | info | Analytics/ads tags present but no Consent Mode default found | — |
+| `datalayer-gtag-config-id-mismatch` | warning | `gtag('config', X)` targets an ID with no matching `gtag/js` loader (and no GTM that could load it) | `config_id`, `loaded_ids` |
+| `datalayer-consent-mode-present` | info | Google Consent Mode signals (`gtag('consent', …)`) detected | — |
+| `datalayer-consent-mode-missing` | info | Analytics/ads tags present but no Consent Mode default found | — |
 
 **Runtime tier** (requires `--render headless` — reads the post-JS `window.dataLayer` and the
 page's network beacons):
@@ -484,14 +484,14 @@ page's network beacons):
 | --- | --- | --- | --- |
 | `datalayer-empty` | warning | A tag manager is present but `window.dataLayer` is empty/absent after rendering | — |
 | `datalayer-events` | info | Inventory of every event pushed, with per-event counts | `events` |
-| `page-view-missing` | warning | The dataLayer has events but no `page_view`/GTM lifecycle event, and no gtag config implying GA4 auto page_view | — |
-| `ecommerce-event-invalid` | warning | A GA4 e-commerce event (`purchase`, `add_to_cart`, …) is missing required parameters | `event`, `missing` |
+| `datalayer-page-view-missing` | warning | The dataLayer has events but no `page_view`/GTM lifecycle event, and no gtag config implying GA4 auto page_view | — |
+| `datalayer-ecommerce-event-invalid` | warning | A GA4 e-commerce event (`purchase`, `add_to_cart`, …) is missing required parameters | `event`, `missing` |
 | `datalayer-param-type` | warning | An e-commerce parameter has the wrong type (`value` not numeric, `currency` not ISO-4217, `items` not a non-empty array) | `event`, `param`, `want`, `got` |
-| `duplicate-event` | warning | A conversion event (`purchase`, `generate_lead`, …) fired more than once | `event`, `count` |
-| `duplicate-transaction` | warning | The same purchase `transaction_id` fired more than once | `transaction_id`, `count` |
+| `datalayer-duplicate-event` | warning | A conversion event (`purchase`, `generate_lead`, …) fired more than once | `event`, `count` |
+| `datalayer-duplicate-transaction` | warning | The same purchase `transaction_id` fired more than once | `transaction_id`, `count` |
 | `datalayer-pii` | warning | An email (anywhere) or a phone-shaped value under a phone-like key was pushed into the dataLayer | `kind`, `key`, `value` (redacted) |
-| `tag-not-firing` | warning | A tag detected in the HTML issued no matching network beacon during render | `tag` |
-| `tags-firing` | info | Tags confirmed to have issued a network beacon | `tags` |
+| `datalayer-tag-not-firing` | warning | A tag detected in the HTML issued no matching network beacon during render | `tag` |
+| `datalayer-tags-firing` | info | Tags confirmed to have issued a network beacon | `tags` |
 | `datalayer-not-collected` | info | Emitted once when no page was rendered; runtime checks need `--render headless` | — |
 
 > **Why two tiers.** The dataLayer and the events pushed into it only exist after JavaScript

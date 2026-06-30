@@ -46,7 +46,7 @@ func TestStructuredExtractsTypes(t *testing.T) {
 
 func TestStructuredInvalidJSON(t *testing.T) {
 	res := page(t, `<html><head><script type="application/ld+json">{ not json }</script></head><body></body></html>`)
-	if _, ok := find(structured.New().Analyze(context.Background(), res), "invalid-jsonld"); !ok {
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-invalid-jsonld"); !ok {
 		t.Error("expected invalid-jsonld issue")
 	}
 }

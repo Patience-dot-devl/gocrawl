@@ -93,7 +93,7 @@ Each entry in `issues` is an [`Issue`](../internal/analyze/analyze.go):
 | `analyzer` | string | Name of the analyzer that produced it (`seo`, `links`, …). |
 | `url` | string | The URL the finding applies to. For the `robots` analyzer's per-host findings this is `host <hostname>`; for crawl-wide notices it may be the seed. |
 | `severity` | string | `error`, `warning`, or `info`. |
-| `code` | string | Stable machine-readable code (e.g. `missing-title`). See the [Analyzer reference](analyzers.md). |
+| `code` | string | Stable machine-readable code (e.g. `seo-missing-title`). See the [Analyzer reference](analyzers.md). |
 | `message` | string | Human-readable description. |
 | `data` | object | Optional analyzer-specific details; omitted when empty. |
 
@@ -192,7 +192,7 @@ The page has three blocks:
   and message. When an issue has a `data` map, a `<details>` toggle reveals it as
   pretty-printed JSON. A toolbar above the table lets you full-text search, toggle
   severities, filter by analyzer, and **multi-select issue codes** — uncheck codes in the
-  *Codes* dropdown to hide them (e.g. hide `meta-noindex` / `x-robots-noindex` noise when
+  *Codes* dropdown to hide them (e.g. hide `seo-meta-noindex` / `seo-x-robots-noindex` noise when
   auditing a staging site that is deliberately noindexed). You can also mark rows
   resolved / non-issue, add comments, and **Save to file** to bake that review state back
   into a shareable copy.
