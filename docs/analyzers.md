@@ -329,6 +329,30 @@ the crawl's mean.
 
 ---
 
+## `botwall` — CAPTCHA / bot-protection challenge detection
+
+Source: [`internal/analyze/botwall/botwall.go`](../internal/analyze/botwall/botwall.go). Flags
+pages that served a CAPTCHA or bot-protection wall instead of the real content — so a crawl
+that was silently blocked isn't mistaken for a successful audit (challenge pages usually
+return HTTP `200`, then trip a page's worth of false "missing title / thin content" findings).
+
+It scans each page's body, **response headers** (catches `cf-mitigated`, `x-datadome`,
+challenge cookies), and — in headless mode — the **outbound request URLs** the renderer
+captured, against signatures for: Cloudflare (challenge + Turnstile), Google reCAPTCHA,
+hCaptcha, AWS WAF, DataDome, PerimeterX/HUMAN, and Imperva Incapsula.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `bot-challenge` | warning | A vendor interstitial marker matched, or a CAPTCHA-widget marker matched on a page that looks like a wall (blocking status `401/403/429/503`, a challenge-style `<title>`, or almost no other content). A challenge-style title on a blocking status with no known vendor is reported as `provider: "Unknown"`. | `provider`, `signals`, `status` |
+| `captcha-widget` | info | A reCAPTCHA / hCaptcha / Turnstile widget is embedded in an otherwise-normal page (e.g. a contact form) — present, but not a block | `provider`, `providers`, `signals` |
+
+> The widget-vs-wall distinction is deliberate: a reCAPTCHA on a full contact page is `info`,
+> while the same widget on a thin/blocking page is a `bot-challenge`. When you see
+> `bot-challenge`, treat that page's other findings as unreliable and re-crawl from an
+> allow-listed IP/User-Agent or at a lower rate.
+
+---
+
 ## `wordpress` — WordPress detection and WP-specific checks (CMS)
 
 Source: [`internal/analyze/wordpress/wordpress.go`](../internal/analyze/wordpress/wordpress.go).

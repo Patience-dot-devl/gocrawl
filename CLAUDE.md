@@ -83,10 +83,10 @@ part of the report contract and have explanations in `internal/report/explanatio
 
 Registered analyzers (in order): `seo`, `redirects` (pkg `httpx`), `links`, `robots` (pkg
 `robotscheck`), `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`,
-`hreflang`, `amp`, `duplicates`, `content`, `wordpress` (CMS-specific), the SEA analyzers
-`utm` / `tracking` / `landing`, and the AI-search analyzers `aeo` (Answer Engine
-Optimization) / `geo` (Generative Engine Optimization). `seaurl` is a shared UTM-parsing
-helper, **not** an analyzer.
+`hreflang`, `amp`, `duplicates`, `content`, `botwall` (CAPTCHA / bot-challenge detection),
+`wordpress` (CMS-specific), the SEA analyzers `utm` / `tracking` / `datalayer` / `landing`,
+and the AI-search analyzers `aeo` (Answer Engine Optimization) / `geo` (Generative Engine
+Optimization). `seaurl` is a shared UTM-parsing helper, **not** an analyzer.
 
 Note: the analyzer's registered `Name()` can differ from its package name (e.g. package
 `httpx` registers as `redirects`, package `robotscheck` registers as `robots`).

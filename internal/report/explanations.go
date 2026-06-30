@@ -94,6 +94,18 @@ var explanations = map[string]Explanation{
 		Fix:    "Review whether the page needs more depth, or confirm the short length is intentional (e.g. a contact page).",
 	},
 
+	// --- botwall: CAPTCHA / bot-protection challenge detection ---
+	"bot-challenge": {
+		What:   "The page served a CAPTCHA or bot-protection challenge (e.g. reCAPTCHA, Turnstile, Cloudflare, DataDome) instead of the real content. Challenge walls often return HTTP 200, so the crawl looks successful while the body is just the wall.",
+		Impact: "Every other finding on this page is unreliable — the analyzers audited the challenge HTML, not your page. If many pages are blocked, the whole crawl is compromised.",
+		Fix:    "Crawl from an allow-listed IP/User-Agent, lower concurrency and rate, or coordinate with whoever manages the WAF/bot rules. For staging, allow-list the crawler. Re-crawl once access is granted.",
+	},
+	"captcha-widget": {
+		What:   "The page embeds a CAPTCHA widget (reCAPTCHA, hCaptcha, or Turnstile) within otherwise-normal content — typically on a form, not a block page.",
+		Impact: "Informational. The page was crawled fine; this just notes a CAPTCHA is present (which can add third-party scripts and affect form-completion metrics).",
+		Fix:    "No action needed unless the widget is unexpected. Ensure it loads only where required to limit third-party script weight.",
+	},
+
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {
 		What:   "The page body is identical to one or more other crawled pages.",
