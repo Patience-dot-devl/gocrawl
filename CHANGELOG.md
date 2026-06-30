@@ -1,0 +1,37 @@
+# Changelog
+
+All notable changes to `gocrawl` are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0] - 2026-06-30
+
+### Added
+
+- **`gocrawl render <report.json>`** — re-emit a saved JSON report as HTML (or CSV) **without
+  recrawling**. The fast way to regenerate a report after a gocrawl upgrade, or to produce
+  another format from a JSON you already have. Mirrors `crawl`'s output flags
+  (`--out`/`-o`, `--format`/`-f` default `html`, `--sitemap`). (#27)
+- **Visual site map** — the HTML report's Site map tab is now a node-link (org-chart-style)
+  diagram: each page is a card colored by health, connected by elbow lines, with collapsible
+  branches, Expand/Collapse-all controls, and a click-to-open issues popover per node. (#27)
+- **Multi-select issue-code filter** in the HTML report toolbar — uncheck codes in the *Codes*
+  dropdown to hide them (e.g. silence `meta-noindex` / `x-robots-noindex` noise when auditing a
+  deliberately-noindexed staging site). Composes with the existing search, severity, and
+  analyzer filters. (#26)
+
+### Changed
+
+- The JSON report now includes the site-map tree under `site_map`, so a JSON report is a
+  complete artifact that `gocrawl render` can turn back into HTML (including the Site map tab)
+  without recrawling. (#27)
+
+## [0.1.0] - 2026-06-29
+
+Initial public release: a concurrent website crawler for SEO/SEA audits with a pluggable
+analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitemap.xml`
+coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
+reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
+
+[0.2.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Patience-dot-devl/gocrawl/releases/tag/v0.1.0
