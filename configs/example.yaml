@@ -13,8 +13,8 @@ seed: "https://example.com"
 render: "raw"
 
 crawl:
-  max_depth: 2          # link hops from the seed (0 = only the seed page)
-  max_pages: 500        # hard cap on the number of pages crawled
+  max_depth: 0          # link hops from the seed (0 = unlimited; the crawl is bounded by max_pages)
+  max_pages: 500        # hard cap on the number of pages crawled — the primary bound on crawl size
   concurrency: 4        # number of parallel fetch workers
   rate_per_second: 0    # max requests/second across the crawl (0 = unlimited)
   adaptive_delay: true  # slow down automatically on HTTP 429/503 responses

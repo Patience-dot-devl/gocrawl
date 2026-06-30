@@ -100,11 +100,18 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	}
 
 	var (
-		mu        sync.Mutex // guards visited, result.Pages, result.index
+		mu        sync.Mutex // guards visited, result.Pages, result.index, notCrawled, limit flags
 		visited   = make(map[string]bool)
 		wg        sync.WaitGroup
 		sem       = make(chan struct{}, e.opts.Concurrency)
 		pageCount int64
+
+		// Coverage tracking: in-scope, robots-allowed URLs we discovered but declined to fetch
+		// because a limit was reached, plus which limit it was. Reconciled against the crawled
+		// set at the end (a URL reachable by a shorter path may still have been crawled).
+		notCrawled        = make(map[string]bool)
+		pageLimitReached  bool
+		depthLimitReached bool
 	)
 
 	var enqueue func(t task)
@@ -119,13 +126,16 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		mu.Unlock()
 
 		u, perr := url.Parse(norm)
-		if perr != nil || !e.inScope(u) {
-			return
-		}
-		if e.opts.RespectRobots && !e.robots.allowed(ctx, u) {
+		if perr != nil || !e.crawlable(ctx, u) {
 			return
 		}
 		if e.opts.MaxPages > 0 && atomic.AddInt64(&pageCount, 1) > int64(e.opts.MaxPages) {
+			// This URL passed scope + robots + dedup but exceeds the page budget: a genuine,
+			// reportable coverage gap.
+			mu.Lock()
+			notCrawled[norm] = true
+			pageLimitReached = true
+			mu.Unlock()
 			return
 		}
 
@@ -168,14 +178,25 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			}
 			mu.Unlock()
 
-			if t.depth >= e.opts.MaxDepth {
-				return
-			}
+			// MaxDepth == 0 means unlimited: the crawl is bounded by the page budget instead.
+			atDepthLimit := e.opts.MaxDepth > 0 && t.depth >= e.opts.MaxDepth
 			for _, link := range page.Links {
 				if link.External && !e.opts.FollowExternal {
 					continue
 				}
 				if link.Nofollow && !e.opts.FollowNofollow {
+					continue
+				}
+				if atDepthLimit {
+					// We won't follow links past the depth limit. Record in-scope, allowed
+					// targets as a coverage gap so the report can flag partial coverage.
+					ln := normalizeURL(link.URL, e.opts.StripQuery)
+					if lu, err := url.Parse(ln); err == nil && e.crawlable(ctx, lu) {
+						mu.Lock()
+						notCrawled[ln] = true
+						depthLimitReached = true
+						mu.Unlock()
+					}
 					continue
 				}
 				enqueue(task{url: link.URL, depth: t.depth + 1, referrer: page.FinalURL})
@@ -190,6 +211,24 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	result.ThrottleEvents = e.throttleCount
 	result.FinalRate = e.curRate
 	e.backoffMu.Unlock()
+
+	// Reconcile the discovered-but-declined set against what actually got crawled: a URL we
+	// declined on one path may have been reached by a shorter one. Whatever remains is a real
+	// coverage gap.
+	uncrawled := 0
+	for u := range notCrawled {
+		if _, ok := result.index[u]; !ok {
+			uncrawled++
+		}
+	}
+	result.Coverage = Coverage{
+		Complete:             uncrawled == 0,
+		DiscoveredNotCrawled: uncrawled,
+		PageLimitReached:     pageLimitReached && uncrawled > 0,
+		DepthLimitReached:    depthLimitReached && uncrawled > 0,
+		MaxPages:             e.opts.MaxPages,
+		MaxDepth:             e.opts.MaxDepth,
+	}
 
 	result.Finished = time.Now()
 	e.collectRobots(ctx, result)
@@ -268,6 +307,20 @@ func retryAfterSeconds(h http.Header) float64 {
 		}
 	}
 	return 0
+}
+
+// crawlable reports whether u is eligible to be fetched: in scope and not robots-disallowed.
+// It deliberately ignores depth/page limits and the visited set, so it can also classify a
+// frontier link the crawl declined to follow (was it skipped because it's out of scope, or
+// because we hit a limit?).
+func (e *Engine) crawlable(ctx context.Context, u *url.URL) bool {
+	if !e.inScope(u) {
+		return false
+	}
+	if e.opts.RespectRobots && !e.robots.allowed(ctx, u) {
+		return false
+	}
+	return true
 }
 
 // inScope reports whether u should be crawled given host scope and include/exclude rules.

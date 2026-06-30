@@ -30,6 +30,11 @@ type Report struct {
 	// Notes carries human-readable advisories about the run itself (e.g. analyzers skipped
 	// because of a conflicting option), not page findings. Omitted when empty.
 	Notes []string `json:"notes,omitempty"`
+	// Coverage reports whether the crawl reached every in-scope URL it found. When it didn't,
+	// findings that depend on fetching a page (broken links especially) may be incomplete, and
+	// the HTML report shows a banner saying so. A pointer so re-rendering an older JSON report
+	// that predates this field doesn't falsely claim partial coverage.
+	Coverage *crawler.Coverage `json:"coverage,omitempty"`
 	// SiteMap is the crawled site as a tree, annotated with the issues found on each page. It
 	// powers the "Site map" tab of the HTML report and the optional sitemap.xml side output.
 	// It is serialized so a JSON report is a complete artifact that `gocrawl render` can turn
@@ -62,6 +67,7 @@ func Build(result *crawler.Result, issues []analyze.Issue) *Report {
 		sum.ByStatus[fmt.Sprintf("%d", p.StatusCode)]++
 	}
 	sm := sitemapgen.Generate(result, issues, result.Finished)
+	cov := result.Coverage
 	return &Report{
 		Seed:         result.Seed,
 		StartedAt:    result.StartedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -70,6 +76,7 @@ func Build(result *crawler.Result, issues []analyze.Issue) *Report {
 		Summary:      sum,
 		Issues:       issues,
 		SiteMap:      &sm,
+		Coverage:     &cov,
 	}
 }
 

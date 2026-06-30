@@ -51,8 +51,8 @@ fields fall back to the built-in defaults:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `url` | string | *(required)* | Seed URL (e.g. `https://example.com`). A bare host gets `https://` prepended. |
-| `depth` | int | `2` | Maximum link depth from the seed (`0` = seed only). |
-| `max_pages` | int | `500` | Hard cap on pages crawled. |
+| `depth` | int | `0` | Maximum link hops from the seed (`0` = unlimited; the crawl is bounded by `max_pages`). |
+| `max_pages` | int | `500` | Hard cap on pages crawled — the primary bound on crawl size. |
 | `concurrency` | int | `4` | Parallel fetch workers. |
 | `render` | string | `raw` | `raw` or `headless` (headless is stubbed). |
 | `analyzers` | string[] | *(all)* | Subset of analyzer names to run; empty runs all. |

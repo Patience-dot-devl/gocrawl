@@ -143,6 +143,9 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	if result.ThrottleEvents > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("server returned HTTP 429/503: adaptive delay slowed the crawl %d time(s), down to %.3g req/s (disable with --adaptive-delay=false)", result.ThrottleEvents, result.FinalRate))
 	}
+	if !result.Coverage.Complete {
+		rep.Notes = append(rep.Notes, coverageNote(result.Coverage))
+	}
 
 	// The crawled site is rendered as a tab in the HTML report (report.Build attaches it). When
 	// --sitemap is set, also write it out as a standalone, machine-readable sitemap.xml.
@@ -153,6 +156,26 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 		rep.Notes = append(rep.Notes, fmt.Sprintf("sitemap.xml written to %s (%d URLs)", cfg.Output.SitemapPath, len(rep.SiteMap.Entries)))
 	}
 	return rep, nil
+}
+
+// coverageNote turns an incomplete-coverage result into an actionable advisory, naming the
+// limit that cut the crawl short and how to lift it. This is the signal that keeps "0 broken
+// links" from being misread as "no broken links" when the crawl simply didn't reach them.
+func coverageNote(c crawler.Coverage) string {
+	var reasons []string
+	if c.PageLimitReached {
+		reasons = append(reasons, fmt.Sprintf("the page limit (--max-pages %d) was reached — raise it or set 0 for unlimited", c.MaxPages))
+	}
+	if c.DepthLimitReached {
+		reasons = append(reasons, fmt.Sprintf("the depth limit (--depth %d) was reached — raise it or set 0 for unlimited", c.MaxDepth))
+	}
+	why := ""
+	if len(reasons) > 0 {
+		why = " because " + strings.Join(reasons, ", and ")
+	}
+	return fmt.Sprintf("partial coverage: %d in-scope URL(s) were discovered but not crawled%s. "+
+		"Page-level findings (broken links especially) may be incomplete — re-crawl with a higher limit for full coverage.",
+		c.DiscoveredNotCrawled, why)
 }
 
 // planAnalyzers selects the analyzers to run for the given config, and returns the names of any

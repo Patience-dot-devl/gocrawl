@@ -133,8 +133,8 @@ Key crawl options:
 
 | Option | Flag | Description |
 | --- | --- | --- |
-| Max depth | `--depth` | How many link hops from the seed (0 = seed only) |
-| Max pages | `--max-pages` | Hard cap on pages crawled |
+| Max depth | `--depth` | How many link hops from the seed (0 = unlimited; the crawl is bounded by `--max-pages`) |
+| Max pages | `--max-pages` | Hard cap on pages crawled — the primary bound on crawl size |
 | Concurrency | `--concurrency` | Parallel fetch workers |
 | Rate limit | `--rate` | Max requests/second (0 = unlimited) |
 | Adaptive delay | `--adaptive-delay` | Auto-slow the crawl on HTTP 429/503 (on by default; honors `Retry-After`) |

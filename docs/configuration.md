@@ -24,8 +24,8 @@ default** (the value used when you set nothing).
 | --- | --- | --- | --- | --- |
 | `seed` | *(positional arg)* | string | — | Seed URL to start from. The `crawl <url>` argument overrides it. |
 | `render` | `--render` | string | `raw` | `raw` (HTTP fetch) or `headless` (chromedp — renders JS and captures Core Web Vitals; requires a Chromium-class browser on PATH). |
-| `crawl.max_depth` | `--depth` / `-d` | int | `2` | Link hops from the seed (`0` = seed page only). |
-| `crawl.max_pages` | `--max-pages` | int | `500` | Hard cap on pages crawled (`0` = unlimited). |
+| `crawl.max_depth` | `--depth` / `-d` | int | `0` | Link hops from the seed (`0` = unlimited). By default the crawl is bounded by `max_pages`, not depth, so it walks the whole site rather than stopping shallow. |
+| `crawl.max_pages` | `--max-pages` | int | `500` | Hard cap on pages crawled (`0` = unlimited) — the primary bound on crawl size. When it (or a depth limit) leaves in-scope URLs un-fetched, the report flags **partial coverage** (see [Output](output.md#coverage)). |
 | `crawl.concurrency` | `--concurrency` | int | `4` | Parallel fetch workers (`<=0` is treated as 1). |
 | `crawl.rate_per_second` | `--rate` | float | `0` | Max requests/second across the crawl (`0` = unlimited). |
 | `crawl.adaptive_delay` | `--adaptive-delay` | bool | `true` | Automatically slow the crawl when the server responds with HTTP 429/503: the requests-per-second rate is halved on each trigger (down to one request every 10s), and any `Retry-After` header is honored. See below. |
@@ -56,8 +56,8 @@ default** (the value used when you set nothing).
 
 The `--depth`, `--max-pages`, and `--concurrency` flags show `0` as their flag default, but
 a flag is only applied when you actually pass it. If you omit the flag, the value comes from
-the config file or the built-in defaults in the table above (depth `2`, max-pages `500`,
-concurrency `4`). Passing `--max-pages 0` explicitly means *unlimited*.
+the config file or the built-in defaults in the table above (depth `0` = unlimited, max-pages
+`500`, concurrency `4`). Passing `--max-pages 0` or `--depth 0` explicitly means *unlimited*.
 
 ### include / exclude patterns
 
@@ -233,8 +233,8 @@ seed: "https://example.com"
 render: "raw"            # "raw" or "headless" (stub)
 
 crawl:
-  max_depth: 2           # link hops from the seed (0 = only the seed page)
-  max_pages: 500         # hard cap on the number of pages crawled
+  max_depth: 0           # link hops from the seed (0 = unlimited; bounded by max_pages)
+  max_pages: 500         # hard cap on the number of pages crawled (the primary bound)
   concurrency: 4         # number of parallel fetch workers
   rate_per_second: 0     # max requests/second across the crawl (0 = unlimited)
   adaptive_delay: true   # slow down automatically on HTTP 429/503 responses
