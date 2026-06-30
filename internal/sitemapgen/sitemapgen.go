@@ -1,6 +1,6 @@
 // Package sitemapgen turns a finished crawl into shareable site-map artifacts: a standard
-// sitemap.xml (the sitemaps.org urlset) and a self-contained HTML page that visualizes the
-// crawled site as a collapsible tree, annotated with the analyzer issues found on each page.
+// sitemap.xml (the sitemaps.org urlset) and a tree the HTML report draws as a node-link
+// (org-chart-style) diagram, annotated with the analyzer issues found on each page.
 //
 // It is a pure transform over a crawler.Result and the analyzer issues — it never fetches or
 // mutates anything. This keeps it outside the analyzer seam (analyzers emit Issues and must
@@ -20,24 +20,24 @@ import (
 
 // Entry is one indexable URL destined for sitemap.xml.
 type Entry struct {
-	Loc     string // canonical (post-redirect) URL
-	LastMod string // YYYY-MM-DD from the Last-Modified header, or "" if unknown
+	Loc     string `json:"loc"`               // canonical (post-redirect) URL
+	LastMod string `json:"lastmod,omitempty"` // YYYY-MM-DD from the Last-Modified header, or "" if unknown
 }
 
 // PageIssue is an analyzer finding attached to a node, flattened to plain strings for the
 // HTML template (decoupled from analyze.Issue).
 type PageIssue struct {
-	Severity string
-	Code     string
-	Analyzer string
-	Message  string
+	Severity string `json:"severity"`
+	Code     string `json:"code"`
+	Analyzer string `json:"analyzer"`
+	Message  string `json:"message"`
 }
 
 // SevCounts tallies findings by severity.
 type SevCounts struct {
-	Error   int
-	Warning int
-	Info    int
+	Error   int `json:"error,omitempty"`
+	Warning int `json:"warning,omitempty"`
+	Info    int `json:"info,omitempty"`
 }
 
 func (c SevCounts) Total() int  { return c.Error + c.Warning + c.Info }
@@ -63,30 +63,30 @@ func (c *SevCounts) addAll(o SevCounts) {
 // Node is a node in the site tree. Intermediate path segments that were never crawled
 // directly (URL == "") still appear so the hierarchy stays connected.
 type Node struct {
-	Label    string      // path segment, e.g. "blog" or "/" for the root
-	URL      string      // crawled page URL, or "" for a synthetic intermediate node
-	Title    string      // <title> of the page, when available
-	Status   int         // HTTP status, 0 for synthetic nodes
-	Depth    int         // crawl depth from the seed
-	Issues   []PageIssue // findings on this exact page, worst-first
-	Counts   SevCounts   // issue counts for this page only
-	Subtotal SevCounts   // issue counts for this node and all descendants
-	Children []*Node     // sorted by Label
+	Label    string      `json:"label"`              // path segment, e.g. "blog" or "/" for the root
+	URL      string      `json:"url,omitempty"`      // crawled page URL, or "" for a synthetic intermediate node
+	Title    string      `json:"title,omitempty"`    // <title> of the page, when available
+	Status   int         `json:"status,omitempty"`   // HTTP status, 0 for synthetic nodes
+	Depth    int         `json:"depth,omitempty"`    // crawl depth from the seed
+	Issues   []PageIssue `json:"issues,omitempty"`   // findings on this exact page, worst-first
+	Counts   SevCounts   `json:"counts,omitempty"`   // issue counts for this page only
+	Subtotal SevCounts   `json:"subtotal,omitempty"` // issue counts for this node and all descendants
+	Children []*Node     `json:"children,omitempty"` // sorted by Label
 }
 
 // Map is the generated site map: a flat list of entries for sitemap.xml and a tree for the
 // HTML visualization, plus any findings that don't belong to a single crawled page.
 type Map struct {
-	Seed      string
-	Host      string
-	Generated time.Time
-	Entries   []Entry
-	Root      *Node
+	Seed      string    `json:"seed"`
+	Host      string    `json:"host"`
+	Generated time.Time `json:"generated"`
+	Entries   []Entry   `json:"entries,omitempty"`
+	Root      *Node     `json:"root,omitempty"`
 	// SiteWide holds issues whose URL didn't resolve to a crawled page in the tree (e.g. the
 	// robots analyzer's per-host findings, keyed "host <hostname>").
-	SiteWide []PageIssue
+	SiteWide []PageIssue `json:"site_wide,omitempty"`
 	// Totals counts every issue placed on the tree plus the site-wide ones.
-	Totals SevCounts
+	Totals SevCounts `json:"totals,omitempty"`
 }
 
 // Generate builds a site map from a crawl result and its analyzer issues. Only successful

@@ -34,6 +34,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newCrawlCmd())
 	root.AddCommand(newAnalyzersCmd())
 	root.AddCommand(newInitCmd())
+	root.AddCommand(newRenderCmd())
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newPathCmd())
 	return root

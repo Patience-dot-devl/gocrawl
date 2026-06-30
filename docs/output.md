@@ -24,11 +24,19 @@ report (nothing is re-fetched). Source: [`internal/sitemapgen`](../internal/site
 ### In the HTML report (a tab)
 
 The HTML report (`--format html`) carries the site map as a second tab next to **Issues &
-summary** — no extra flags. It doubles as an audit navigator:
+summary** — no extra flags. It's drawn as a **node-link diagram** (an org-chart-style tree of
+cards connected by lines), so the structure of the site is visible at a glance. It doubles as
+an audit navigator:
 
-- Every page node carries colored severity pills (errors / warnings / info); clicking it
-  expands the full list of findings on that page (code, analyzer, message), sorted worst-first.
-- Collapsed branches show a muted roll-up (`∑ N`) of how many issues hide beneath them.
+- Each page is a **card** whose top border is colored by that page's health — green (clean),
+  blue (info), amber (warning), or red (error); synthetic path nodes that were never crawled
+  directly are neutral.
+- A card shows the path segment (a link to the page), the HTTP status pill, and severity-count
+  badges. **Clicking a card** pops up the full list of findings on that page (code, analyzer,
+  message), sorted worst-first; **clicking the label** opens the page itself.
+- Branches collapse and expand with the `−`/`+` toggle on each card (deep branches start
+  collapsed to keep the chart compact); **Expand all** / **Collapse all** controls sit above
+  it. A collapsed card shows a muted roll-up (`∑ N`) of how many issues hide beneath it.
 - Findings that don't belong to a single crawled page (e.g. the `robots` analyzer's per-host
   checks) are listed in a **Site-wide issues** section at the bottom.
 
@@ -63,6 +71,7 @@ The top-level [`Report`](../internal/report/report.go):
 | `summary` | object | Aggregated counts — see [Summary](#summary). |
 | `issues` | array | Every [Issue](#issue) emitted by the analyzers. |
 | `notes` | array | Advisories about the run itself (e.g. analyzers skipped because `strip_query` is on), not page findings. Omitted when empty. |
+| `site_map` | object | The crawled site as a tree (the same structure the HTML Site map tab draws), with issues attached to each page node. Serialized so a JSON report is a complete artifact that [`gocrawl render`](#re-rendering-a-saved-report) can turn back into HTML without recrawling. Omitted when empty. |
 
 ### Summary
 
@@ -173,6 +182,25 @@ directly in any browser:
 gocrawl crawl https://example.com --format html --out report.html
 open report.html
 ```
+
+## Re-rendering a saved report
+
+`gocrawl render <report.json>` reads a JSON report you saved earlier and writes it out in
+another format — **without recrawling**. This is the fast way to regenerate an HTML report
+after upgrading gocrawl (e.g. to pick up template improvements), or to produce CSV/HTML from a
+JSON you already have:
+
+```sh
+gocrawl crawl  https://example.com --format json --out report.json   # crawl once
+gocrawl render report.json --out report.html                         # re-render any time, no recrawl
+gocrawl render report.json --format csv --out issues.csv             # or to CSV
+gocrawl render report.json --out report.html --sitemap sitemap.xml   # also (re)emit sitemap.xml
+```
+
+Flags mirror `crawl`'s output flags: `--out`/`-o` (default stdout), `--format`/`-f` (default
+`html`), and `--sitemap`. Because the JSON report carries the [`site_map`](#json-schema) tree,
+the HTML **Site map** tab is reproduced too. Only the page bodies aren't stored (see below),
+so re-rendering can't run new analyzers — for that, recrawl.
 
 ## What is (and isn't) in the report
 

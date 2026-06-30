@@ -57,8 +57,12 @@ gocrawl crawl https://example.com --depth 1 --out report.json
 gocrawl crawl https://example.com --max-pages 200 --concurrency 8 \
   --format csv --out report.csv
 
-# Self-contained HTML report to open in a browser
+# Self-contained HTML report to open in a browser (with a visual site-map tab)
 gocrawl crawl https://example.com --format html --out report.html
+
+# Re-render a saved JSON report into HTML — no recrawl
+gocrawl crawl  https://example.com --format json --out report.json
+gocrawl render report.json --out report.html
 
 # Only run specific analyzers
 gocrawl crawl https://example.com --analyzers seo,links,redirects
@@ -140,7 +144,7 @@ Key crawl options:
 | Robots | `--respect-robots` | Obey `robots.txt` while crawling |
 | Subdomains | `--subdomains` | Follow links to subdomains of the seed |
 | Output | `--out` / `--format` | File path and `json` / `csv` / `html` |
-| Site map | `--sitemap` | Write a `sitemap.xml`; the HTML report also has a clickable Site map tab showing issues per page |
+| Site map | `--sitemap` | Write a `sitemap.xml`; the HTML report also has a Site map tab that draws the crawl as a visual node-link diagram with issues per page |
 | Analyzers | `--analyzers` | Comma-separated allow-list |
 | Specialized checks | `--specialized` | Enable opt-in checks: AI-search heuristics + WordPress security probes (off by default) |
 

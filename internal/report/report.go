@@ -32,8 +32,9 @@ type Report struct {
 	Notes []string `json:"notes,omitempty"`
 	// SiteMap is the crawled site as a tree, annotated with the issues found on each page. It
 	// powers the "Site map" tab of the HTML report and the optional sitemap.xml side output.
-	// Not serialized to JSON/CSV (the structure is derivable from pages + issues).
-	SiteMap *sitemapgen.Map `json:"-"`
+	// It is serialized so a JSON report is a complete artifact that `gocrawl render` can turn
+	// back into HTML (including the Site map tab) without recrawling.
+	SiteMap *sitemapgen.Map `json:"site_map,omitempty"`
 }
 
 // Summary aggregates issue counts.
