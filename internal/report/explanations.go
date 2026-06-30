@@ -83,24 +83,24 @@ var explanations = map[string]Explanation{
 	},
 
 	// --- content: thin content detection ---
-	"thin-content": {
+	"content-thin": {
 		What:   "The page has very little textual content.",
 		Impact: "Thin pages rank poorly and can dilute overall site quality in search engines' eyes.",
 		Fix:    "Add substantive, useful content, consolidate with a richer page, or noindex if the page has no standalone value.",
 	},
-	"low-content": {
+	"content-low": {
 		What:   "The page's word count is well below the site average.",
 		Impact: "May indicate an under-developed page that underperforms relative to its peers.",
 		Fix:    "Review whether the page needs more depth, or confirm the short length is intentional (e.g. a contact page).",
 	},
 
 	// --- botwall: CAPTCHA / bot-protection challenge detection ---
-	"bot-challenge": {
+	"botwall-challenge": {
 		What:   "The page served a CAPTCHA or bot-protection challenge (e.g. reCAPTCHA, Turnstile, Cloudflare, DataDome) instead of the real content. Challenge walls often return HTTP 200, so the crawl looks successful while the body is just the wall.",
 		Impact: "Every other finding on this page is unreliable — the analyzers audited the challenge HTML, not your page. If many pages are blocked, the whole crawl is compromised.",
 		Fix:    "Crawl from an allow-listed IP/User-Agent, lower concurrency and rate, or coordinate with whoever manages the WAF/bot rules. For staging, allow-list the crawler. Re-crawl once access is granted.",
 	},
-	"captcha-widget": {
+	"botwall-captcha-widget": {
 		What:   "The page embeds a CAPTCHA widget (reCAPTCHA, hCaptcha, or Turnstile) within otherwise-normal content — typically on a form, not a block page.",
 		Impact: "Informational. The page was crawled fine; this just notes a CAPTCHA is present (which can add third-party scripts and affect form-completion metrics).",
 		Fix:    "No action needed unless the widget is unexpected. Ensure it loads only where required to limit third-party script weight.",
@@ -188,42 +188,42 @@ var explanations = map[string]Explanation{
 	},
 
 	// --- redirects / httpx: HTTP responses ---
-	"fetch-error": {
+	"http-fetch-error": {
 		What:   "The page could not be fetched at all.",
 		Impact: "Users and crawlers cannot reach the page; it cannot rank and damages site reliability.",
 		Fix:    "Investigate DNS, TLS, timeouts, or server availability for the URL and ensure it responds.",
 	},
-	"server-error": {
+	"http-server-error": {
 		What:   "The URL returned a 5xx server error.",
 		Impact: "The page is unavailable; persistent 5xx responses cause de-indexing and lost traffic.",
 		Fix:    "Check server logs and fix the application/infrastructure fault causing the error.",
 	},
-	"client-error": {
+	"http-client-error": {
 		What:   "The URL returned a 4xx client error (e.g. 404, 403, 410).",
 		Impact: "The page is unreachable; inbound links and crawl budget are wasted.",
 		Fix:    "Restore the page, 301-redirect to a relevant URL, or fix the access/permission issue.",
 	},
-	"redirect-loop": {
+	"http-redirect-loop": {
 		What:   "The URL redirects in a cycle that never resolves to a final page.",
 		Impact: "Users and crawlers get trapped; the content is effectively unreachable.",
 		Fix:    "Break the loop so the chain terminates at a single 200-status destination.",
 	},
-	"redirect-chain": {
+	"http-redirect-chain": {
 		What:   "The URL passes through multiple redirects before reaching its final destination.",
 		Impact: "Each hop adds latency and dilutes ranking signals; long chains risk being abandoned by crawlers.",
 		Fix:    "Collapse the chain to a single redirect that points straight to the final URL.",
 	},
-	"redirect": {
+	"http-redirect": {
 		What:   "The URL redirects to another location.",
 		Impact: "Informational. A single redirect is normal, but update internal links to point at the destination.",
 		Fix:    "Where possible, link directly to the final URL to avoid unnecessary hops.",
 	},
-	"slow-response": {
+	"http-slow-response": {
 		What:   "The server's response was slower than the configured threshold.",
 		Impact: "Slow responses hurt user experience, crawl efficiency, and Core Web Vitals (TTFB).",
 		Fix:    "Optimise backend processing, caching, or CDN delivery to lower response time.",
 	},
-	"mixed-content": {
+	"http-mixed-content": {
 		What:   "An HTTPS page loads insecure http:// resources.",
 		Impact: "Browsers may block the resources or warn users, breaking functionality and eroding trust.",
 		Fix:    "Update all subresource URLs (scripts, images, styles, iframes) to https://.",
@@ -284,7 +284,7 @@ var explanations = map[string]Explanation{
 	},
 
 	// --- links: internal link analysis ---
-	"broken-link": {
+	"link-broken": {
 		What:   "An internal link points to a page that returns an error status.",
 		Impact: "Creates dead ends for users and crawlers and wastes crawl budget and link equity.",
 		Fix:    "Fix or remove the link, or repair the destination URL.",
@@ -294,7 +294,7 @@ var explanations = map[string]Explanation{
 		Impact: "Adds an unnecessary hop, slowing navigation and diluting link signals.",
 		Fix:    "Update the link to point directly to the redirect's final destination.",
 	},
-	"empty-anchor": {
+	"link-empty-anchor": {
 		What:   "One or more links have empty anchor text.",
 		Impact: "Empty anchors give no context to users or search engines and hurt accessibility.",
 		Fix:    "Add descriptive anchor text, or aria-label/alt where the link wraps an image/icon.",
@@ -304,7 +304,7 @@ var explanations = map[string]Explanation{
 		Impact: "Informational. Useful for understanding the page's link profile.",
 		Fix:    "No action needed. Review if external/nofollow ratios look unexpected.",
 	},
-	"inbound-links": {
+	"link-inbound": {
 		What:   "The number of internal pages linking to this page, with sample anchors.",
 		Impact: "Informational. Inbound internal links indicate a page's importance within the site.",
 		Fix:    "No action needed. Boost internal links to important pages that have few.",
@@ -323,230 +323,230 @@ var explanations = map[string]Explanation{
 	},
 
 	// --- perf: Core Web Vitals ---
-	"cwv-render-failed": {
+	"perf-cwv-render-failed": {
 		What:   "Headless rendering failed, so Core Web Vitals were not collected for the page.",
 		Impact: "Informational. No CWV data is available for this page in this run.",
 		Fix:    "Re-run with rendering enabled and check that the headless browser can load the page.",
 	},
-	"cwv-measured": {
+	"perf-cwv-measured": {
 		What:   "Core Web Vitals were measured in lab mode (LCP, FCP, CLS, TBT, TTFB).",
 		Impact: "Informational. These lab metrics approximate field performance.",
 		Fix:    "No action needed. Review the individual metric findings for any that need improvement.",
 	},
-	"render-incomplete": {
+	"perf-render-incomplete": {
 		What:   "In headless mode the rendered DOM came back much smaller than the raw HTML, so the page had likely not finished rendering when it was snapshotted. gocrawl analyzed the raw HTML for this page instead, so structural checks (H1, meta tags, content) are still accurate.",
 		Impact: "The page's Core Web Vitals for this run are unreliable. Without the raw-HTML fallback this would also cause false 'missing H1', 'missing meta description', and 'thin content' findings.",
 		Fix:    "Usually harmless. If you need trustworthy CWV for slow pages, re-run headless with a longer settle / fewer concurrent workers, or crawl the page on its own. For SEO structure, raw mode (the default) is reliable.",
 	},
-	"lcp-needs-improvement": {
+	"perf-lcp-needs-improvement": {
 		What:   "Largest Contentful Paint is above the 'good' threshold (2.5s).",
 		Impact: "Slower perceived load; borderline LCP can reduce rankings and conversions.",
 		Fix:    "Optimise the LCP element: faster server/TTFB, preloaded hero image/font, fewer render-blocking resources.",
 	},
-	"lcp-poor": {
+	"perf-lcp-poor": {
 		What:   "Largest Contentful Paint is poor (above ~4s).",
 		Impact: "Users perceive the page as slow to load; a clear negative ranking and UX factor.",
 		Fix:    "Significantly speed up the main content paint: optimise images, server response, and critical-path CSS/JS.",
 	},
-	"fcp-needs-improvement": {
+	"perf-fcp-needs-improvement": {
 		What:   "First Contentful Paint is above the 'good' threshold (1.8s).",
 		Impact: "Users wait longer to see any content, hurting perceived speed.",
 		Fix:    "Reduce render-blocking resources and improve TTFB so first paint happens sooner.",
 	},
-	"fcp-poor": {
+	"perf-fcp-poor": {
 		What:   "First Contentful Paint is poor (above ~3s).",
 		Impact: "The page appears blank for too long, increasing bounce risk.",
 		Fix:    "Cut render-blocking CSS/JS, inline critical CSS, and improve server response time.",
 	},
-	"cls-needs-improvement": {
+	"perf-cls-needs-improvement": {
 		What:   "Cumulative Layout Shift is above the 'good' threshold (0.1).",
 		Impact: "Visible layout jumps frustrate users and can cause misclicks.",
 		Fix:    "Reserve space for images/ads/embeds with explicit dimensions and avoid inserting content above existing content.",
 	},
-	"cls-poor": {
+	"perf-cls-poor": {
 		What:   "Cumulative Layout Shift is poor (above 0.25).",
 		Impact: "Significant layout instability; a strong negative UX and ranking signal.",
 		Fix:    "Set dimensions on all media, preload fonts to avoid FOUT/FOIT, and stabilise dynamic content insertion.",
 	},
-	"tbt-needs-improvement": {
+	"perf-tbt-needs-improvement": {
 		What:   "Total Blocking Time (a lab proxy for INP) is above the 'good' threshold (200ms).",
 		Impact: "The main thread is busy enough to make the page feel sluggish to interact with.",
 		Fix:    "Break up long JavaScript tasks, defer non-critical scripts, and reduce third-party JS.",
 	},
-	"tbt-poor": {
+	"perf-tbt-poor": {
 		What:   "Total Blocking Time (lab proxy for INP) is poor (above 600ms).",
 		Impact: "Interactions are noticeably delayed; a strong negative responsiveness signal.",
 		Fix:    "Aggressively reduce and split main-thread JavaScript; remove or lazy-load heavy third-party scripts.",
 	},
-	"ttfb-needs-improvement": {
+	"perf-ttfb-needs-improvement": {
 		What:   "Time to First Byte is above the 'good' threshold (800ms).",
 		Impact: "A slow server response delays everything downstream, including LCP and FCP.",
 		Fix:    "Improve backend performance, add caching/CDN, and reduce redirects before the document loads.",
 	},
-	"ttfb-poor": {
+	"perf-ttfb-poor": {
 		What:   "Time to First Byte is poor (above ~1.8s).",
 		Impact: "The server is slow to respond, dragging down all other load metrics.",
 		Fix:    "Investigate slow backend queries, enable caching/CDN, and right-size hosting.",
 	},
-	"cwv-not-collected": {
+	"perf-cwv-not-collected": {
 		What:   "Core Web Vitals were not collected because headless rendering was not enabled.",
 		Impact: "Informational. No CWV data for this run.",
 		Fix:    "Run with --render headless to collect Core Web Vitals.",
 	},
-	"response-time": {
+	"perf-response-time": {
 		What:   "The measured server response time (a TTFB proxy) for the page.",
 		Impact: "Informational. High values indicate slow server responses.",
 		Fix:    "No action needed unless the value is high; then optimise backend/caching.",
 	},
 
 	// --- robots: robots.txt ---
-	"no-robots": {
+	"robots-missing": {
 		What:   "No robots.txt file was found.",
 		Impact: "Crawling defaults to fully allowed; you lose a place to declare sitemaps and crawl directives.",
 		Fix:    "Add a robots.txt (even a permissive one) and declare your sitemap location.",
 	},
-	"no-sitemap-declared": {
+	"robots-no-sitemap-declared": {
 		What:   "robots.txt does not declare a Sitemap directive.",
 		Impact: "Search engines have to discover the sitemap by convention rather than being told where it is.",
 		Fix:    "Add a 'Sitemap: https://…/sitemap.xml' line to robots.txt.",
 	},
-	"sitemaps-declared": {
+	"robots-sitemaps-declared": {
 		What:   "robots.txt declares one or more sitemaps.",
 		Impact: "Positive signal. Helps crawlers find your sitemap(s).",
 		Fix:    "No action needed. Ensure the declared sitemap URLs are valid.",
 	},
-	"crawled-disallowed": {
+	"robots-crawled-disallowed": {
 		What:   "A URL that robots.txt disallows was nonetheless crawled (per crawler configuration).",
 		Impact: "Indicates a mismatch between intended crawl rules and actual crawling; compliant bots would skip it.",
 		Fix:    "Confirm the disallow rule is intentional, and that production bots respect it.",
 	},
 
 	// --- security: headers & forms ---
-	"missing-hsts": {
+	"security-missing-hsts": {
 		What:   "An HTTPS response has no Strict-Transport-Security header.",
 		Impact: "Leaves users exposed to protocol-downgrade/man-in-the-middle attacks on first or subsequent visits.",
 		Fix:    "Send Strict-Transport-Security with an appropriate max-age (and includeSubDomains where applicable).",
 	},
-	"missing-csp": {
+	"security-missing-csp": {
 		What:   "The response has no Content-Security-Policy header.",
 		Impact: "Without CSP the page is more exposed to XSS and content-injection attacks.",
 		Fix:    "Define a Content-Security-Policy restricting allowed script/style/resource origins.",
 	},
-	"missing-x-content-type-options": {
+	"security-missing-x-content-type-options": {
 		What:   "The response has no X-Content-Type-Options: nosniff header.",
 		Impact: "Browsers may MIME-sniff responses, enabling some content-type confusion attacks.",
 		Fix:    "Send 'X-Content-Type-Options: nosniff' on responses.",
 	},
-	"insecure-form": {
+	"security-insecure-form": {
 		What:   "A form submits over insecure http://.",
 		Impact: "Submitted data can be intercepted; browsers warn users, harming trust and conversions.",
 		Fix:    "Point the form action at an https:// endpoint.",
 	},
 
 	// --- seo: on-page technical SEO ---
-	"missing-title": {
+	"seo-missing-title": {
 		What:   "The page has no <title> element.",
 		Impact: "Title is a primary ranking and SERP-display signal; its absence severely hurts visibility.",
 		Fix:    "Add a unique, descriptive <title> (roughly 50–60 characters).",
 	},
-	"short-title": {
+	"seo-short-title": {
 		What:   "The <title> is very short.",
 		Impact: "A too-short title likely under-describes the page and wastes SERP space.",
 		Fix:    "Expand the title to clearly describe the page using relevant keywords.",
 	},
-	"long-title": {
+	"seo-long-title": {
 		What:   "The <title> may be truncated in search results.",
 		Impact: "Truncated titles lose meaning and can lower click-through.",
 		Fix:    "Trim the title to roughly 50–60 characters, front-loading the important words.",
 	},
-	"missing-meta-description": {
+	"seo-missing-meta-description": {
 		What:   "The page has no meta description.",
 		Impact: "Search engines auto-generate snippet text, often less compelling, reducing CTR.",
 		Fix:    "Add a unique meta description (~150–160 characters) summarising the page.",
 	},
-	"short-meta-description": {
+	"seo-short-meta-description": {
 		What:   "The meta description is short.",
 		Impact: "Under-uses the available snippet space and may under-sell the page.",
 		Fix:    "Expand toward ~150–160 characters with a compelling, accurate summary.",
 	},
-	"long-meta-description": {
+	"seo-long-meta-description": {
 		What:   "The meta description may be truncated.",
 		Impact: "The tail of the description is cut off in SERPs, potentially losing the call to action.",
 		Fix:    "Trim to roughly 150–160 characters, leading with the key message.",
 	},
-	"meta-noindex": {
+	"seo-meta-noindex": {
 		What:   "The page is marked noindex via the robots meta tag.",
 		Impact: "The page is excluded from search indexes. This may be intentional, or an accidental loss of visibility.",
 		Fix:    "Remove the noindex directive if the page should rank; otherwise no action is needed.",
 	},
-	"meta-nofollow": {
+	"seo-meta-nofollow": {
 		What:   "The page is marked nofollow via the robots meta tag.",
 		Impact: "Search engines won't follow links on the page, limiting crawl flow and link equity.",
 		Fix:    "Remove the page-level nofollow unless intentionally sandboxing the page's links.",
 	},
-	"x-robots-noindex": {
+	"seo-x-robots-noindex": {
 		What:   "An X-Robots-Tag HTTP header marks the page noindex.",
 		Impact: "The page is excluded from search indexes via headers — easy to overlook since it's not in the HTML.",
 		Fix:    "Remove noindex from the X-Robots-Tag header if the page should be indexed.",
 	},
-	"x-robots-nofollow": {
+	"seo-x-robots-nofollow": {
 		What:   "An X-Robots-Tag HTTP header marks the page nofollow.",
 		Impact: "Links on the page won't be followed; this header-level directive is easy to miss.",
 		Fix:    "Remove nofollow from the X-Robots-Tag header unless intentional.",
 	},
-	"meta-refresh": {
+	"seo-meta-refresh": {
 		What:   "The page uses a meta-refresh redirect.",
 		Impact: "Meta refreshes are slower, hurt UX/accessibility, and pass signals less reliably than HTTP redirects.",
 		Fix:    "Replace with a server-side HTTP 301/302 redirect.",
 	},
-	"multiple-canonical": {
+	"seo-multiple-canonical": {
 		What:   "The page declares more than one canonical link.",
 		Impact: "Conflicting canonicals confuse search engines, which may ignore them entirely.",
 		Fix:    "Keep exactly one rel=canonical pointing to the preferred URL.",
 	},
-	"missing-canonical": {
+	"seo-missing-canonical": {
 		What:   "The page has no canonical link.",
 		Impact: "Without a canonical, duplicate/parameterised variants can compete and split signals.",
 		Fix:    "Add a self-referencing rel=canonical (or point to the preferred variant).",
 	},
-	"missing-h1": {
+	"seo-missing-h1": {
 		What:   "The page has no <h1> element.",
 		Impact: "The primary heading reinforces topic relevance for users and search engines.",
 		Fix:    "Add a single, descriptive <h1> that states the page's main topic.",
 	},
-	"multiple-h1": {
+	"seo-multiple-h1": {
 		What:   "The page has multiple <h1> elements.",
 		Impact: "Generally tolerated by modern search engines but can dilute heading clarity.",
 		Fix:    "Prefer one <h1> per page and use <h2>–<h6> for the heading hierarchy.",
 	},
-	"missing-lang": {
+	"seo-missing-lang": {
 		What:   "The <html> element has no lang attribute.",
 		Impact: "Hurts accessibility (screen-reader pronunciation) and language targeting.",
 		Fix:    "Set the document language, e.g. <html lang=\"en\">.",
 	},
-	"missing-viewport": {
+	"seo-missing-viewport": {
 		What:   "The page has no viewport meta tag.",
 		Impact: "The page won't be mobile-friendly, hurting mobile UX and mobile-first ranking.",
 		Fix:    "Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">.",
 	},
-	"missing-charset": {
+	"seo-missing-charset": {
 		What:   "The page declares no character set.",
 		Impact: "Browsers must guess the encoding, risking garbled text (mojibake).",
 		Fix:    "Add <meta charset=\"utf-8\"> early in the <head>.",
 	},
-	"missing-opengraph": {
+	"seo-missing-opengraph": {
 		What:   "The page has no OpenGraph tags.",
 		Impact: "Shared links on social platforms get poor or no preview cards, reducing engagement.",
 		Fix:    "Add og:title, og:description, og:image, and og:url (plus Twitter Card tags) to the <head>.",
 	},
 
 	// --- sitemap: sitemap.xml ---
-	"invalid-sitemap": {
+	"sitemap-invalid": {
 		What:   "A sitemap could not be parsed as a urlset or sitemap index.",
 		Impact: "Search engines can't use a malformed sitemap, undermining discovery of your URLs.",
 		Fix:    "Validate the sitemap XML structure against the sitemaps.org schema and fix errors.",
 	},
-	"no-sitemap": {
+	"sitemap-missing": {
 		What:   "No sitemap was found at the robots.txt declaration or conventional locations.",
 		Impact: "Search engines must rely solely on link discovery, which can miss pages.",
 		Fix:    "Publish a sitemap.xml and reference it from robots.txt.",
@@ -558,7 +558,7 @@ var explanations = map[string]Explanation{
 	},
 
 	// --- structured: JSON-LD ---
-	"invalid-jsonld": {
+	"structured-invalid-jsonld": {
 		What:   "A JSON-LD block is not valid JSON.",
 		Impact: "Malformed structured data is ignored, forfeiting rich-result eligibility.",
 		Fix:    "Fix the JSON syntax so the block parses; validate with a structured-data testing tool.",
@@ -568,7 +568,7 @@ var explanations = map[string]Explanation{
 		Impact: "Incomplete markup is ineligible for the corresponding rich results.",
 		Fix:    "Add the required properties for the schema type (per schema.org / Google's documentation).",
 	},
-	"no-structured-data": {
+	"structured-none": {
 		What:   "The page has no JSON-LD structured data.",
 		Impact: "The page is ineligible for rich results and gives engines fewer explicit entity signals.",
 		Fix:    "Add relevant JSON-LD (e.g. Article, Product, Organization, BreadcrumbList) where appropriate.",
@@ -580,12 +580,12 @@ var explanations = map[string]Explanation{
 	},
 
 	// --- tracking: analytics & marketing tags ---
-	"no-tracking-tags": {
+	"tracking-none": {
 		What:   "No analytics or marketing tags were detected in the static HTML.",
 		Impact: "Either the page is untracked, or tags load via a tag manager and aren't visible in static HTML.",
 		Fix:    "Confirm tracking is intentional; if expected, verify tags fire (e.g. via a tag manager or browser tools).",
 	},
-	"duplicate-tracking-tag": {
+	"tracking-duplicate-tag": {
 		What:   "The same tag is installed more than once on the page.",
 		Impact: "Duplicate tags can double-count traffic/conversions and distort analytics.",
 		Fix:    "Remove the redundant install so each tag loads exactly once.",
@@ -595,7 +595,7 @@ var explanations = map[string]Explanation{
 		Impact: "Informational. Documents which tracking is present on the page.",
 		Fix:    "No action needed. Verify the detected IDs are the intended ones.",
 	},
-	"mixed-ga-versions": {
+	"tracking-mixed-ga-versions": {
 		What:   "Both Universal Analytics and GA4 tags are present.",
 		Impact: "Usually a leftover from migration; UA is deprecated and may add noise/overhead.",
 		Fix:    "Confirm GA4 is primary and remove obsolete Universal Analytics tags once migration is complete.",

@@ -34,7 +34,7 @@ func TestSEOFlagsMissingElements(t *testing.T) {
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	got := codes(seo.New().Analyze(context.Background(), res))
 
-	for _, want := range []string{"missing-title", "missing-meta-description", "missing-h1", "missing-canonical", "missing-viewport", "missing-opengraph"} {
+	for _, want := range []string{"seo-missing-title", "seo-missing-meta-description", "seo-missing-h1", "seo-missing-canonical", "seo-missing-viewport", "seo-missing-opengraph"} {
 		if !got[want] {
 			t.Errorf("expected issue %q, not found", want)
 		}
@@ -53,7 +53,7 @@ func TestSEOCleanPage(t *testing.T) {
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	got := codes(seo.New().Analyze(context.Background(), res))
 
-	for _, unwanted := range []string{"missing-title", "missing-meta-description", "missing-h1", "missing-canonical", "missing-viewport", "missing-opengraph", "missing-charset", "missing-lang"} {
+	for _, unwanted := range []string{"seo-missing-title", "seo-missing-meta-description", "seo-missing-h1", "seo-missing-canonical", "seo-missing-viewport", "seo-missing-opengraph", "seo-missing-charset", "seo-missing-lang"} {
 		if got[unwanted] {
 			t.Errorf("did not expect issue %q on a clean page", unwanted)
 		}
@@ -63,7 +63,7 @@ func TestSEOCleanPage(t *testing.T) {
 func TestSEONoindex(t *testing.T) {
 	p := htmlPage(t, `<html><head><title>Page With Noindex</title><meta name="robots" content="noindex,follow"></head><body><h1>x</h1></body></html>`)
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
-	if !codes(seo.New().Analyze(context.Background(), res))["meta-noindex"] {
+	if !codes(seo.New().Analyze(context.Background(), res))["seo-meta-noindex"] {
 		t.Error("expected meta-noindex issue")
 	}
 }
@@ -75,7 +75,7 @@ func TestSEOXRobotsAndMetaRefresh(t *testing.T) {
 	p.Header.Set("X-Robots-Tag", "noindex, nofollow")
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	got := codes(seo.New().Analyze(context.Background(), res))
-	for _, want := range []string{"x-robots-noindex", "x-robots-nofollow", "meta-refresh"} {
+	for _, want := range []string{"seo-x-robots-noindex", "seo-x-robots-nofollow", "seo-meta-refresh"} {
 		if !got[want] {
 			t.Errorf("expected issue %q, not found", want)
 		}

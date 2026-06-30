@@ -50,15 +50,15 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	}
 
 	if p.Err != "" {
-		add(analyze.Error, "fetch-error", "Failed to fetch page: "+p.Err, found(nil))
+		add(analyze.Error, "http-fetch-error", "Failed to fetch page: "+p.Err, found(nil))
 		return issues
 	}
 
 	switch {
 	case p.StatusCode >= 500:
-		add(analyze.Error, "server-error", "Server error response", found(map[string]any{"status": p.StatusCode}))
+		add(analyze.Error, "http-server-error", "Server error response", found(map[string]any{"status": p.StatusCode}))
 	case p.StatusCode >= 400:
-		add(analyze.Error, "client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
+		add(analyze.Error, "http-client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
 	}
 
 	// Redirect chain and loops.
@@ -75,23 +75,23 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		}
 		switch {
 		case loop:
-			add(analyze.Error, "redirect-loop", "Redirect loop detected", map[string]any{"chain": chain(p)})
+			add(analyze.Error, "http-redirect-loop", "Redirect loop detected", map[string]any{"chain": chain(p)})
 		case n > 1:
-			add(analyze.Warning, "redirect-chain", "Multiple redirects before final URL", map[string]any{"hops": n, "chain": chain(p)})
+			add(analyze.Warning, "http-redirect-chain", "Multiple redirects before final URL", map[string]any{"hops": n, "chain": chain(p)})
 		default:
-			add(analyze.Info, "redirect", "Page redirects", map[string]any{"to": p.FinalURL, "status": p.Redirects[0].Status})
+			add(analyze.Info, "http-redirect", "Page redirects", map[string]any{"to": p.FinalURL, "status": p.Redirects[0].Status})
 		}
 	}
 
 	// Slow response.
 	if a.SlowThreshold > 0 && p.Duration > a.SlowThreshold {
-		add(analyze.Warning, "slow-response", "Response slower than threshold", map[string]any{"duration_ms": p.Duration.Milliseconds()})
+		add(analyze.Warning, "http-slow-response", "Response slower than threshold", map[string]any{"duration_ms": p.Duration.Milliseconds()})
 	}
 
 	// Mixed content: HTTPS page referencing HTTP subresources.
 	if strings.HasPrefix(p.FinalURL, "https://") && p.IsHTML() {
 		if insecure := insecureSubresources(p.Doc); len(insecure) > 0 {
-			add(analyze.Warning, "mixed-content", "HTTPS page loads insecure (http://) resources", map[string]any{"count": len(insecure), "examples": insecure})
+			add(analyze.Warning, "http-mixed-content", "HTTPS page loads insecure (http://) resources", map[string]any{"count": len(insecure), "examples": insecure})
 		}
 	}
 

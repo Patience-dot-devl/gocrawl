@@ -45,13 +45,13 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	// Header checks are nil-safe: p.Header may be nil in tests.
 	if p.Header != nil {
 		if https && p.Header.Get("Strict-Transport-Security") == "" {
-			add(analyze.Warning, "missing-hsts", "HTTPS response has no Strict-Transport-Security header", nil)
+			add(analyze.Warning, "security-missing-hsts", "HTTPS response has no Strict-Transport-Security header", nil)
 		}
 		if p.Header.Get("Content-Security-Policy") == "" {
-			add(analyze.Info, "missing-csp", "Response has no Content-Security-Policy header", nil)
+			add(analyze.Info, "security-missing-csp", "Response has no Content-Security-Policy header", nil)
 		}
 		if !strings.Contains(strings.ToLower(p.Header.Get("X-Content-Type-Options")), "nosniff") {
-			add(analyze.Info, "missing-x-content-type-options", "Response has no X-Content-Type-Options: nosniff header", nil)
+			add(analyze.Info, "security-missing-x-content-type-options", "Response has no X-Content-Type-Options: nosniff header", nil)
 		}
 	}
 
@@ -59,7 +59,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	if https {
 		doc.Find("form").EachWithBreak(func(_ int, s *goquery.Selection) bool {
 			if action, ok := s.Attr("action"); ok && strings.HasPrefix(action, "http://") {
-				add(analyze.Warning, "insecure-form", "Form submits over insecure http://", map[string]any{"action": action})
+				add(analyze.Warning, "security-insecure-form", "Form submits over insecure http://", map[string]any{"action": action})
 				return false
 			}
 			return true

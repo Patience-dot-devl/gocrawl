@@ -48,7 +48,7 @@ func TestAnalyzeGoodMetricsEmitOnlyMeasured(t *testing.T) {
 	}}
 	issues := New().Analyze(context.Background(), result)
 	got := codes(issues)
-	if len(got) != 1 || got[0] != "cwv-measured" {
+	if len(got) != 1 || got[0] != "perf-cwv-measured" {
 		t.Fatalf("expected only cwv-measured, got %v", got)
 	}
 }
@@ -61,14 +61,14 @@ func TestAnalyzeRawFallbackEmitsRenderIncomplete(t *testing.T) {
 		}),
 	}}
 	issues := New().Analyze(context.Background(), result)
-	if !contains(codes(issues), "render-incomplete") {
+	if !contains(codes(issues), "perf-render-incomplete") {
 		t.Errorf("expected render-incomplete issue, got %v", codes(issues))
 	}
 	// A normal render must not emit it.
 	ok := &crawler.Result{Seed: "https://example.com", Pages: []*crawler.Page{
 		htmlPage("https://example.com/a", &crawler.RenderResult{Implemented: true, LCP: 1500}),
 	}}
-	if contains(codes(New().Analyze(context.Background(), ok)), "render-incomplete") {
+	if contains(codes(New().Analyze(context.Background(), ok)), "perf-render-incomplete") {
 		t.Error("render-incomplete emitted for a normal render")
 	}
 }
@@ -95,11 +95,11 @@ func TestAnalyzeNeedsImprovementAndPoorBands(t *testing.T) {
 	got := codes(New().Analyze(context.Background(), result))
 
 	wantNI := []string{
-		"lcp-needs-improvement", "fcp-needs-improvement",
-		"cls-needs-improvement", "tbt-needs-improvement", "ttfb-needs-improvement",
+		"perf-lcp-needs-improvement", "perf-fcp-needs-improvement",
+		"perf-cls-needs-improvement", "perf-tbt-needs-improvement", "perf-ttfb-needs-improvement",
 	}
 	wantPoor := []string{
-		"lcp-poor", "fcp-poor", "cls-poor", "tbt-poor", "ttfb-poor",
+		"perf-lcp-poor", "perf-fcp-poor", "perf-cls-poor", "perf-tbt-poor", "perf-ttfb-poor",
 	}
 	for _, c := range append(wantNI, wantPoor...) {
 		if !contains(got, c) {
@@ -116,7 +116,7 @@ func TestAnalyzeRenderFailedEmitsInfo(t *testing.T) {
 	}}
 	got := codes(New().Analyze(context.Background(), result))
 	// No page rendered successfully, so this is the raw-fallback path.
-	if !contains(got, "cwv-not-collected") {
+	if !contains(got, "perf-cwv-not-collected") {
 		t.Errorf("expected raw fallback to emit cwv-not-collected, got %v", got)
 	}
 }
@@ -131,10 +131,10 @@ func TestAnalyzeMixedRenderedAndFailed(t *testing.T) {
 		}),
 	}}
 	got := codes(New().Analyze(context.Background(), result))
-	if !contains(got, "cwv-measured") {
+	if !contains(got, "perf-cwv-measured") {
 		t.Errorf("expected cwv-measured for the rendered page, got %v", got)
 	}
-	if !contains(got, "cwv-render-failed") {
+	if !contains(got, "perf-cwv-render-failed") {
 		t.Errorf("expected cwv-render-failed for the failed page, got %v", got)
 	}
 }
@@ -149,10 +149,10 @@ func TestAnalyzeRawModeFallback(t *testing.T) {
 		},
 	}}
 	got := codes(New().Analyze(context.Background(), result))
-	if !contains(got, "cwv-not-collected") {
+	if !contains(got, "perf-cwv-not-collected") {
 		t.Errorf("expected cwv-not-collected in raw mode, got %v", got)
 	}
-	if !contains(got, "response-time") {
+	if !contains(got, "perf-response-time") {
 		t.Errorf("expected response-time proxy in raw mode, got %v", got)
 	}
 }

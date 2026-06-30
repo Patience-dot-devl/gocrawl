@@ -29,9 +29,9 @@ func fixtureReport() *report.Report {
 		},
 	}
 	issues := []analyze.Issue{
-		{Analyzer: "seo", URL: "https://example.com/", Severity: analyze.Error, Code: "missing-title", Message: "Page has no <title>"},
-		{Analyzer: "seo", URL: "https://example.com/about", Severity: analyze.Warning, Code: "long-title", Message: "Title may be truncated", Data: map[string]any{"length": 73}},
-		{Analyzer: "redirects", URL: "https://example.com/old", Severity: analyze.Info, Code: "redirect", Message: "Page redirects", Data: map[string]any{"to": "https://example.com/new", "status": 301}},
+		{Analyzer: "seo", URL: "https://example.com/", Severity: analyze.Error, Code: "seo-missing-title", Message: "Page has no <title>"},
+		{Analyzer: "seo", URL: "https://example.com/about", Severity: analyze.Warning, Code: "seo-long-title", Message: "Title may be truncated", Data: map[string]any{"length": 73}},
+		{Analyzer: "redirects", URL: "https://example.com/old", Severity: analyze.Info, Code: "http-redirect", Message: "Page redirects", Data: map[string]any{"to": "https://example.com/new", "status": 301}},
 	}
 	return report.Build(result, issues)
 }
@@ -98,7 +98,7 @@ func TestCSVReporter(t *testing.T) {
 			t.Errorf("header[%d]: got %q want %q", i, rows[0][i], h)
 		}
 	}
-	if rows[1][0] != "seo" || rows[1][2] != "missing-title" {
+	if rows[1][0] != "seo" || rows[1][2] != "seo-missing-title" {
 		t.Errorf("first issue row: got %v", rows[1])
 	}
 }
@@ -115,9 +115,9 @@ func TestHTMLReporter(t *testing.T) {
 	}
 	for _, want := range []string{
 		"https://example.com", // seed
-		"missing-title",       // issue code
-		"long-title",          // issue code
-		"redirect",            // issue code
+		"seo-missing-title",   // issue code
+		"seo-long-title",      // issue code
+		"http-redirect",       // issue code
 		"seo", "redirects",    // analyzer names
 		"sev-error", "sev-warning", "sev-info", // severity classes
 	} {
@@ -142,8 +142,8 @@ func TestHTMLReporterRendersSiteMapTab(t *testing.T) {
 		},
 	}
 	issues := []analyze.Issue{
-		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "missing-h1", Message: "No H1 on page"},
-		{Analyzer: "robots", URL: "host example.com", Severity: analyze.Warning, Code: "no-robots", Message: "No robots.txt"},
+		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "seo-missing-h1", Message: "No H1 on page"},
+		{Analyzer: "robots", URL: "host example.com", Severity: analyze.Warning, Code: "robots-missing", Message: "No robots.txt"},
 	}
 	r := report.Build(result, issues)
 
@@ -160,10 +160,10 @@ func TestHTMLReporterRendersSiteMapTab(t *testing.T) {
 		`id="tab-sitemap"`,   // the tab panel
 		"post-1",             // tree node label
 		"Post One",           // page <title> in the tree
-		"missing-h1",         // per-page issue code shown on its node
+		"seo-missing-h1",     // per-page issue code shown on its node
 		"issue on this page", // the clickable issue disclosure
 		"Site-wide issues",   // the host-level findings section
-		"no-robots",          // the site-wide issue code
+		"robots-missing",     // the site-wide issue code
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("HTML site-map tab missing %q", want)
@@ -188,7 +188,7 @@ func TestReportJSONRoundTripPreservesSiteMap(t *testing.T) {
 		},
 	}
 	issues := []analyze.Issue{
-		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "missing-h1", Message: "No H1 on page"},
+		{Analyzer: "seo", URL: "https://example.com/blog/post-1", Severity: analyze.Error, Code: "seo-missing-h1", Message: "No H1 on page"},
 	}
 	orig := report.Build(result, issues)
 	if orig.SiteMap == nil {
@@ -221,7 +221,7 @@ func TestReportJSONRoundTripPreservesSiteMap(t *testing.T) {
 	if origHTML.String() != gotHTML.String() {
 		t.Error("HTML rendered from the round-tripped report differs from the original")
 	}
-	for _, want := range []string{"post-1", "missing-h1", "sm-chart"} {
+	for _, want := range []string{"post-1", "seo-missing-h1", "sm-chart"} {
 		if !strings.Contains(gotHTML.String(), want) {
 			t.Errorf("round-tripped HTML missing %q", want)
 		}

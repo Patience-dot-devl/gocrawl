@@ -26,7 +26,7 @@ func TestExplainUnknownCode(t *testing.T) {
 }
 
 func TestExplainKnownCode(t *testing.T) {
-	got := explain("missing-title")
+	got := explain("seo-missing-title")
 	if got == nil {
 		t.Fatal("explain(missing-title) = nil, want explanation")
 	}

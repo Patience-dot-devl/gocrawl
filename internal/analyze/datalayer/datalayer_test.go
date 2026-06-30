@@ -87,7 +87,7 @@ const gtmSnippet = `<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.s
 
 func TestGTMNoscriptMissing(t *testing.T) {
 	res := staticPage(t, `<html><head>`+gtmSnippet+`</head><body></body></html>`)
-	is := must(t, run(res), "gtm-noscript-missing")
+	is := must(t, run(res), "datalayer-gtm-noscript-missing")
 	if is.Severity != analyze.Warning {
 		t.Errorf("severity = %v, want warning", is.Severity)
 	}
@@ -97,7 +97,7 @@ func TestGTMNoscriptPresent(t *testing.T) {
 	res := staticPage(t, `<html><head>`+gtmSnippet+`</head><body>
 		<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-ABC123"></iframe></noscript>
 	</body></html>`)
-	mustNot(t, run(res), "gtm-noscript-missing")
+	mustNot(t, run(res), "datalayer-gtm-noscript-missing")
 }
 
 func TestPushBeforeInit(t *testing.T) {
@@ -128,7 +128,7 @@ func TestGtagConfigIDMismatch(t *testing.T) {
 		<script async src="https://www.googletagmanager.com/gtag/js?id=G-AAAA1111"></script>
 		<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('config','G-BBBB2222');</script>
 	</head><body></body></html>`)
-	is := must(t, run(res), "gtag-config-id-mismatch")
+	is := must(t, run(res), "datalayer-gtag-config-id-mismatch")
 	if is.Data["config_id"] != "G-BBBB2222" {
 		t.Errorf("config_id = %v", is.Data["config_id"])
 	}
@@ -139,27 +139,27 @@ func TestGtagConfigIDMatchNoWarning(t *testing.T) {
 		<script async src="https://www.googletagmanager.com/gtag/js?id=G-AAAA1111"></script>
 		<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('config','G-AAAA1111');</script>
 	</head><body></body></html>`)
-	mustNot(t, run(res), "gtag-config-id-mismatch")
+	mustNot(t, run(res), "datalayer-gtag-config-id-mismatch")
 }
 
 func TestConsentModeMissingAndPresent(t *testing.T) {
 	missing := staticPage(t, `<html><head>`+gtmSnippet+`</head><body></body></html>`)
-	must(t, run(missing), "consent-mode-missing")
+	must(t, run(missing), "datalayer-consent-mode-missing")
 
 	present := staticPage(t, `<html><head>
 		<script>gtag('consent','default',{ad_storage:'denied'});</script>
 		`+gtmSnippet+`
 	</head><body></body></html>`)
 	got := run(present)
-	must(t, got, "consent-mode-present")
-	mustNot(t, got, "consent-mode-missing")
+	must(t, got, "datalayer-consent-mode-present")
+	mustNot(t, got, "datalayer-consent-mode-missing")
 }
 
 func TestStaticTierRunsWithoutRender(t *testing.T) {
 	res := staticPage(t, `<html><head>`+gtmSnippet+`</head><body></body></html>`)
 	got := run(res)
-	must(t, got, "datalayer-not-collected") // runtime checks need headless
-	must(t, got, "gtm-noscript-missing")    // static checks still ran
+	must(t, got, "datalayer-not-collected")        // runtime checks need headless
+	must(t, got, "datalayer-gtm-noscript-missing") // static checks still ran
 }
 
 // --- runtime tier ---
@@ -174,13 +174,13 @@ func TestEventInventoryAndPageView(t *testing.T) {
 	if len(events) != 3 {
 		t.Errorf("event count = %d, want 3 (%v)", len(events), events)
 	}
-	mustNot(t, got, "page-view-missing")
+	mustNot(t, got, "datalayer-page-view-missing")
 }
 
 func TestPageViewMissing(t *testing.T) {
 	res := renderedPage(t, `<html><head>`+gtmSnippet+`</head><body></body></html>`,
 		[]string{`{"event":"custom_click"}`}, nil)
-	must(t, run(res), "page-view-missing")
+	must(t, run(res), "datalayer-page-view-missing")
 }
 
 func TestDataLayerEmpty(t *testing.T) {
@@ -196,7 +196,7 @@ func TestDataLayerEmpty(t *testing.T) {
 func TestEcommercePurchaseMissingParams(t *testing.T) {
 	res := renderedPage(t, `<html><head>`+gtmSnippet+`</head><body></body></html>`,
 		[]string{`{"event":"purchase","ecommerce":{"value":10,"currency":"USD"}}`}, nil)
-	is := must(t, run(res), "ecommerce-event-invalid")
+	is := must(t, run(res), "datalayer-ecommerce-event-invalid")
 	missing, _ := is.Data["missing"].([]string)
 	if !contains(missing, "transaction_id") || !contains(missing, "items") {
 		t.Errorf("missing = %v, want transaction_id and items", missing)
@@ -206,7 +206,7 @@ func TestEcommercePurchaseMissingParams(t *testing.T) {
 func TestEcommerceValidPurchase(t *testing.T) {
 	res := renderedPage(t, `<html><head>`+gtmSnippet+`</head><body></body></html>`,
 		[]string{`{"event":"purchase","ecommerce":{"transaction_id":"T1","value":10.5,"currency":"USD","items":[{"id":"a"}]}}`}, nil)
-	mustNot(t, run(res), "ecommerce-event-invalid")
+	mustNot(t, run(res), "datalayer-ecommerce-event-invalid")
 }
 
 func TestParamTypeStringValue(t *testing.T) {
@@ -233,7 +233,7 @@ func TestGtagArgumentsEvent(t *testing.T) {
 	// gtag('event','purchase',{...}) serializes as an arguments object.
 	res := renderedPage(t, `<html><head>`+gtmSnippet+`</head><body></body></html>`,
 		[]string{`{"event":"gtm.js"}`, `{"0":"event","1":"purchase","2":{"value":5,"currency":"EUR"}}`}, nil)
-	is := must(t, run(res), "ecommerce-event-invalid")
+	is := must(t, run(res), "datalayer-ecommerce-event-invalid")
 	if is.Data["event"] != "purchase" {
 		t.Errorf("event = %v, want purchase", is.Data["event"])
 	}
@@ -246,8 +246,8 @@ func TestDuplicateConversion(t *testing.T) {
 			`{"event":"purchase","ecommerce":{"transaction_id":"T1","value":1,"currency":"USD","items":[{"id":"a"}]}}`,
 		}, nil)
 	got := run(res)
-	must(t, got, "duplicate-event")
-	must(t, got, "duplicate-transaction")
+	must(t, got, "datalayer-duplicate-event")
+	must(t, got, "datalayer-duplicate-transaction")
 }
 
 func TestPIIEmailAndPhone(t *testing.T) {
@@ -274,14 +274,14 @@ func TestTagFiringAndNotFiring(t *testing.T) {
 	</head><body></body></html>`
 	// GA4 configured but no /g/collect beacon -> tag-not-firing.
 	notFiring := renderedPage(t, html, []string{`{"0":"config","1":"G-XXXX1234"}`}, []string{"https://example.com/style.css"})
-	must(t, run(notFiring), "tag-not-firing")
+	must(t, run(notFiring), "datalayer-tag-not-firing")
 
 	// With the beacon present -> tags-firing, no tag-not-firing.
 	firing := renderedPage(t, html, []string{`{"0":"config","1":"G-XXXX1234"}`},
 		[]string{"https://www.google-analytics.com/g/collect?v=2&tid=G-XXXX1234"})
 	got := run(firing)
-	must(t, got, "tags-firing")
-	mustNot(t, got, "tag-not-firing")
+	must(t, got, "datalayer-tags-firing")
+	mustNot(t, got, "datalayer-tag-not-firing")
 }
 
 func contains(s []string, v string) bool {

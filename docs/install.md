@@ -135,6 +135,21 @@ gocrawl
 See the [Quick start](../README.md#quick-start) and [Configuration guide](configuration.md)
 for every flag and option.
 
+### Long crawls and screen lock (macOS)
+
+gocrawl raises no power assertion by default, so a long crawl can be paused if macOS goes to
+**idle sleep** — locking the screen alone keeps the crawl running, but the idle-sleep timer
+(especially on battery) will suspend the process and drop in-flight connections. The
+interactive menu (`gocrawl` with no arguments) has a **"Keep this Mac awake while crawling?"**
+toggle that holds a `caffeinate -i` power assertion for the duration of the crawl. For a
+non-interactive `gocrawl crawl …`, wrap it yourself:
+
+```sh
+caffeinate -i gocrawl crawl https://example.com --out report.json
+```
+
+`caffeinate` exits when gocrawl finishes, so the assertion is scoped to the crawl.
+
 ### A note on file paths
 
 `--out` accepts platform-native paths:

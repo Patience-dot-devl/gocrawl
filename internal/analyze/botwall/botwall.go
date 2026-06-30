@@ -112,7 +112,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 			// block; report at info so it's visible without alarming.
 			return []analyze.Issue{{
 				Analyzer: "botwall", URL: p.FinalURL, Severity: analyze.Info,
-				Code: "captcha-widget", Message: "Page embeds a CAPTCHA widget (" + primary(providers) + ")",
+				Code: "botwall-captcha-widget", Message: "Page embeds a CAPTCHA widget (" + primary(providers) + ")",
 				Data: map[string]any{"provider": primary(providers), "providers": providers, "signals": signals},
 			}}
 		}
@@ -123,7 +123,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 func challenge(p *crawler.Page, provider string, signals []string) analyze.Issue {
 	return analyze.Issue{
 		Analyzer: "botwall", URL: p.FinalURL, Severity: analyze.Warning,
-		Code:    "bot-challenge",
+		Code:    "botwall-challenge",
 		Message: "Bot-protection challenge served (" + provider + "); the crawler was likely blocked, so this page's content is not the real page",
 		Data:    map[string]any{"provider": provider, "signals": signals, "status": p.StatusCode},
 	}

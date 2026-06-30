@@ -44,7 +44,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		if err := json.Unmarshal([]byte(raw), &v); err != nil {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
-				Code: "invalid-jsonld", Message: "JSON-LD block is not valid JSON",
+				Code: "structured-invalid-jsonld", Message: "JSON-LD block is not valid JSON",
 				Data: map[string]any{"error": err.Error()},
 			})
 			return
@@ -62,7 +62,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	if blocks == 0 {
 		issues = append(issues, analyze.Issue{
 			Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Info,
-			Code: "no-structured-data", Message: "Page has no JSON-LD structured data",
+			Code: "structured-none", Message: "Page has no JSON-LD structured data",
 		})
 		return issues
 	}

@@ -34,7 +34,7 @@ func TestSecurityFlagsMissingHeadersAndInsecureForm(t *testing.T) {
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	got := codes(security.New().Analyze(context.Background(), res))
 
-	for _, want := range []string{"missing-hsts", "missing-csp", "missing-x-content-type-options", "insecure-form"} {
+	for _, want := range []string{"security-missing-hsts", "security-missing-csp", "security-missing-x-content-type-options", "security-insecure-form"} {
 		if !got[want] {
 			t.Errorf("expected issue %q, not found", want)
 		}
@@ -50,7 +50,7 @@ func TestSecurityCleanPage(t *testing.T) {
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	got := codes(security.New().Analyze(context.Background(), res))
 
-	for _, unwanted := range []string{"missing-hsts", "missing-csp", "missing-x-content-type-options", "insecure-form"} {
+	for _, unwanted := range []string{"security-missing-hsts", "security-missing-csp", "security-missing-x-content-type-options", "security-insecure-form"} {
 		if got[unwanted] {
 			t.Errorf("did not expect issue %q on a clean page", unwanted)
 		}
@@ -62,10 +62,10 @@ func TestSecurityNilHeaderStillChecksForms(t *testing.T) {
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	got := codes(security.New().Analyze(context.Background(), res))
 
-	if !got["insecure-form"] {
+	if !got["security-insecure-form"] {
 		t.Error("expected insecure-form even with nil Header")
 	}
-	for _, unwanted := range []string{"missing-hsts", "missing-csp", "missing-x-content-type-options"} {
+	for _, unwanted := range []string{"security-missing-hsts", "security-missing-csp", "security-missing-x-content-type-options"} {
 		if got[unwanted] {
 			t.Errorf("did not expect header issue %q when Header is nil", unwanted)
 		}

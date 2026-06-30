@@ -36,7 +36,7 @@ func TestLinksBrokenInternal(t *testing.T) {
 	b := mkPage(t, "https://example.com/b", 404, `<html><body>gone</body></html>`)
 	res := &crawler.Result{Pages: []*crawler.Page{a, b}}
 	res.Reindex()
-	if _, ok := issueFor(links.New().Analyze(context.Background(), res), "https://example.com/a", "broken-link"); !ok {
+	if _, ok := issueFor(links.New().Analyze(context.Background(), res), "https://example.com/a", "link-broken"); !ok {
 		t.Error("expected broken-link for an internal link to a 404")
 	}
 }
@@ -49,7 +49,7 @@ func TestLinksInboundCount(t *testing.T) {
 	res.Reindex()
 	issues := links.New().Analyze(context.Background(), res)
 
-	is, ok := issueFor(issues, "https://example.com/b", "inbound-links")
+	is, ok := issueFor(issues, "https://example.com/b", "link-inbound")
 	if !ok {
 		t.Fatal("expected inbound-links issue for /b")
 	}
@@ -62,7 +62,7 @@ func TestLinksInboundCount(t *testing.T) {
 	}
 
 	// /a has no inbound links → reported with count 0.
-	if is, ok := issueFor(issues, "https://example.com/a", "inbound-links"); !ok || is.Data["count"] != 0 {
+	if is, ok := issueFor(issues, "https://example.com/a", "link-inbound"); !ok || is.Data["count"] != 0 {
 		t.Errorf("expected /a inbound-links with count 0, got %v (present=%v)", is.Data["count"], ok)
 	}
 }
