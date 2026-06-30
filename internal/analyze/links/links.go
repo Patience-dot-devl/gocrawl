@@ -45,18 +45,24 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 			// Cross-reference internal links against the crawl to find broken targets.
 			if !link.External {
 				if target, ok := result.Page(link.URL); ok {
+					// Report the authored target with its trailing slash preserved; fall back to
+					// the dedup form for links recorded before Resolved was populated.
+					authored := link.Resolved
+					if authored == "" {
+						authored = link.URL
+					}
 					switch {
 					case target.StatusCode >= 400:
 						issues = append(issues, analyze.Issue{
 							Analyzer: "links", URL: p.FinalURL, Severity: analyze.Error,
 							Code: "link-broken", Message: "Internal link points to an error page",
-							Data: map[string]any{"target": link.URL, "status": target.StatusCode, "anchor": link.Anchor},
+							Data: map[string]any{"target": authored, "status": target.StatusCode, "anchor": link.Anchor},
 						})
-					case len(target.Redirects) > 0:
+					case result.LinkPointsToRedirect(authored, target):
 						issues = append(issues, analyze.Issue{
 							Analyzer: "links", URL: p.FinalURL, Severity: analyze.Warning,
 							Code: "link-to-redirect", Message: "Internal link points to a redirecting URL",
-							Data: map[string]any{"target": link.URL, "final": target.FinalURL},
+							Data: map[string]any{"target": authored, "final": target.FinalURL},
 						})
 					}
 				}

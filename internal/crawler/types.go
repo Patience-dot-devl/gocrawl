@@ -30,8 +30,9 @@ type Redirect struct {
 
 // Link is an outbound link discovered on a page.
 type Link struct {
-	URL      string `json:"url"`    // absolute, normalized
-	Anchor   string `json:"anchor"` // visible text
+	URL      string `json:"url"`                // absolute, normalized for dedup (trailing slash stripped)
+	Resolved string `json:"resolved,omitempty"` // absolute, normalized but trailing slash preserved
+	Anchor   string `json:"anchor"`             // visible text
 	Rel      string `json:"rel"`
 	Nofollow bool   `json:"nofollow"`
 	External bool   `json:"external"` // points outside the seed host

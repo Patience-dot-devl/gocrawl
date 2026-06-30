@@ -314,7 +314,9 @@ whitespace-collapsed, lowercased `<body>` text.
 | `duplicate-meta-description` | info | Two or more pages share an identical meta description | `duplicates`, `group_size` |
 
 > One issue is emitted per page in each duplicate group; `duplicates` lists up to ten of the
-> other URLs in the group. Empty bodies/titles/descriptions are ignored.
+> other URLs in the group. Empty bodies/titles/descriptions are ignored. URLs that differ only
+> by query string (e.g. `?solution=onboarding`) or `#fragment` are collapsed to a single page
+> first, so query/anchor variants of one page are not reported as duplicates of each other.
 
 ---
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -64,7 +65,8 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 	var issues []analyze.Issue
 
 	// Duplicate content.
-	for _, urls := range sortedGroups(contentGroups) {
+	for _, hash := range sortedKeys(contentGroups) {
+		urls := distinctPages(contentGroups[hash])
 		if len(urls) < 2 {
 			continue
 		}
@@ -79,7 +81,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 
 	// Duplicate titles.
 	for _, title := range sortedKeys(titleGroups) {
-		urls := sortedURLs(titleGroups[title])
+		urls := distinctPages(titleGroups[title])
 		if len(urls) < 2 {
 			continue
 		}
@@ -93,7 +95,8 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 	}
 
 	// Duplicate meta descriptions.
-	for _, urls := range sortedGroups(descGroups) {
+	for _, desc := range sortedKeys(descGroups) {
+		urls := distinctPages(descGroups[desc])
 		if len(urls) < 2 {
 			continue
 		}
@@ -109,15 +112,6 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 	return issues
 }
 
-// sortedGroups returns the groups' URL slices, each sorted, ordered deterministically by key.
-func sortedGroups(groups map[string][]string) [][]string {
-	out := make([][]string, 0, len(groups))
-	for _, k := range sortedKeys(groups) {
-		out = append(out, sortedURLs(groups[k]))
-	}
-	return out
-}
-
 // sortedKeys returns the map keys in sorted order.
 func sortedKeys(groups map[string][]string) []string {
 	keys := make([]string, 0, len(groups))
@@ -128,11 +122,53 @@ func sortedKeys(groups map[string][]string) []string {
 	return keys
 }
 
-// sortedURLs returns a sorted copy of urls.
-func sortedURLs(urls []string) []string {
-	out := append([]string(nil), urls...)
+// pageKey returns a URL's page identity for duplicate detection: everything but the query
+// string and fragment. Two URLs that differ only by query parameters (e.g.
+// ?solution=onboarding) or a #fragment address the same page, so they must not count as
+// distinct pages duplicating each other's title, description, or content.
+func pageKey(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	return u.String()
+}
+
+// distinctPages collapses URLs that address the same page (ignoring query string and
+// fragment) to one representative each — preferring the bare URL with no query or fragment —
+// and returns them sorted. This keeps query-string and anchor variants of a single page from
+// registering as duplicates of one another while still surfacing genuinely distinct pages.
+func distinctPages(urls []string) []string {
+	rep := make(map[string]string, len(urls))
+	for _, u := range urls {
+		k := pageKey(u)
+		if cur, ok := rep[k]; !ok || preferred(u, cur) {
+			rep[k] = u
+		}
+	}
+	out := make([]string, 0, len(rep))
+	for _, v := range rep {
+		out = append(out, v)
+	}
 	sort.Strings(out)
 	return out
+}
+
+// preferred reports whether candidate is a better representative for a page than current: a
+// bare URL (already equal to its page key) wins over one carrying a query/fragment, then the
+// shorter, then the lexicographically smaller — so the choice is stable.
+func preferred(candidate, current string) bool {
+	cb, curb := candidate == pageKey(candidate), current == pageKey(current)
+	if cb != curb {
+		return cb
+	}
+	if len(candidate) != len(current) {
+		return len(candidate) < len(current)
+	}
+	return candidate < current
 }
 
 // others returns up to maxListed URLs from urls, excluding self.

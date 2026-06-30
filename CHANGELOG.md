@@ -6,6 +6,39 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-30
+
+### Added
+
+- **Bulk review in the HTML report.** Each issue row has a **Select** checkbox, a **Select
+  shown** master toggle ticks every currently-visible row, and toolbar buttons mark the
+  selection as **Non-issue** / **Resolved** (or clear it) in one action. Bulk actions only
+  ever touch issues that are *currently shown*, so you can filter to a code or analyzer (e.g.
+  all `seo-meta-noindex` on a staging site) and dismiss the whole set at once without
+  affecting filtered-out rows. Selection state is transient — only the review flags are saved.
+
+### Fixed
+
+- **`duplicate-title` / `duplicate-meta-description` / `duplicate-content` no longer fire on
+  query-string or fragment variants of one page.** URLs that differ only by query parameters
+  (e.g. `?solution=onboarding`) or a `#fragment` address the same page, so the duplicates
+  analyzer now collapses them to a single page before comparing — a page is no longer reported
+  as duplicating itself. Genuinely distinct paths are still flagged.
+- **HTML report: the `data` / "what this means" disclosure toggles no longer show a stray
+  full-width focus box.** The `<summary>` outline is now hugged to the text and only shown for
+  keyboard focus.
+- **`link-to-redirect` no longer fires on trailing-slash-only redirects.** The crawl index
+  strips a trailing slash to deduplicate URLs, so it would fetch a link authored as `/page/`
+  (the canonical form on WordPress and many other CMSes) as `/page` and follow the site's
+  `301 → /page/`, then report the link as pointing at a redirect. Every internal link on a
+  trailing-slash site was flagged. Links now carry their resolved address with the slash
+  preserved, and the analyzer only flags a redirect that genuinely changes scheme, host, or
+  path — so real redirects are still caught while the self-induced slash hop is not. The
+  issue's `target` now shows the link as authored rather than the slash-stripped form.
+- **HTML report links open in a new tab.** Clicking a page URL in the issues table or a node
+  label in the site map now opens in a new foreground tab (`target="_blank"`) instead of
+  navigating away from the report.
+
 ## [0.2.1] - 2026-06-30
 
 ### Added
@@ -83,7 +116,8 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Patience-dot-devl/gocrawl/releases/tag/v0.1.0
