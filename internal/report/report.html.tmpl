@@ -122,15 +122,23 @@
   .badge.sev-warning { background:var(--warning-bg); color:var(--warning); }
   .badge.sev-info { background:var(--info-bg); color:var(--info); }
   details { margin-top:.4rem; }
-  details summary { cursor:pointer; color:var(--info); font-size:.8rem; font-weight:600; }
+  details summary { cursor:pointer; color:var(--info); font-size:.8rem; font-weight:600; width:fit-content; border-radius:4px; }
+  details summary:focus { outline:none; }
+  details summary:focus-visible { outline:2px solid var(--info); outline-offset:2px; }
   details pre { background:#f6f8fa; border:1px solid var(--border); border-radius:6px; padding:.6rem .8rem; margin:.4rem 0 0; font-size:.8rem; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   details.explain dl { margin:.4rem 0 0; padding:.55rem .8rem; background:#f6f8fa; border:1px solid var(--border); border-left:3px solid var(--info); border-radius:6px; font-size:.85rem; }
   details.explain dt { font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; font-size:.68rem; margin-top:.55rem; }
   details.explain dt:first-child { margin-top:0; }
   details.explain dd { margin:.15rem 0 0; color:var(--fg); }
   .toolbar label.hidetog { display:flex; align-items:center; gap:.35rem; font-size:.82rem; color:var(--muted); font-weight:600; cursor:pointer; user-select:none; }
+  .toolbar .bulk { display:flex; align-items:center; gap:.4rem; padding-left:.5rem; margin-left:.1rem; border-left:1px solid var(--border); }
+  .toolbar .bulk button { cursor:pointer; border:1px solid var(--border); background:#fff; color:var(--fg); padding:.45rem .6rem; border-radius:8px; font-size:.8rem; font-weight:600; font-family:inherit; }
+  .toolbar .bulk button:hover:not(:disabled) { border-color:var(--muted); }
+  .toolbar .bulk button:disabled { opacity:.4; cursor:default; }
+  .toolbar .bulk .seln { color:var(--info); font-size:.8rem; font-weight:600; font-variant-numeric:tabular-nums; min-width:0; }
   table.issues td.review { white-space:nowrap; }
   table.issues td.review label { display:flex; align-items:center; gap:.35rem; font-size:.78rem; color:var(--muted); font-weight:600; cursor:pointer; user-select:none; margin-bottom:.2rem; }
+  table.issues td.review label.sel { color:var(--info); border-bottom:1px solid #eef1f4; padding-bottom:.25rem; margin-bottom:.3rem; }
   table.issues td.review label input { margin:0; }
   table.issues td.review textarea { margin-top:.35rem; width:13rem; max-width:100%; font:inherit; font-size:.8rem; padding:.35rem .5rem; border:1px solid var(--border); border-radius:6px; resize:vertical; background:#fff; }
   table.issues tbody tr.reviewed { opacity:.5; }
@@ -224,7 +232,7 @@
 {{define "smbadges"}}{{if .Error}}<span class="sm-sev sm-error" title="errors">{{.Error}}</span>{{end}}{{if .Warning}}<span class="sm-sev sm-warning" title="warnings">{{.Warning}}</span>{{end}}{{if .Info}}<span class="sm-sev sm-info" title="info">{{.Info}}</span>{{end}}{{end}}
 {{define "smrollup"}}{{if and .Children (gt .Subtotal.Total .Counts.Total)}}<span class="sm-roll" title="issues in this branch">{{.Subtotal.Total}}</span>{{end}}{{end}}
 {{define "smissues"}}{{if .Issues}}<div class="sm-pop" hidden><div class="sm-pop-h">{{len .Issues}} issue{{if ne (len .Issues) 1}}s{{end}} on this page</div><ul class="sm-issuelist">{{range .Issues}}<li class="sm-issue {{severityClass .Severity}}"><span class="sm-dot"></span><code>{{.Code}}</code><span class="sm-an">{{.Analyzer}}</span><span class="sm-msg">{{.Message}}</span></li>{{end}}</ul></div>{{end}}{{end}}
-{{define "smbox"}}<div class="sm-box {{if .URL}}{{if .Counts.Error}}sm-h-error{{else if .Counts.Warning}}sm-h-warning{{else if .Counts.Info}}sm-h-info{{else}}sm-h-ok{{end}}{{else}}sm-h-none{{end}}{{if .Issues}} sm-haspop{{end}}"><div class="sm-box-head">{{if .Children}}<button type="button" class="sm-box-toggle" title="collapse / expand subtree">&#8722;</button>{{end}}{{if .URL}}<a href="{{.URL}}" class="sm-box-label" title="{{.URL}}">{{if .Label}}{{.Label}}{{else}}/{{end}}</a>{{else}}<span class="sm-box-label">{{.Label}}</span>{{end}}{{if .Status}}<span class="sm-st {{statusClass .Status}}">{{.Status}}</span>{{end}}</div>{{if .Title}}<div class="sm-box-title" title="{{.Title}}">{{.Title}}</div>{{end}}<div class="sm-box-foot">{{template "smbadges" .Counts}}{{template "smrollup" .}}</div>{{template "smissues" .}}</div>{{end}}
+{{define "smbox"}}<div class="sm-box {{if .URL}}{{if .Counts.Error}}sm-h-error{{else if .Counts.Warning}}sm-h-warning{{else if .Counts.Info}}sm-h-info{{else}}sm-h-ok{{end}}{{else}}sm-h-none{{end}}{{if .Issues}} sm-haspop{{end}}"><div class="sm-box-head">{{if .Children}}<button type="button" class="sm-box-toggle" title="collapse / expand subtree">&#8722;</button>{{end}}{{if .URL}}<a href="{{.URL}}" class="sm-box-label" title="{{.URL}}" target="_blank" rel="noopener">{{if .Label}}{{.Label}}{{else}}/{{end}}</a>{{else}}<span class="sm-box-label">{{.Label}}</span>{{end}}{{if .Status}}<span class="sm-st {{statusClass .Status}}">{{.Status}}</span>{{end}}</div>{{if .Title}}<div class="sm-box-title" title="{{.Title}}">{{.Title}}</div>{{end}}<div class="sm-box-foot">{{template "smbadges" .Counts}}{{template "smrollup" .}}</div>{{template "smissues" .}}</div>{{end}}
 {{define "smchartnode"}}<li class="sm-li{{if .Children}} sm-haskids{{end}}">{{template "smbox" .}}{{if .Children}}<ul>{{range .Children}}{{template "smchartnode" .}}{{end}}</ul>{{end}}</li>{{end}}
 <main>
   {{if .Coverage}}{{if not .Coverage.Complete}}
@@ -293,7 +301,7 @@
         <td><span class="badge {{severityClass (printf "%s" .Severity)}}">{{.Severity}}</span></td>
         <td>{{.Analyzer}}</td>
         <td><code>{{.Code}}</code></td>
-        <td class="url"><a href="{{.URL}}">{{.URL}}</a></td>
+        <td class="url"><a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a></td>
         <td>
           {{.Message}}
           {{$ex := explain (printf "%s" .Code)}}
@@ -312,6 +320,7 @@
           {{end}}
         </td>
         <td class="review">
+          <label class="sel"><input type="checkbox" class="ck-sel">Select</label>
           <label><input type="checkbox" class="ck-resolved">Resolved</label>
           <label><input type="checkbox" class="ck-nonissue">Non-issue</label>
           <textarea class="note" rows="2" placeholder="Add a comment…"></textarea>
@@ -408,10 +417,20 @@
     '</div>'+
     '<label class="hidetog"><input type="checkbox" id="hideResolved">Hide resolved</label>'+
     '<label class="hidetog"><input type="checkbox" id="hideNon">Hide non-issues</label>'+
+    '<span class="bulk">'+
+      '<label class="hidetog"><input type="checkbox" id="selAll">Select shown</label>'+
+      '<button type="button" id="bulkNon" disabled title="Mark every selected (and currently shown) issue as a non-issue">&#8594; Non-issue</button>'+
+      '<button type="button" id="bulkRes" disabled title="Mark every selected (and currently shown) issue as resolved">&#8594; Resolved</button>'+
+      '<button type="button" id="bulkClr" disabled title="Clear the resolved / non-issue flags on selected issues">Clear</button>'+
+      '<span class="seln" id="selCount"></span>'+
+    '</span>'+
     '<button type="button" id="saveBtn" class="sevbtn active" title="Download this report with your review state baked in">Save to file</button>'+
     '<span class="count" id="count"></span>';
   var q=document.getElementById('q'),sel=document.getElementById('anSel'),ce=document.getElementById('count');
   var hideResolved=document.getElementById('hideResolved'),hideNon=document.getElementById('hideNon');
+  var selAll=document.getElementById('selAll'),bulkNon=document.getElementById('bulkNon'),
+      bulkRes=document.getElementById('bulkRes'),bulkClr=document.getElementById('bulkClr'),
+      selCount=document.getElementById('selCount');
   var on={error:true,warning:true,info:true};
   var codeOn={}; codelist.forEach(function(c){codeOn[c]=true;});
   function apply(){
@@ -424,6 +443,32 @@
       if(ok&&hideNon.checked&&r._nonissue&&r._nonissue.checked){ok=false;}
       r.style.display=ok?'':'none'; if(ok){shown++;}}
     ce.textContent='Showing '+shown.toLocaleString()+' of '+rows.length.toLocaleString()+' issues';
+    updateSel();
+  }
+  // Bulk review acts only on rows that are both selected and currently shown, so a hidden
+  // (filtered-out) issue is never silently marked. "Select shown" ticks exactly the visible set.
+  function updateSel(){
+    var vis=0,selc=0;
+    rows.forEach(function(r){
+      if(r.style.display==='none'){return;}
+      vis++; if(r._sel&&r._sel.checked){selc++;}
+    });
+    if(selAll){selAll.checked=(vis>0&&selc===vis);selAll.indeterminate=(selc>0&&selc<vis);}
+    if(selCount){selCount.textContent=selc?(selc.toLocaleString()+' selected'):'';}
+    var none=selc===0;
+    if(bulkNon){bulkNon.disabled=none;} if(bulkRes){bulkRes.disabled=none;} if(bulkClr){bulkClr.disabled=none;}
+  }
+  function bulk(kind){
+    var n=0;
+    rows.forEach(function(r){
+      if(r.style.display==='none'||!r._sel||!r._sel.checked){return;}
+      if(kind==='non'){if(r._nonissue){r._nonissue.checked=true;}}
+      else if(kind==='res'){if(r._resolved){r._resolved.checked=true;}}
+      else{if(r._resolved){r._resolved.checked=false;}if(r._nonissue){r._nonissue.checked=false;}}
+      r._sel.checked=false; refresh(r); n++;
+    });
+    if(n){markDirty();}
+    apply(); // re-filters (e.g. "Hide non-issues" now drops them) and refreshes selection state
   }
   // Review state: checkboxes + comment live in the DOM and are saved back into the file
   // via the "Save to file" button, so a shared report carries its own state — no cookies,
@@ -436,16 +481,27 @@
   rows.forEach(function(r){
     r._resolved=r.querySelector('.ck-resolved');
     r._nonissue=r.querySelector('.ck-nonissue');
+    r._sel=r.querySelector('.ck-sel');
     var note=r.querySelector('.note');
     refresh(r);
     function onToggle(){refresh(r);markDirty();apply();}
     if(r._resolved){r._resolved.addEventListener('change',onToggle);}
     if(r._nonissue){r._nonissue.addEventListener('change',onToggle);}
+    if(r._sel){r._sel.addEventListener('change',updateSel);}
     if(note){note.addEventListener('input',markDirty);}
   });
+  if(selAll){selAll.addEventListener('change',function(){
+    var v=selAll.checked;
+    rows.forEach(function(r){if(r.style.display!=='none'&&r._sel){r._sel.checked=v;}});
+    updateSel();
+  });}
+  if(bulkNon){bulkNon.addEventListener('click',function(){bulk('non');});}
+  if(bulkRes){bulkRes.addEventListener('click',function(){bulk('res');});}
+  if(bulkClr){bulkClr.addEventListener('click',function(){bulk('clr');});}
   function save(){
     // Reflect live form state into HTML attributes/content so it serializes into the file.
-    Array.prototype.forEach.call(document.querySelectorAll('table.issues input[type=checkbox]'),function(cb){
+    // Only the review flags persist — the transient bulk-selection checkboxes are excluded.
+    Array.prototype.forEach.call(document.querySelectorAll('table.issues .ck-resolved,table.issues .ck-nonissue'),function(cb){
       if(cb.checked){cb.setAttribute('checked','checked');}else{cb.removeAttribute('checked');}
     });
     Array.prototype.forEach.call(document.querySelectorAll('table.issues textarea.note'),function(ta){ta.textContent=ta.value;});

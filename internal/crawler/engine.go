@@ -361,7 +361,7 @@ func (e *Engine) extractLinks(page *Page) []Link {
 	var links []Link
 	page.Doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
-		abs, ok := resolveURL(base, href, e.opts.StripQuery)
+		abs, resolved, ok := resolveURL(base, href, e.opts.StripQuery)
 		if !ok || seen[abs] {
 			return
 		}
@@ -374,6 +374,7 @@ func (e *Engine) extractLinks(page *Page) []Link {
 		}
 		links = append(links, Link{
 			URL:      abs,
+			Resolved: resolved,
 			Anchor:   strings.TrimSpace(s.Text()),
 			Rel:      rel,
 			Nofollow: strings.Contains(strings.ToLower(rel), "nofollow"),

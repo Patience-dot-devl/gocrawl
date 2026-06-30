@@ -195,7 +195,11 @@ The page has three blocks:
   *Codes* dropdown to hide them (e.g. hide `seo-meta-noindex` / `seo-x-robots-noindex` noise when
   auditing a staging site that is deliberately noindexed). You can also mark rows
   resolved / non-issue, add comments, and **Save to file** to bake that review state back
-  into a shareable copy.
+  into a shareable copy. To triage in bulk, tick rows with **Select** (or **Select shown** to
+  tick every currently-visible row) and use the toolbar's **→ Non-issue** / **→ Resolved** /
+  **Clear** buttons — bulk actions only ever apply to issues that are *currently shown*, so
+  filter first (e.g. to one code) and dismiss the whole set in one click. Clickable URLs open
+  in a new tab.
 
 Untrusted strings from crawled pages (URLs, titles, analyzer messages) are escaped through
 Go's `html/template`, so HTML in a crawled page can't break the report layout. Open the file
