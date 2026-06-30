@@ -52,6 +52,33 @@
     border:1px solid var(--border); border-radius:8px; background:#fff;
   }
   .toolbar select { padding:.5rem .6rem; border:1px solid var(--border); border-radius:8px; background:#fff; font-size:.9rem; }
+  .msel { position:relative; }
+  .msel > button {
+    cursor:pointer; padding:.5rem .7rem; border:1px solid var(--border); border-radius:8px;
+    background:#fff; font-size:.9rem; color:var(--fg); font-family:inherit;
+  }
+  .msel > button:hover { border-color:var(--muted); }
+  .msel > button .caret { color:var(--muted); margin-left:.35rem; }
+  .msel.has-hidden > button { border-color:var(--info); color:var(--info); font-weight:600; }
+  .msel-panel {
+    position:absolute; z-index:30; top:calc(100% + .25rem); left:0; min-width:16rem; max-width:24rem;
+    max-height:20rem; overflow:auto; background:#fff; border:1px solid var(--border);
+    border-radius:8px; box-shadow:0 6px 18px rgba(27,31,36,.16); padding:.4rem;
+  }
+  .msel-panel[hidden] { display:none; }
+  .msel-panel .msel-acts { display:flex; gap:.5rem; padding:.25rem .35rem .45rem; border-bottom:1px solid #eef1f4; margin-bottom:.35rem; }
+  .msel-panel .msel-acts button {
+    cursor:pointer; border:1px solid var(--border); background:#fff; color:var(--info);
+    padding:.25rem .55rem; border-radius:6px; font-size:.78rem; font-weight:600; font-family:inherit;
+  }
+  .msel-panel label {
+    display:flex; align-items:center; gap:.45rem; padding:.3rem .35rem; border-radius:6px;
+    font-size:.84rem; cursor:pointer; user-select:none;
+  }
+  .msel-panel label:hover { background:#f0f6ff; }
+  .msel-panel label input { margin:0; }
+  .msel-panel label code { font-size:.8rem; background:#f0f3f6; padding:.05rem .35rem; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .msel-panel label .msel-n { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; }
   .sevfilters { display:flex; gap:.4rem; }
   .sevbtn {
     cursor:pointer; border:1px solid var(--border); background:#fff; color:var(--muted);
@@ -290,6 +317,7 @@
     var b=r.querySelector('.badge');
     r._sev=b?b.textContent.trim().toLowerCase():'';
     r._an=r.cells[1]?r.cells[1].textContent.trim():'';
+    r._code=r.cells[2]?r.cells[2].textContent.trim():'';
     r._t=r.textContent.toLowerCase();
     if(counts[r._sev]!=null){counts[r._sev]++;}
     r.style.borderLeftColor=({error:'#cf222e',warning:'#9a6700',info:'#0969da'})[r._sev]||'transparent';
@@ -307,6 +335,9 @@
   var f0=document.createDocumentFragment(); rows.forEach(function(r){f0.appendChild(r);}); tbody.appendChild(f0);
   var ans={}; rows.forEach(function(r){if(r._an){ans[r._an]=1;}});
   var anlist=Object.keys(ans).sort();
+  var codeCounts={}; rows.forEach(function(r){if(r._code){codeCounts[r._code]=(codeCounts[r._code]||0)+1;}});
+  var codelist=Object.keys(codeCounts).sort();
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   var tb=document.getElementById('toolbar');
   tb.innerHTML='<input type="search" id="q" placeholder="Search URL, message, code…">'+
     '<div class="sevfilters">'+
@@ -315,8 +346,15 @@
       '<button data-sev="info" class="sevbtn sev-info active">Info</button>'+
     '</div>'+
     '<select id="anSel"><option value="">All analyzers</option>'+
-      anlist.map(function(a){return '<option value="'+a+'">'+a+'</option>';}).join('')+
+      anlist.map(function(a){return '<option value="'+esc(a)+'">'+esc(a)+'</option>';}).join('')+
     '</select>'+
+    '<div class="msel" id="codeMsel">'+
+      '<button type="button" id="codeMselBtn" aria-expanded="false">Codes<span class="caret">▾</span></button>'+
+      '<div class="msel-panel" id="codeMselPanel" hidden>'+
+        '<div class="msel-acts"><button type="button" data-all="1">Select all</button><button type="button" data-all="0">Hide all</button></div>'+
+        codelist.map(function(c){return '<label><input type="checkbox" class="ck-code" value="'+esc(c)+'" checked><code>'+esc(c)+'</code><span class="msel-n">'+codeCounts[c]+'</span></label>';}).join('')+
+      '</div>'+
+    '</div>'+
     '<label class="hidetog"><input type="checkbox" id="hideResolved">Hide resolved</label>'+
     '<label class="hidetog"><input type="checkbox" id="hideNon">Hide non-issues</label>'+
     '<button type="button" id="saveBtn" class="sevbtn active" title="Download this report with your review state baked in">Save to file</button>'+
@@ -324,10 +362,12 @@
   var q=document.getElementById('q'),sel=document.getElementById('anSel'),ce=document.getElementById('count');
   var hideResolved=document.getElementById('hideResolved'),hideNon=document.getElementById('hideNon');
   var on={error:true,warning:true,info:true};
+  var codeOn={}; codelist.forEach(function(c){codeOn[c]=true;});
   function apply(){
     var term=q.value.trim().toLowerCase(),an=sel.value,shown=0;
     for(var i=0;i<rows.length;i++){var r=rows[i],ok=on[r._sev]!==false;
       if(ok&&an&&r._an!==an){ok=false;}
+      if(ok&&r._code&&codeOn[r._code]===false){ok=false;}
       if(ok&&term&&r._t.indexOf(term)===-1){ok=false;}
       if(ok&&hideResolved.checked&&r._resolved&&r._resolved.checked){ok=false;}
       if(ok&&hideNon.checked&&r._nonissue&&r._nonissue.checked){ok=false;}
@@ -375,6 +415,32 @@
   Array.prototype.forEach.call(tb.querySelectorAll('.sevbtn'),function(btn){
     btn.addEventListener('click',function(){var s=btn.getAttribute('data-sev');on[s]=!on[s];btn.classList.toggle('active');apply();});
   });
+  // Codes multi-select: uncheck a code to hide its issues (e.g. meta-noindex on a staging site).
+  var codeMsel=document.getElementById('codeMsel'),codeBtn=document.getElementById('codeMselBtn'),
+      codePanel=document.getElementById('codeMselPanel'),codeBoxes=codePanel?codePanel.querySelectorAll('.ck-code'):[];
+  function syncCodeBtn(){
+    var hidden=codelist.filter(function(c){return codeOn[c]===false;}).length;
+    codeMsel.classList.toggle('has-hidden',hidden>0);
+    codeBtn.firstChild.nodeValue=hidden>0?('Codes ('+hidden+' hidden)'):'Codes';
+  }
+  if(codeBtn&&codePanel){
+    codeBtn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var open=codePanel.hidden; codePanel.hidden=!open; codeBtn.setAttribute('aria-expanded',String(open));
+    });
+    codePanel.addEventListener('click',function(e){e.stopPropagation();});
+    document.addEventListener('click',function(){codePanel.hidden=true;codeBtn.setAttribute('aria-expanded','false');});
+    Array.prototype.forEach.call(codeBoxes,function(cb){
+      cb.addEventListener('change',function(){codeOn[cb.value]=cb.checked;syncCodeBtn();apply();});
+    });
+    Array.prototype.forEach.call(codePanel.querySelectorAll('.msel-acts button'),function(b){
+      b.addEventListener('click',function(){
+        var v=b.getAttribute('data-all')==='1';
+        Array.prototype.forEach.call(codeBoxes,function(cb){cb.checked=v;codeOn[cb.value]=v;});
+        syncCodeBtn();apply();
+      });
+    });
+  }
   var ths=table.tHead.rows[0].cells,st={c:-1,d:1};
   Array.prototype.forEach.call(ths,function(th,idx){
     if(th.classList.contains('nosort')){return;}
