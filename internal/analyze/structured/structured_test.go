@@ -95,3 +95,92 @@ func TestStructuredMissingRequiredInGraph(t *testing.T) {
 		t.Error("expected structured-missing-required for an Organization without name inside @graph")
 	}
 }
+
+func TestStructuredBreadcrumbCandidate(t *testing.T) {
+	res := page(t, `<html><body>
+		<nav aria-label="breadcrumb"><a href="/">Home</a> &gt; <a href="/shoes">Shoes</a></nav>
+	</body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-breadcrumb-candidate")
+	if !ok {
+		t.Fatal("expected structured-breadcrumb-candidate")
+	}
+	if is.Data["links"] != 2 {
+		t.Errorf("expected 2 links, got %v", is.Data["links"])
+	}
+}
+
+func TestStructuredBreadcrumbCandidateSuppressedByExistingType(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[]}
+	</script></head><body>
+		<nav aria-label="breadcrumb"><a href="/">Home</a> &gt; <a href="/shoes">Shoes</a></nav>
+	</body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-breadcrumb-candidate"); ok {
+		t.Error("did not expect structured-breadcrumb-candidate when BreadcrumbList is already present")
+	}
+}
+
+func TestStructuredProductCandidate(t *testing.T) {
+	res := page(t, `<html><body>
+		<h1>Widget</h1><p>Price: $19.99</p><button>Add to cart</button>
+	</body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate")
+	if !ok {
+		t.Fatal("expected structured-product-candidate")
+	}
+	if is.Data["signal"] != "$19.99" {
+		t.Errorf("expected signal $19.99, got %v", is.Data["signal"])
+	}
+}
+
+func TestStructuredProductCandidateNoCartSignal(t *testing.T) {
+	res := page(t, `<html><body><p>This gadget costs $19.99 to make.</p></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate"); ok {
+		t.Error("did not expect structured-product-candidate without a cart/buy signal")
+	}
+}
+
+func TestStructuredArticleCandidate(t *testing.T) {
+	words := strings.Repeat("word ", 150)
+	res := page(t, `<html><body><article>
+		<h1>Title</h1><time datetime="2026-01-01">Jan 1</time><p>`+words+`</p>
+	</article></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-article-candidate")
+	if !ok {
+		t.Fatal("expected structured-article-candidate")
+	}
+	if w, _ := is.Data["words"].(int); w < 150 {
+		t.Errorf("expected >= 150 words, got %v", is.Data["words"])
+	}
+}
+
+func TestStructuredArticleCandidateShortArticleIgnored(t *testing.T) {
+	res := page(t, `<html><body><article><time datetime="2026-01-01">Jan 1</time><p>Too short.</p></article></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-article-candidate"); ok {
+		t.Error("did not expect structured-article-candidate for a short article")
+	}
+}
+
+func TestStructuredVideoCandidate(t *testing.T) {
+	res := page(t, `<html><body>
+		<iframe src="https://www.youtube.com/embed/abc123"></iframe>
+	</body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-video-candidate")
+	if !ok {
+		t.Fatal("expected structured-video-candidate")
+	}
+	if is.Data["src"] != "https://www.youtube.com/embed/abc123" {
+		t.Errorf("unexpected src %v", is.Data["src"])
+	}
+}
+
+func TestStructuredVideoCandidateSuppressedByExistingType(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"VideoObject","name":"x","thumbnailUrl":"x.jpg"}
+	</script></head><body>
+		<iframe src="https://www.youtube.com/embed/abc123"></iframe>
+	</body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-video-candidate"); ok {
+		t.Error("did not expect structured-video-candidate when VideoObject is already present")
+	}
+}
