@@ -558,6 +558,26 @@ var explanations = map[string]Explanation{
 	},
 
 	// --- structured: JSON-LD ---
+	"structured-breadcrumb-candidate": {
+		What:   "The page has breadcrumb navigation but no BreadcrumbList structured data.",
+		Impact: "You miss eligibility for the breadcrumb rich result in search, which improves click-through and clarifies page hierarchy.",
+		Fix:    "Add BreadcrumbList JSON-LD whose itemListElement mirrors the visible breadcrumb trail.",
+	},
+	"structured-product-candidate": {
+		What:   "The page reads like a product page (a price alongside an add-to-cart/buy action) but has no Product structured data.",
+		Impact: "You miss eligibility for product rich results (price, availability, reviews) in search.",
+		Fix:    "Add Product (with a nested Offer) JSON-LD describing the item, price, and availability.",
+	},
+	"structured-article-candidate": {
+		What:   "The page reads like an article (substantial <article> copy with an author or publish date) but has no Article/NewsArticle/BlogPosting structured data.",
+		Impact: "You miss eligibility for article rich results and give search/AI engines fewer explicit signals about authorship and publish date.",
+		Fix:    "Add Article, NewsArticle, or BlogPosting JSON-LD with headline, author, and date fields.",
+	},
+	"structured-video-candidate": {
+		What:   "The page embeds a video (native <video> or a YouTube/Vimeo iframe) but has no VideoObject structured data.",
+		Impact: "You miss eligibility for video rich results and video search surfaces.",
+		Fix:    "Add VideoObject JSON-LD with name, description, thumbnailUrl, and uploadDate for the embedded video.",
+	},
 	"structured-invalid-jsonld": {
 		What:   "A JSON-LD block is not valid JSON.",
 		Impact: "Malformed structured data is ignored, forfeiting rich-result eligibility.",
