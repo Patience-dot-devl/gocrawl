@@ -4,6 +4,7 @@ package seo
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -113,6 +114,22 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	default:
 		add(analyze.Info, "seo-multiple-h1", "Page has multiple <h1> elements", map[string]any{"count": h1.Length()})
 	}
+
+	// Heading hierarchy: skipped levels and empty headings, in document order.
+	var prevLevel int
+	doc.Find("h1, h2, h3, h4, h5, h6").Each(func(_ int, s *goquery.Selection) {
+		level := int(s.Get(0).Data[1] - '0')
+		text := strings.TrimSpace(s.Text())
+		if text == "" {
+			add(analyze.Warning, "seo-empty-heading", "Heading element has no text content", map[string]any{"tag": s.Get(0).Data})
+		}
+		if prevLevel > 0 && level > prevLevel+1 {
+			add(analyze.Info, "seo-skipped-heading-level",
+				"Heading level skips from h"+strconv.Itoa(prevLevel)+" to h"+strconv.Itoa(level),
+				map[string]any{"from": prevLevel, "to": level})
+		}
+		prevLevel = level
+	})
 
 	// html lang.
 	if lang, ok := doc.Find("html").First().Attr("lang"); !ok || strings.TrimSpace(lang) == "" {
