@@ -68,6 +68,36 @@ func TestSEONoindex(t *testing.T) {
 	}
 }
 
+func TestSEOSkippedHeadingLevel(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>Skipped Heading Level Test</title></head>
+		<body><h1>Title</h1><h3>Subsection</h3></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	got := codes(seo.New().Analyze(context.Background(), res))
+	if !got["seo-skipped-heading-level"] {
+		t.Error("expected seo-skipped-heading-level issue")
+	}
+}
+
+func TestSEONoSkippedHeadingLevel(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>Sequential Heading Level Test</title></head>
+		<body><h1>Title</h1><h2>Section</h2><h3>Subsection</h3></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	got := codes(seo.New().Analyze(context.Background(), res))
+	if got["seo-skipped-heading-level"] {
+		t.Error("did not expect seo-skipped-heading-level issue")
+	}
+}
+
+func TestSEOEmptyHeading(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>Empty Heading Test</title></head>
+		<body><h1>Title</h1><h2>   </h2></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	got := codes(seo.New().Analyze(context.Background(), res))
+	if !got["seo-empty-heading"] {
+		t.Error("expected seo-empty-heading issue")
+	}
+}
+
 func TestSEOXRobotsAndMetaRefresh(t *testing.T) {
 	p := htmlPage(t, `<html><head><title>Header Robots And Refresh</title>
 		<meta http-equiv="refresh" content="3;url=/elsewhere"></head><body><h1>x</h1></body></html>`)

@@ -48,6 +48,8 @@ page that returned `200`.
 | `seo-missing-canonical` | info | No canonical link | — |
 | `seo-missing-h1` | warning | No `<h1>` element | — |
 | `seo-multiple-h1` | info | More than one `<h1>` | `count` |
+| `seo-skipped-heading-level` | info | Heading hierarchy skips a level (e.g. h1 → h3) | `from`, `to` |
+| `seo-empty-heading` | warning | A heading element has no text content | `tag` |
 | `seo-missing-lang` | info | `<html>` has no `lang` attribute | — |
 | `seo-missing-viewport` | info | No `<meta name="viewport">` (mobile-friendliness) | — |
 | `seo-missing-charset` | info | No `<meta charset>` and no `content-type` http-equiv | — |

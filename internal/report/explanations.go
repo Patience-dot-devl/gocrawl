@@ -519,6 +519,16 @@ var explanations = map[string]Explanation{
 		Impact: "Generally tolerated by modern search engines but can dilute heading clarity.",
 		Fix:    "Prefer one <h1> per page and use <h2>–<h6> for the heading hierarchy.",
 	},
+	"seo-skipped-heading-level": {
+		What:   "The heading hierarchy skips a level (e.g. an <h1> followed directly by an <h3>).",
+		Impact: "Breaks the logical outline of the page, hurting accessibility (screen readers rely on heading order) and making content structure harder to parse.",
+		Fix:    "Use headings in strict descending order without skipping levels (h1 → h2 → h3 ...).",
+	},
+	"seo-empty-heading": {
+		What:   "A heading element (<h1>–<h6>) contains no text.",
+		Impact: "Empty headings provide no topical signal and confuse screen readers and search engines relying on the heading outline.",
+		Fix:    "Remove the empty heading or give it descriptive text.",
+	},
 	"seo-missing-lang": {
 		What:   "The <html> element has no lang attribute.",
 		Impact: "Hurts accessibility (screen-reader pronunciation) and language targeting.",
