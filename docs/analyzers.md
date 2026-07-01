@@ -148,10 +148,18 @@ blocks and reports their schema.org `@type` values (descending into `@graph` and
 | `structured-none` | info | The page has no JSON-LD blocks | — |
 | `structured-data` | info | JSON-LD found; lists the de-duplicated `@type`s | `types` |
 | `structured-missing-required` | warning | A typed object of a recognized schema.org type omits a required field | `type`, `missing` |
+| `structured-breadcrumb-candidate` | warning | Breadcrumb-styled nav (aria-label/class containing "breadcrumb") with ≥2 links, no `BreadcrumbList` | `links` |
+| `structured-product-candidate` | warning | Leftover Product/price microdata, or an on-page price plus a cart/buy call-to-action, with no `Product`/`Offer` | `signal` |
+| `structured-article-candidate` | warning | A substantial `<article>` (150+ words) with an author or publish-date signal, no `Article`/`NewsArticle`/`BlogPosting`/`TechArticle`/`Report` | `words` |
+| `structured-video-candidate` | warning | A native `<video>` or YouTube/Vimeo iframe embed, no `VideoObject` | `src` |
 
 > Required-field validation covers a pragmatic subset of common types (`Product`, `Article`,
 > `Event`, `Organization`, `BreadcrumbList`, `FAQPage`, `Recipe`, …), not the full schema.org
 > vocabulary. It descends into `@graph` the same way type extraction does.
+
+> The `*-candidate` checks are low-noise heuristics (the same pattern as `aeo`'s
+> `aeo-faq-candidate`): they only fire when the page shows a fairly specific on-page signal for
+> the type, and never fire if a matching `@type` is already present anywhere on the page.
 
 ---
 
