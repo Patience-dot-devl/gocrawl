@@ -6,7 +6,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
-## [0.3.0-beta.1] - 2026-06-30
+## [0.3.0] - 2026-06-30
 
 ### Added
 
