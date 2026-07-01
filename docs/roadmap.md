@@ -53,6 +53,13 @@ The current baseline. Everything here works today.
   tools. See the [MCP guide](mcp.md).
 - **Layered configuration** — defaults → YAML → env → flags, with `gocrawl init` to
   scaffold a config. See the [Configuration reference](configuration.md).
+- **Persistent crawl storage** — `gocrawl crawl --save` writes a crawl to an on-disk store
+  (`~/.gocrawl/crawls` by default), addressable by a `<host>/<timestamp>` ID. `gocrawl
+  history` lists saved crawls. ([`internal/store`](../internal/store))
+- **Crawl comparison** — `gocrawl compare <base> <current>` diffs two crawls (by stored ID,
+  `latest`, a bare host, or a report file path) into new / resolved / persisting issues plus
+  page and summary deltas, as text or JSON. `--fail-on-new` makes it a CI gate.
+  ([`internal/diff`](../internal/diff))
 
 ## 🚧 In progress / stubbed
 
@@ -82,11 +89,8 @@ analyzer can consume them.
 
 Broader capabilities beyond individual checks.
 
-- **Persistent crawl storage** — save crawls to disk and reopen them. Prerequisite for crawl
-  comparison and scheduling below.
-- **Crawl comparison** — diff two crawls to track progress over time and map staging vs.
-  production.
-- **Scheduling & auto-export** — recurring crawls with automatic report export.
+- **Scheduling & auto-export** — recurring crawls with automatic report export. Builds on the
+  now-shipped crawl store and comparison.
 - **API integrations** — Google Search Console (incl. URL Inspection), PageSpeed Insights /
   CrUX, and backlink data (Ahrefs/Majestic/Moz). Subsumes the earlier "export integrations"
   item.

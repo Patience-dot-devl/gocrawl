@@ -193,6 +193,12 @@ analyzers always run their other checks; this toggle only adds these. See the
 gocrawl crawl https://example.com --specialized
 ```
 
+### Crawl store
+
+`store.dir` (or the `--store-dir` flag, or `GOCRAWL_STORE_DIR`) sets where `gocrawl crawl
+--save` writes crawls and where `gocrawl history` / `gocrawl compare` read them. Empty means
+`~/.gocrawl/crawls`. See [Storage & comparison](storage.md) for the full workflow.
+
 ## Environment variables
 
 Environment variables use the prefix `GOCRAWL_`, with the config key uppercased and dots
@@ -211,6 +217,7 @@ replaced by underscores. They override the YAML file and are overridden by CLI f
 | `crawl.respect_robots` | `GOCRAWL_CRAWL_RESPECT_ROBOTS` |
 | `render` | `GOCRAWL_RENDER` |
 | `output.format` | `GOCRAWL_OUTPUT_FORMAT` |
+| `store.dir` | `GOCRAWL_STORE_DIR` |
 
 ```sh
 GOCRAWL_CRAWL_MAX_DEPTH=1 GOCRAWL_CRAWL_CONCURRENCY=8 gocrawl crawl https://example.com

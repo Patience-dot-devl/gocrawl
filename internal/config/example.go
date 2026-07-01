@@ -55,6 +55,12 @@ analyzers:
   # the WordPress security-endpoint probes.
   # aeo-no-answer-lead and geo-low-quotable-density.
   specialized: false
+
+store:
+  # Where 'gocrawl crawl --save' writes crawls and where 'gocrawl history' / 'gocrawl
+  # compare' read them from. Empty = ~/.gocrawl/crawls. Saved crawls are addressable by
+  # their "<host>/<timestamp>" ID, or by "latest" / a bare host name.
+  dir: ""
 `
 
 // WriteExample writes the example configuration to path, refusing to overwrite an existing
