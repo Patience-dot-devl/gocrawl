@@ -36,6 +36,7 @@ default** (the value used when you set nothing).
 | `crawl.proxy` | `--proxy` | string | *(none)* | Route requests through this proxy URL (`http(s)://` or `socks5://`; supports `user:pass@host`). Prepended to `proxies` when both are set. |
 | `crawl.proxies` | `--proxies` | list of string | *(none)* | Pool of proxy URLs to rotate across. See [Rotating proxies and User-Agents](#rotating-proxies-and-user-agents). |
 | `crawl.proxy_rotation` | `--proxy-rotation` | string | `round-robin` | How a multi-entry proxy pool is picked: `off`, `round-robin`, `random`, or `sticky-host`. |
+| `crawl.basic_auth` | `--basic-auth` | string | *(none)* | HTTP Basic Auth credentials as `user:pass`, for sites gated by server-level Basic Auth (common on staging/acceptance environments). See [HTTP Basic Auth](#http-basic-auth). The interactive menu has separate username/password fields for this. |
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
 | `crawl.respect_robots` | `--respect-robots` | bool | `true` | Obey `robots.txt` while crawling. |
@@ -126,6 +127,27 @@ mode (the default) for full per-request proxy rotation.
 limiter / adaptive delay, which remain per-crawl and stay in force. The intended use is keeping
 authorized audits from tripping WAF false-positives and testing UA/IP-conditional serving — not
 bypassing access controls.
+
+### HTTP Basic Auth
+
+Some sites — most often staging/acceptance environments — sit behind a reverse-proxy realm
+challenge that gates the entire host with HTTP Basic Auth, independent of any app-level login.
+Set `basic_auth` (or `--basic-auth`) to `user:pass` to send credentials on every request to that
+host:
+
+```sh
+gocrawl crawl https://staging.example.com --basic-auth "svc-crawler:s3cret"
+```
+
+**Scoping.** In raw mode (the default), the `Authorization` header is only sent to the host you
+asked gocrawl to crawl. If a page redirects to a *different* host, the header is not carried
+along — so credentials for the protected site can't leak to a redirect target on another domain.
+
+**Headless mode caveat.** Chromium's extra-headers mechanism has no per-host equivalent: under
+`--render headless` the `Authorization` header is attached to every request the page makes,
+including third-party subresources (fonts, analytics, ads) on other hosts. Only use
+`--basic-auth` with headless rendering when the whole page is served from the protected host, or
+use raw mode instead.
 
 ## Selecting analyzers
 

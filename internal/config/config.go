@@ -44,9 +44,14 @@ type CrawlConfig struct {
 	UserAgentRotation string   `mapstructure:"user_agent_rotation"`
 	// Proxy is a single proxy URL; Proxies is a pool to rotate across (Proxy, if set, is
 	// prepended to the pool). ProxyRotation is off, round-robin, random, or sticky-host.
-	Proxy           string        `mapstructure:"proxy"`
-	Proxies         []string      `mapstructure:"proxies"`
-	ProxyRotation   string        `mapstructure:"proxy_rotation"`
+	Proxy         string   `mapstructure:"proxy"`
+	Proxies       []string `mapstructure:"proxies"`
+	ProxyRotation string   `mapstructure:"proxy_rotation"`
+	// BasicAuth is "user:pass" sent as an HTTP Basic Authorization header on every request to
+	// the crawled host — for sites gated by server-level Basic Auth, which is common on
+	// staging/acceptance environments (e.g. a reverse-proxy realm challenge in front of the
+	// whole site, independent of any app-level login).
+	BasicAuth       string        `mapstructure:"basic_auth"`
 	Timeout         time.Duration `mapstructure:"timeout"`
 	MaxBodyBytes    int64         `mapstructure:"max_body_bytes"`
 	RespectRobots   bool          `mapstructure:"respect_robots"`
@@ -204,6 +209,15 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	}
 	o.ProxyRotation = proxyRot
 
+	if strings.TrimSpace(c.Crawl.BasicAuth) != "" {
+		user, pass, err := parseBasicAuth(c.Crawl.BasicAuth)
+		if err != nil {
+			return o, fmt.Errorf("basic_auth: %w", err)
+		}
+		o.BasicAuthUser = user
+		o.BasicAuthPass = pass
+	}
+
 	inc, err := compile(c.Crawl.Include)
 	if err != nil {
 		return o, fmt.Errorf("include: %w", err)
@@ -245,6 +259,17 @@ func parseProxies(raw []string) ([]*url.URL, error) {
 		out = append(out, u)
 	}
 	return out, nil
+}
+
+// parseBasicAuth splits "user:pass" into its components. A missing colon is rejected rather
+// than guessed at, since an empty password silently sent as the whole username is a confusing
+// way to fail auth.
+func parseBasicAuth(raw string) (user, pass string, err error) {
+	user, pass, ok := strings.Cut(raw, ":")
+	if !ok {
+		return "", "", fmt.Errorf(`want "user:pass", got %q`, raw)
+	}
+	return user, pass, nil
 }
 
 func compile(patterns []string) ([]*regexp.Regexp, error) {

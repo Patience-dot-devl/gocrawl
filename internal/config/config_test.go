@@ -62,3 +62,23 @@ func TestToOptionsUserAgentsSupersede(t *testing.T) {
 		t.Errorf("UserAgentRotation = %v, want random", o.UserAgentRotation)
 	}
 }
+
+func TestToOptionsParsesBasicAuth(t *testing.T) {
+	c := Default()
+	c.Crawl.BasicAuth = "alice:s3cret"
+	o, err := c.ToOptions()
+	if err != nil {
+		t.Fatalf("ToOptions: %v", err)
+	}
+	if o.BasicAuthUser != "alice" || o.BasicAuthPass != "s3cret" {
+		t.Errorf("BasicAuthUser/Pass = %q/%q, want alice/s3cret", o.BasicAuthUser, o.BasicAuthPass)
+	}
+}
+
+func TestToOptionsRejectsBasicAuthWithoutColon(t *testing.T) {
+	c := Default()
+	c.Crawl.BasicAuth = "alice-no-colon"
+	if _, err := c.ToOptions(); err == nil {
+		t.Fatal("expected an error for basic_auth missing a colon, got nil")
+	}
+}

@@ -40,6 +40,8 @@ func runInteractive(cmd *cobra.Command) error {
 		userAgent       = cfg.Crawl.UserAgent
 		keepAwake       = false
 
+		basicAuthUser, basicAuthPass, _ = strings.Cut(cfg.Crawl.BasicAuth, ":")
+
 		render     = cfg.Render
 		format     = cfg.Output.Format
 		outputPath = cfg.Output.Path
@@ -120,6 +122,16 @@ func runInteractive(cmd *cobra.Command) error {
 				Value(&userAgent),
 		),
 		huh.NewGroup(
+			huh.NewInput().
+				Title("Basic Auth username").
+				Description("Only needed if the site is gated by server-level HTTP Basic Auth (common on staging/acceptance environments). Leave blank otherwise.").
+				Value(&basicAuthUser),
+			huh.NewInput().
+				Title("Basic Auth password").
+				EchoMode(huh.EchoModePassword).
+				Value(&basicAuthPass),
+		),
+		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Analyzers").
 				Description("Space to toggle; all run by default.").
@@ -158,6 +170,11 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Crawl.AllowSubdomains = allowSubdomains
 	cfg.Crawl.FollowExternal = followExternal
 	cfg.Crawl.UserAgent = strings.TrimSpace(userAgent)
+	if user := strings.TrimSpace(basicAuthUser); user != "" {
+		cfg.Crawl.BasicAuth = user + ":" + basicAuthPass
+	} else {
+		cfg.Crawl.BasicAuth = ""
+	}
 	cfg.Render = render
 	cfg.Output.Format = format
 	cfg.Output.Path = strings.TrimSpace(outputPath)

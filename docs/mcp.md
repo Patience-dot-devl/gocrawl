@@ -66,6 +66,7 @@ fields fall back to the built-in defaults:
 | `proxy` | string | *(none)* | Proxy URL (`http(s)://` or `socks5://`; supports `user:pass@host`). |
 | `proxies` | string[] | *(none)* | Pool of proxy URLs to rotate across. |
 | `proxy_rotation` | string | `round-robin` | `off`, `round-robin`, `random`, or `sticky-host`. |
+| `basic_auth` | string | *(none)* | HTTP Basic Auth credentials as `user:pass`, for sites gated by server-level Basic Auth (see [Configuration](configuration.md#http-basic-auth)). |
 
 **Output** ([`CrawlOutput`](../internal/mcpserver/server.go)): `{ "report": <Report> }`, where
 `<Report>` is the full crawl report documented in the [Output reference](output.md).

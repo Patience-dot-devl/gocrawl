@@ -15,10 +15,12 @@ import (
 // HTTPFetcher fetches pages over HTTP(S). It follows redirects manually so the full
 // redirect chain is recorded on the resulting Page.
 type HTTPFetcher struct {
-	client       *http.Client
-	ua           *UAPool
-	maxBody      int64
-	maxRedirects int
+	client        *http.Client
+	ua            *UAPool
+	maxBody       int64
+	maxRedirects  int
+	basicAuthUser string
+	basicAuthPass string
 }
 
 // NewHTTPFetcher builds a fetcher from the given options. When opts.Proxies is non-empty the
@@ -50,10 +52,12 @@ func NewHTTPFetcher(opts Options) *HTTPFetcher {
 		client.Transport = transport
 	}
 	return &HTTPFetcher{
-		client:       client,
-		ua:           NewUAPool(opts),
-		maxBody:      maxBody,
-		maxRedirects: maxRedirects,
+		client:        client,
+		ua:            NewUAPool(opts),
+		maxBody:       maxBody,
+		maxRedirects:  maxRedirects,
+		basicAuthUser: opts.BasicAuthUser,
+		basicAuthPass: opts.BasicAuthPass,
 	}
 }
 
@@ -76,6 +80,10 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 	page := &Page{RequestedURL: rawURL, FetchedAt: time.Now()}
 	start := time.Now()
 	current := rawURL
+	origHost := ""
+	if u, err := url.Parse(rawURL); err == nil {
+		origHost = u.Hostname()
+	}
 
 	for hop := 0; hop <= f.maxRedirects; hop++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, current, nil)
@@ -88,6 +96,12 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			req.Header.Set("User-Agent", ua)
 		}
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		// Only sent to the host we were asked to fetch, never carried across a redirect to a
+		// different host, so credentials for the crawled site can't leak to a redirect target
+		// on another domain.
+		if f.basicAuthUser != "" && req.URL.Hostname() == origHost {
+			req.SetBasicAuth(f.basicAuthUser, f.basicAuthPass)
+		}
 
 		resp, err := f.client.Do(req)
 		if err != nil {

@@ -35,6 +35,7 @@ type CrawlInput struct {
 	Proxy             string   `json:"proxy,omitempty" jsonschema:"Route requests through this proxy URL (http(s):// or socks5://; supports user:pass@host)"`
 	Proxies           []string `json:"proxies,omitempty" jsonschema:"Pool of proxy URLs to rotate across"`
 	ProxyRotation     string   `json:"proxy_rotation,omitempty" jsonschema:"Rotation across proxies: off, round-robin, random, or sticky-host"`
+	BasicAuth         string   `json:"basic_auth,omitempty" jsonschema:"HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)"`
 }
 
 // CrawlOutput is the MCP "crawl" tool output: the full crawl report.
@@ -109,6 +110,7 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 	cfg.Crawl.Proxy = in.Proxy
 	cfg.Crawl.Proxies = in.Proxies
 	cfg.Crawl.ProxyRotation = in.ProxyRotation
+	cfg.Crawl.BasicAuth = in.BasicAuth
 
 	rep, err := runner.Run(ctx, cfg, seed)
 	if err != nil {

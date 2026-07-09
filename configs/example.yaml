@@ -31,6 +31,11 @@ crawl:
   proxy: ""
   proxies: []
   proxy_rotation: "round-robin"
+  # HTTP Basic Auth as "user:pass", for sites gated by server-level Basic Auth (common on
+  # staging/acceptance environments). Sent only to the host you asked to crawl, never carried
+  # across a redirect to a different host. In headless mode it is sent with every request the
+  # page makes, including third-party subresources — prefer raw mode for auth-gated sites.
+  basic_auth: ""
   timeout: "15s"        # per-request timeout
   max_body_bytes: 5242880  # 5 MiB cap on a single response body
   respect_robots: true  # obey robots.txt while crawling

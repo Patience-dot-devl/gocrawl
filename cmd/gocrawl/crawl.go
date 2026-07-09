@@ -39,6 +39,7 @@ func newCrawlCmd() *cobra.Command {
 	f.String("proxy", "", "route requests through this proxy URL (http(s):// or socks5://; supports user:pass@host)")
 	f.StringSlice("proxies", nil, "pool of proxy URLs to rotate across")
 	f.String("proxy-rotation", "", "rotation across proxies: off, round-robin, random, or sticky-host (default round-robin)")
+	f.String("basic-auth", "", "HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)")
 	f.Bool("respect-robots", true, "obey robots.txt while crawling")
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
@@ -145,6 +146,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("proxy-rotation") {
 		cfg.Crawl.ProxyRotation, _ = f.GetString("proxy-rotation")
+	}
+	if f.Changed("basic-auth") {
+		cfg.Crawl.BasicAuth, _ = f.GetString("basic-auth")
 	}
 	if f.Changed("respect-robots") {
 		cfg.Crawl.RespectRobots, _ = f.GetBool("respect-robots")
