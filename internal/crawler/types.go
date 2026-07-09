@@ -197,8 +197,14 @@ type Options struct {
 	// Proxies is an optional pool of proxy URLs (http, https, or socks5) to route requests
 	// through. When non-empty, ProxyRotation picks one per request. Empty leaves Go's default
 	// proxy behavior (honoring HTTP_PROXY/HTTPS_PROXY/NO_PROXY) in place.
-	Proxies         []*url.URL
-	ProxyRotation   RotationStrategy
+	Proxies       []*url.URL
+	ProxyRotation RotationStrategy
+	// BasicAuthUser and BasicAuthPass, when BasicAuthUser is non-empty, are sent as an HTTP
+	// Basic Authorization header on every request. This targets server-level Basic Auth (the
+	// realm challenge common on staging/acceptance environments), sent preemptively rather
+	// than in response to a 401 challenge.
+	BasicAuthUser   string
+	BasicAuthPass   string
 	Include         []*regexp.Regexp
 	Exclude         []*regexp.Regexp
 	RespectRobots   bool

@@ -11,6 +11,7 @@ package render
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -82,6 +83,11 @@ func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 // without any userinfo (Chromium rejects credentials embedded in the flag).
 func proxyServerArg(u *url.URL) string {
 	return u.Scheme + "://" + u.Host
+}
+
+// basicAuthHeader renders the "Basic <base64>" value for an HTTP Authorization header.
+func basicAuthHeader(user, pass string) string {
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass))
 }
 
 // hostOf extracts the hostname from rawURL for sticky-host User-Agent rotation. A parse
@@ -238,6 +244,16 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		if ua := h.ua.Next(hostOf(rawURL)); ua != "" {
 			actions = append(actions, emulation.SetUserAgentOverride(ua))
 		}
+	}
+	// Unlike raw mode (which scopes the Authorization header to the originally requested
+	// host, even across redirects), Chromium has no per-host equivalent of extra HTTP
+	// headers: SetExtraHTTPHeaders applies to every request the tab makes, including
+	// third-party subresources (fonts, analytics, ads). Only use --basic-auth with headless
+	// rendering when the whole page is served from the protected host, or prefer raw mode.
+	if h.opts.BasicAuthUser != "" {
+		actions = append(actions, network.SetExtraHTTPHeaders(network.Headers{
+			"Authorization": basicAuthHeader(h.opts.BasicAuthUser, h.opts.BasicAuthPass),
+		}))
 	}
 	actions = append(actions,
 		chromedp.ActionFunc(func(c context.Context) error {
