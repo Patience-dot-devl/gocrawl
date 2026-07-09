@@ -34,6 +34,20 @@ func hasBrowser() bool {
 	return false
 }
 
+// TestNewHeadlessFetcherRejectsBasicAuth guards against a credential leak: Chromium's
+// extra-headers mechanism can't be scoped to a single host, so combining --basic-auth with
+// --render headless must be rejected rather than silently sent to every third-party
+// subresource the page loads. This must not require a browser on PATH since the check runs
+// before the browser is launched.
+func TestNewHeadlessFetcherRejectsBasicAuth(t *testing.T) {
+	opts := crawler.DefaultOptions()
+	opts.BasicAuthUser = "alice"
+	opts.BasicAuthPass = "s3cret"
+	if _, err := NewHeadlessFetcher(opts); err == nil {
+		t.Fatal("expected an error combining --basic-auth with --render headless, got nil")
+	}
+}
+
 func TestHeadlessFetchCapturesCWV(t *testing.T) {
 	if !hasBrowser() {
 		t.Skip("no Chromium-class browser available on PATH")

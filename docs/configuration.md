@@ -139,15 +139,15 @@ host:
 gocrawl crawl https://staging.example.com --basic-auth "svc-crawler:s3cret"
 ```
 
-**Scoping.** In raw mode (the default), the `Authorization` header is only sent to the host you
-asked gocrawl to crawl. If a page redirects to a *different* host, the header is not carried
-along — so credentials for the protected site can't leak to a redirect target on another domain.
+**Scoping.** The `Authorization` header is only sent to the host you asked gocrawl to crawl,
+over the scheme you requested. If a page redirects to a *different* host, or downgrades from
+`https` to plain `http`, the header is not carried along — so credentials for the protected site
+can't leak to a redirect target on another domain or in cleartext.
 
-**Headless mode caveat.** Chromium's extra-headers mechanism has no per-host equivalent: under
-`--render headless` the `Authorization` header is attached to every request the page makes,
-including third-party subresources (fonts, analytics, ads) on other hosts. Only use
-`--basic-auth` with headless rendering when the whole page is served from the protected host, or
-use raw mode instead.
+**Not supported with `--render headless`.** Chromium's extra-headers mechanism has no per-host
+equivalent: it would attach the `Authorization` header to every request the page makes,
+including third-party subresources (fonts, analytics, ads) on other hosts. `--basic-auth` with
+`--render headless` is rejected with an error; use raw mode (the default) for auth-gated sites.
 
 ## Selecting analyzers
 

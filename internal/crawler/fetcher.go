@@ -80,9 +80,10 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 	page := &Page{RequestedURL: rawURL, FetchedAt: time.Now()}
 	start := time.Now()
 	current := rawURL
-	origHost := ""
+	origHost, origScheme := "", ""
 	if u, err := url.Parse(rawURL); err == nil {
 		origHost = u.Hostname()
+		origScheme = u.Scheme
 	}
 
 	for hop := 0; hop <= f.maxRedirects; hop++ {
@@ -96,10 +97,11 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			req.Header.Set("User-Agent", ua)
 		}
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		// Only sent to the host we were asked to fetch, never carried across a redirect to a
-		// different host, so credentials for the crawled site can't leak to a redirect target
-		// on another domain.
-		if f.basicAuthUser != "" && req.URL.Hostname() == origHost {
+		// Only sent to the host and scheme we were asked to fetch, never carried across a
+		// redirect to a different host or downgraded to plain HTTP, so credentials for the
+		// crawled site can't leak to a redirect target on another domain or over the wire in
+		// cleartext.
+		if f.basicAuthUser != "" && req.URL.Hostname() == origHost && req.URL.Scheme == origScheme {
 			req.SetBasicAuth(f.basicAuthUser, f.basicAuthPass)
 		}
 
