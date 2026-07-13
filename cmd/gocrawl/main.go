@@ -42,6 +42,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newCompareCmd())
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newPathCmd())
+	root.AddCommand(newCheckRedirectsCmd())
 	return root
 }
 
