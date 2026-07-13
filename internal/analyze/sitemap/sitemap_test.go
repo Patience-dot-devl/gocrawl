@@ -88,3 +88,38 @@ func TestNoSitemapWhenOnlySoft404s(t *testing.T) {
 		t.Error("guessed soft-404 paths should not be flagged invalid-sitemap")
 	}
 }
+
+func TestFetchDirect(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://example.com/sitemap.xml": {StatusCode: 200, ContentType: "application/xml", Body: []byte(validSitemap)},
+	}}
+	urls, parsed, invalid := sitemap.Fetch(context.Background(), ff, map[string]bool{"https://example.com/sitemap.xml": false})
+	if parsed != 1 {
+		t.Fatalf("parsed = %d, want 1", parsed)
+	}
+	if len(invalid) != 0 {
+		t.Fatalf("invalidDeclared = %v, want empty", invalid)
+	}
+	want := []string{"https://example.com/a", "https://example.com/b"}
+	if len(urls) != len(want) {
+		t.Fatalf("got %d urls, want %d: %v", len(urls), len(want), urls)
+	}
+	for _, u := range want {
+		if !urls[u] {
+			t.Errorf("missing url %q in result %v", u, urls)
+		}
+	}
+}
+
+func TestFetchDirectFlagsDeclaredInvalid(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://example.com/broken.xml": {StatusCode: 200, ContentType: "text/html", Body: []byte(softHTML)},
+	}}
+	_, parsed, invalid := sitemap.Fetch(context.Background(), ff, map[string]bool{"https://example.com/broken.xml": true})
+	if parsed != 0 {
+		t.Fatalf("parsed = %d, want 0", parsed)
+	}
+	if len(invalid) != 1 || invalid[0] != "https://example.com/broken.xml" {
+		t.Fatalf("invalidDeclared = %v, want [https://example.com/broken.xml]", invalid)
+	}
+}
