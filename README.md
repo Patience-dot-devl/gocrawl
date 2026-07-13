@@ -80,6 +80,9 @@ gocrawl analyzers list
 # Write a fully-commented example config you can edit
 gocrawl init
 gocrawl crawl https://example.com --config gocrawl.yaml
+
+# Verify a HubSpot redirect-rule export against the live site
+gocrawl check-redirects --input redirects.csv --domain example.com --output results.csv
 ```
 
 ## Documentation
@@ -90,6 +93,7 @@ Full reference docs live in [`docs/`](docs/README.md):
 - [Analyzers](docs/analyzers.md) — what each analyzer checks, with every issue code.
 - [Output / report](docs/output.md) — the JSON, CSV, and HTML report formats.
 - [MCP server](docs/mcp.md) — running as an MCP server and the tool schemas.
+- [Redirect-rule verification](docs/redirect-check.md) — checking a redirect-rule CSV export against a live site.
 - [Architecture](docs/architecture.md) — how the engine and analyzer pipeline fit together.
 - [Roadmap](docs/roadmap.md) — what's shipped, stubbed, and planned.
 
