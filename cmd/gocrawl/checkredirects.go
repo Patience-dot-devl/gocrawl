@@ -50,7 +50,7 @@ func runCheckRedirects(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("opening input: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	rules, err := redirectcheck.ParseCSV(file)
 	if err != nil {
@@ -81,7 +81,7 @@ func runCheckRedirects(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return fmt.Errorf("creating output: %w", err)
 		}
-		defer outFile.Close()
+		defer func() { _ = outFile.Close() }()
 		out = outFile
 	}
 	if err := redirectcheck.WriteCSV(out, rules, results); err != nil {
