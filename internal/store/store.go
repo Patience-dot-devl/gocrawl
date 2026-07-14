@@ -14,6 +14,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 )
 
@@ -66,7 +68,8 @@ type Entry struct {
 }
 
 // Save writes rep to the store and returns its crawl ID. The host comes from the report's
-// seed and the timestamp from its StartedAt (falling back to FinishedAt, then now).
+// seed and the timestamp from its StartedAt (falling back to FinishedAt, then now). The write
+// is atomic: a failure partway through leaves any previously saved crawl at that path intact.
 func (s *Store) Save(rep *report.Report) (string, error) {
 	host := hostOf(rep.Seed)
 	if host == "" {
@@ -77,23 +80,13 @@ func (s *Store) Save(rep *report.Report) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid host in seed %q: %w", rep.Seed, err)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("creating store dir %q: %w", dir, err)
-	}
 	path := filepath.Join(dir, ts+".json")
-	f, err := os.Create(path)
-	if err != nil {
+	if err := atomicfile.Write(path, 0o644, func(w io.Writer) error {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rep)
+	}); err != nil {
 		return "", err
-	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	writeErr := enc.Encode(rep)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return "", writeErr
-	}
-	if closeErr != nil {
-		return "", closeErr
 	}
 	return host + "/" + ts, nil
 }
