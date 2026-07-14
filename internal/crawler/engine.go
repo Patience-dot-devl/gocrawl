@@ -178,11 +178,29 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			page.Referrer = t.referrer
 			page.Links = e.extractLinks(page)
 
+			var finalNorm string
+			if page.FinalURL != "" {
+				finalNorm = normalizeURL(page.FinalURL, e.opts.StripQuery)
+			}
+
 			mu.Lock()
+			if finalNorm != "" && result.index[finalNorm] != nil {
+				// A concurrent fetch already recorded this exact final URL — e.g. two
+				// links discovered on the same page, one a redirect and one pointing
+				// directly at the redirect's destination, enqueued before either fetch
+				// completed. Drop this duplicate rather than double-reporting every
+				// per-page analyzer issue for the same content.
+				mu.Unlock()
+				return
+			}
 			result.Pages = append(result.Pages, page)
 			result.index[normalizeURL(page.RequestedURL, e.opts.StripQuery)] = page
-			if page.FinalURL != "" {
-				result.index[normalizeURL(page.FinalURL, e.opts.StripQuery)] = page
+			if finalNorm != "" {
+				result.index[finalNorm] = page
+				// Mark the redirect's destination visited too, so a separate link pointing
+				// directly at it doesn't trigger a second fetch (and duplicate per-page
+				// issues) for content already covered by this page.
+				visited[finalNorm] = true
 			}
 			mu.Unlock()
 
