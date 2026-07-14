@@ -6,6 +6,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
@@ -47,24 +48,26 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 
 	// Title.
 	title := strings.TrimSpace(doc.Find("head title").First().Text())
+	titleLen := utf8.RuneCountInString(title)
 	switch {
 	case title == "":
 		add(analyze.Error, "seo-missing-title", "Page has no <title>", nil)
-	case len(title) < titleMin:
-		add(analyze.Warning, "seo-short-title", "Title is very short", map[string]any{"length": len(title), "title": title})
-	case len(title) > titleMax:
-		add(analyze.Warning, "seo-long-title", "Title may be truncated in SERPs", map[string]any{"length": len(title), "title": title})
+	case titleLen < titleMin:
+		add(analyze.Warning, "seo-short-title", "Title is very short", map[string]any{"length": titleLen, "title": title})
+	case titleLen > titleMax:
+		add(analyze.Warning, "seo-long-title", "Title may be truncated in SERPs", map[string]any{"length": titleLen, "title": title})
 	}
 
 	// Meta description.
 	desc, hasDesc := metaContent(doc, "name", "description")
+	descLen := utf8.RuneCountInString(desc)
 	switch {
 	case !hasDesc || strings.TrimSpace(desc) == "":
 		add(analyze.Warning, "seo-missing-meta-description", "Page has no meta description", nil)
-	case len(desc) < descMin:
-		add(analyze.Info, "seo-short-meta-description", "Meta description is short", map[string]any{"length": len(desc)})
-	case len(desc) > descMax:
-		add(analyze.Info, "seo-long-meta-description", "Meta description may be truncated", map[string]any{"length": len(desc)})
+	case descLen < descMin:
+		add(analyze.Info, "seo-short-meta-description", "Meta description is short", map[string]any{"length": descLen})
+	case descLen > descMax:
+		add(analyze.Info, "seo-long-meta-description", "Meta description may be truncated", map[string]any{"length": descLen})
 	}
 
 	// Meta robots noindex / nofollow.
