@@ -164,6 +164,11 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 // limit that cut the crawl short and how to lift it. This is the signal that keeps "0 broken
 // links" from being misread as "no broken links" when the crawl simply didn't reach them.
 func coverageNote(c crawler.Coverage) string {
+	if c.Interrupted {
+		return "partial coverage: the crawl was interrupted before it finished (e.g. Ctrl-C). " +
+			"Findings reflect only what was fetched before the interruption, and many in-scope " +
+			"pages may not have been discovered at all — re-run to completion for full coverage."
+	}
 	var reasons []string
 	if c.PageLimitReached {
 		reasons = append(reasons, fmt.Sprintf("the page limit (--max-pages %d) was reached — raise it or set 0 for unlimited", c.MaxPages))

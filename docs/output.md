@@ -106,15 +106,22 @@ coverage is the context you need to trust that result.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `complete` | bool | `true` when no in-scope, robots-allowed URL was left un-fetched because of a limit. |
+| `complete` | bool | `true` when no in-scope, robots-allowed URL was left un-fetched because of a limit or an interruption. |
 | `discovered_not_crawled` | int | Count of distinct in-scope URLs discovered but never fetched. Omitted when 0. |
 | `page_limit_reached` | bool | The `--max-pages` budget cut the crawl short. Omitted when false. |
 | `depth_limit_reached` | bool | The `--depth` limit cut the crawl short. Omitted when false. |
+| `interrupted` | bool | The crawl was stopped early by context cancellation (e.g. Ctrl-C) rather than a configured limit. Omitted when false. |
 | `max_pages` / `max_depth` | int | The limits in effect (`0` = unlimited). |
 
-When `complete` is false, a `notes` entry spells out which limit was hit and how to lift it,
-and the **HTML report shows a prominent banner** at the top of the page. By default the crawl
-is bounded by `--max-pages` (500) with unlimited depth, so it walks the whole site up to that
+A first Ctrl-C during `gocrawl crawl` cancels the crawl gracefully and still writes whatever
+was fetched so far as a report with `interrupted: true`, rather than losing everything; a
+second Ctrl-C falls through to the OS default (immediate termination) if the crawl is slow to
+unwind.
+
+When `complete` is false, a `notes` entry spells out what happened (which limit was hit, or
+that the crawl was interrupted) and how to get full coverage, and the **HTML report shows a
+prominent banner** at the top of the page. By default the crawl is bounded by `--max-pages`
+(500) with unlimited depth, so it walks the whole site up to that
 budget rather than stopping at a shallow depth — re-crawl with a higher `--max-pages` (or `0`)
 when you see the partial-coverage banner.
 

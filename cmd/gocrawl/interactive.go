@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -198,7 +197,7 @@ func runInteractive(cmd *cobra.Command) error {
 		defer startCaffeinate()()
 	}
 
-	rep, err := runner.Run(context.Background(), cfg, seed)
+	rep, err := runner.Run(cmd.Context(), cfg, seed)
 	if err != nil {
 		return err
 	}

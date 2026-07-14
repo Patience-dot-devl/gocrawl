@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -80,7 +79,7 @@ func runCrawl(cmd *cobra.Command, args []string) error {
 		cfg.Crawl.BasicAuth = user + ":" + pass
 	}
 
-	rep, err := runner.Run(context.Background(), cfg, seed)
+	rep, err := runner.Run(cmd.Context(), cfg, seed)
 	if err != nil {
 		return err
 	}

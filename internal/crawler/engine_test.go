@@ -392,6 +392,35 @@ func TestEngineCoveragePartialOnDepthLimit(t *testing.T) {
 	}
 }
 
+// TestEngineCanceledContextReturnsPartialResultNotError guards against a real bug: an
+// interrupted crawl (e.g. an operator's Ctrl-C canceling the context) used to return
+// ctx.Err() alongside the partial Result, and the caller (runner.Run) discarded the whole
+// result on any non-nil error — losing everything that had already been crawled. A canceled
+// context must now be reported honestly via Coverage.Interrupted instead of as an error.
+func TestEngineCanceledContextReturnsPartialResultNotError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled before the crawl starts
+
+	opts := DefaultOptions()
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(ctx, ts.URL)
+	if err != nil {
+		t.Fatalf("expected no error on a canceled context, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected a non-nil result even when interrupted")
+	}
+	if !result.Coverage.Interrupted {
+		t.Error("expected Coverage.Interrupted to be true")
+	}
+	if result.Coverage.Complete {
+		t.Error("expected Coverage.Complete to be false when interrupted")
+	}
+}
+
 func countItemsPages(result *Result) int {
 	n := 0
 	for _, p := range result.Pages {

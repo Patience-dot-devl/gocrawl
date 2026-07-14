@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -46,6 +47,9 @@ func TestCrawlStripsSeedCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// runCrawl reads cmd.Context(), which cobra only populates via Execute()/ExecuteContext();
+	// calling runCrawl directly (bypassing that) needs it set explicitly.
+	cmd.SetContext(context.Background())
 	if err := runCrawl(cmd, []string{seedWithCreds}); err != nil {
 		t.Fatalf("runCrawl: %v", err)
 	}
@@ -93,6 +97,9 @@ func TestCrawlExplicitBasicAuthWinsOverSeedCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// runCrawl reads cmd.Context(), which cobra only populates via Execute()/ExecuteContext();
+	// calling runCrawl directly (bypassing that) needs it set explicitly.
+	cmd.SetContext(context.Background())
 	if err := runCrawl(cmd, []string{seedWithCreds}); err != nil {
 		t.Fatalf("runCrawl: %v", err)
 	}

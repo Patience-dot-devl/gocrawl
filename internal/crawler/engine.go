@@ -257,18 +257,23 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			uncrawled++
 		}
 	}
+	interrupted := ctx.Err() != nil
 	result.Coverage = Coverage{
-		Complete:             uncrawled == 0,
+		Complete:             uncrawled == 0 && !interrupted,
 		DiscoveredNotCrawled: uncrawled,
 		PageLimitReached:     pageLimitReached && uncrawled > 0,
 		DepthLimitReached:    depthLimitReached && uncrawled > 0,
+		Interrupted:          interrupted,
 		MaxPages:             e.opts.MaxPages,
 		MaxDepth:             e.opts.MaxDepth,
 	}
 
 	result.Finished = time.Now()
 	e.collectRobots(ctx, result)
-	return result, ctx.Err()
+	// A canceled context (e.g. an operator's Ctrl-C) stops the crawl early rather than
+	// failing it: whatever was fetched before cancellation is a legitimate partial result,
+	// reported honestly via Coverage.Interrupted rather than discarded by returning an error.
+	return result, nil
 }
 
 // throttleAfter429 slows the crawl after the server signals it is overloaded (HTTP 429 or
