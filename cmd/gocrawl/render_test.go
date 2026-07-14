@@ -108,6 +108,29 @@ func TestRenderSitemapSideOutput(t *testing.T) {
 	}
 }
 
+// TestRenderResolvesStoreID guards against a real usability gap: `gocrawl history`'s help
+// text claims its IDs work with `gocrawl render`, but render only accepted a literal file
+// path. It must now resolve a stored crawl ID (and "latest") the same way `gocrawl compare`
+// already does.
+func TestRenderResolvesStoreID(t *testing.T) {
+	storeDir := t.TempDir()
+	saveViaCmd(t, storeDir, sampleReportJSON)
+
+	out := filepath.Join(t.TempDir(), "report.html")
+	cmd := newRenderCmd()
+	cmd.SetArgs([]string{"latest", "-o", out, "--store-dir", storeDir})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("render latest: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !strings.Contains(string(got), "seo-missing-h1") {
+		t.Errorf("rendered HTML missing the report's issue:\n%s", got)
+	}
+}
+
 func TestRenderMissingFile(t *testing.T) {
 	cmd := newRenderCmd()
 	cmd.SilenceErrors = true

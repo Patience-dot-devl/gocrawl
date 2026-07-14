@@ -93,3 +93,31 @@ func TestSameSite(t *testing.T) {
 		t.Error("different registrable domains should never match")
 	}
 }
+
+func TestStripPort(t *testing.T) {
+	cases := map[string]string{
+		"example.com":       "example.com",
+		"example.com:8080":  "example.com",
+		"[::1]":             "[::1]",
+		"[::1]:8080":        "[::1]",
+		"[2001:db8::1]:443": "[2001:db8::1]",
+		"::1":               "::1", // bare IPv6, no unambiguous port separator: left alone
+	}
+	for in, want := range cases {
+		if got := stripPort(in); got != want {
+			t.Errorf("stripPort(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestSameSiteIPv6 guards against a real bug: stripPort used strings.LastIndex(host, ":"),
+// which for a bracketed IPv6 literal with no port (e.g. "[::1]") lands inside the address
+// itself and corrupts it, breaking the same-site comparison.
+func TestSameSiteIPv6(t *testing.T) {
+	if !sameSite("[::1]", "[::1]", false) {
+		t.Error("identical bracketed IPv6 hosts (no port) should be same site")
+	}
+	if !sameSite("[::1]:8080", "[::1]", false) {
+		t.Error("bracketed IPv6 hosts differing only by port should be same site")
+	}
+}

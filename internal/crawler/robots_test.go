@@ -30,6 +30,60 @@ func TestRobotsDataTestAgent(t *testing.T) {
 	}
 }
 
+// schemeAwareFetcher returns a distinct robots.txt per scheme for the same host, and counts
+// how many times each scheme was actually fetched.
+type schemeAwareFetcher struct {
+	hits map[string]int
+}
+
+func (f *schemeAwareFetcher) Fetch(_ context.Context, rawURL string) (*Page, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if f.hits == nil {
+		f.hits = map[string]int{}
+	}
+	f.hits[u.Scheme]++
+	body := "User-agent: *\nAllow: /\n"
+	if u.Scheme == "http" {
+		body = "User-agent: *\nDisallow: /\n"
+	}
+	return &Page{StatusCode: 200, Body: []byte(body)}, nil
+}
+
+// TestRobotsManagerCachesPerScheme guards against a real bug: a host can serve a different
+// robots.txt on http vs. https (e.g. deliberately disallowing everything on http), so caching
+// by host alone would apply one scheme's rules to the other.
+func TestRobotsManagerCachesPerScheme(t *testing.T) {
+	f := &schemeAwareFetcher{}
+	mgr := newRobotsManager(f, "gocrawl")
+
+	httpURL, _ := url.Parse("http://example.com/page")
+	httpsURL, _ := url.Parse("https://example.com/page")
+
+	if mgr.allowed(context.Background(), httpURL) {
+		t.Error("expected http to be disallowed by its own robots.txt")
+	}
+	if !mgr.allowed(context.Background(), httpsURL) {
+		t.Error("expected https to be allowed by its own robots.txt")
+	}
+	// Fetch again to confirm each scheme's result was cached rather than re-fetched or
+	// overwritten by the other scheme's entry.
+	if mgr.allowed(context.Background(), httpURL) {
+		t.Error("expected http to remain disallowed on a cached lookup")
+	}
+	if !mgr.allowed(context.Background(), httpsURL) {
+		t.Error("expected https to remain allowed on a cached lookup")
+	}
+	if f.hits["http"] != 1 {
+		t.Errorf("http robots.txt fetched %d times, want 1 (cached)", f.hits["http"])
+	}
+	if f.hits["https"] != 1 {
+		t.Errorf("https robots.txt fetched %d times, want 1 (cached)", f.hits["https"])
+	}
+}
+
 func TestRobotsManagerFetch(t *testing.T) {
 	newManager := func(t *testing.T, status int, body string) (*robotsManager, *httptest.Server) {
 		t.Helper()

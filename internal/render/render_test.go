@@ -85,6 +85,7 @@ func TestHeadlessFetchCapturesCWV(t *testing.T) {
 	}
 	if page == nil {
 		t.Fatal("nil page")
+		return
 	}
 	if page.StatusCode != 200 {
 		t.Errorf("status: got %d, want 200", page.StatusCode)

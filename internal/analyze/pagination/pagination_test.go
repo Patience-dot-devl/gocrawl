@@ -46,13 +46,15 @@ func TestPaginationData(t *testing.T) {
 	</head><body></body></html>`)
 	res := &crawler.Result{Pages: []*crawler.Page{p}}
 	issues := pagination.New().Analyze(context.Background(), res)
-	var detected *analyze.Issue
-	for i := range issues {
-		if issues[i].Code == "pagination-detected" {
-			detected = &issues[i]
+	var detected analyze.Issue
+	found := false
+	for _, is := range issues {
+		if is.Code == "pagination-detected" {
+			detected = is
+			found = true
 		}
 	}
-	if detected == nil {
+	if !found {
 		t.Fatal("expected pagination-detected issue")
 	}
 	if detected.Data["next"] != "https://example.com/page/2" {

@@ -25,11 +25,14 @@ func newRobotsManager(fetcher Fetcher, userAgent string) *robotsManager {
 	}
 }
 
-// get returns the (cached) robots.txt data for the host of u, fetching it if necessary.
+// get returns the (cached) robots.txt data for u, fetching it if necessary. The cache key
+// includes the scheme: a host can serve a different robots.txt on http vs. https (e.g. a site
+// that should only be crawled over https and deliberately disallows everything on http), so
+// caching by host alone would incorrectly apply one scheme's rules to the other.
 func (m *robotsManager) get(ctx context.Context, u *url.URL) *RobotsData {
-	host := u.Host
+	key := u.Scheme + "://" + u.Host
 	m.mu.Lock()
-	if d, ok := m.cache[host]; ok {
+	if d, ok := m.cache[key]; ok {
 		m.mu.Unlock()
 		return d
 	}
@@ -38,7 +41,7 @@ func (m *robotsManager) get(ctx context.Context, u *url.URL) *RobotsData {
 	data := m.fetch(ctx, u)
 
 	m.mu.Lock()
-	m.cache[host] = data
+	m.cache[key] = data
 	m.mu.Unlock()
 	return data
 }

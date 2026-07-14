@@ -167,6 +167,11 @@ type Coverage struct {
 	// PageLimitReached / DepthLimitReached record which configured limit cut the crawl short.
 	PageLimitReached  bool `json:"page_limit_reached,omitempty"`
 	DepthLimitReached bool `json:"depth_limit_reached,omitempty"`
+	// Interrupted is true when the crawl's context was canceled before it finished on its own
+	// (e.g. an operator's Ctrl-C) rather than a configured limit being reached. The site may
+	// be far less covered than DiscoveredNotCrawled reflects, since much of it may never have
+	// been discovered at all.
+	Interrupted bool `json:"interrupted,omitempty"`
 	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
 	MaxPages int `json:"max_pages,omitempty"`
 	MaxDepth int `json:"max_depth,omitempty"`

@@ -140,6 +140,19 @@ func TestEngineWiresAllowRedirectOnHTTPFetcher(t *testing.T) {
 	}
 }
 
+// TestEngineRobotsUsesRotationPoolUserAgent guards against a real bug: robots.txt checks used
+// opts.UserAgent even when a UserAgents rotation pool superseded it for actual requests, so
+// the crawl could test the wrong identity against a per-agent robots.txt rule.
+func TestEngineRobotsUsesRotationPoolUserAgent(t *testing.T) {
+	opts := DefaultOptions()
+	opts.UserAgent = "gocrawl-default"
+	opts.UserAgents = []string{"BotA", "BotB"}
+	e := New(opts, NewHTTPFetcher(opts))
+	if e.robots.userAgent != "BotA" {
+		t.Errorf("robots.userAgent = %q, want %q (first entry of the rotation pool)", e.robots.userAgent, "BotA")
+	}
+}
+
 func TestExtractLinksHonorsBaseHref(t *testing.T) {
 	links := extractLinksFromHTML(t, "https://example.com/dir/page",
 		`<html><head><base href="https://other.example/sub/"></head>
@@ -376,6 +389,36 @@ func TestEngineCoveragePartialOnDepthLimit(t *testing.T) {
 	}
 	if _, ok := result.Page(ts.URL + "/b"); ok {
 		t.Error("/b should not have been crawled at MaxDepth 1")
+	}
+}
+
+// TestEngineCanceledContextReturnsPartialResultNotError guards against a real bug: an
+// interrupted crawl (e.g. an operator's Ctrl-C canceling the context) used to return
+// ctx.Err() alongside the partial Result, and the caller (runner.Run) discarded the whole
+// result on any non-nil error — losing everything that had already been crawled. A canceled
+// context must now be reported honestly via Coverage.Interrupted instead of as an error.
+func TestEngineCanceledContextReturnsPartialResultNotError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled before the crawl starts
+
+	opts := DefaultOptions()
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(ctx, ts.URL)
+	if err != nil {
+		t.Fatalf("expected no error on a canceled context, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected a non-nil result even when interrupted")
+		return
+	}
+	if !result.Coverage.Interrupted {
+		t.Error("expected Coverage.Interrupted to be true")
+	}
+	if result.Coverage.Complete {
+		t.Error("expected Coverage.Complete to be false when interrupted")
 	}
 }
 

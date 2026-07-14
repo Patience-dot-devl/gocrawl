@@ -78,8 +78,8 @@ func TestCloudflareInterstitial(t *testing.T) {
 	html := `<html><head><title>Just a moment...</title></head><body>
 		<script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script></body></html>`
 	issues := analyzePage(mkPage(t, html, withStatus(403)))
-	is := find(issues, "botwall-challenge")
-	if is == nil {
+	is, ok := find(issues, "botwall-challenge")
+	if !ok {
 		t.Fatalf("expected bot-challenge, got %+v", issues)
 	}
 	if is.Data["provider"] != "Cloudflare" {
@@ -140,8 +140,8 @@ func TestCloudflareViaResponseHeader(t *testing.T) {
 func TestUnknownChallengeOnBlockingStatus(t *testing.T) {
 	// No known vendor, but a challenge-style title on a 429 → flagged as Unknown.
 	html := `<html><head><title>Checking your browser before access</title></head><body>x</body></html>`
-	is := find(analyzePage(mkPage(t, html, withStatus(429))), "botwall-challenge")
-	if is == nil {
+	is, ok := find(analyzePage(mkPage(t, html, withStatus(429))), "botwall-challenge")
+	if !ok {
 		t.Fatal("expected an Unknown bot-challenge on a blocking status")
 	}
 	if is.Data["provider"] != "Unknown" {
@@ -149,11 +149,11 @@ func TestUnknownChallengeOnBlockingStatus(t *testing.T) {
 	}
 }
 
-func find(issues []analyze.Issue, code string) *analyze.Issue {
-	for i := range issues {
-		if issues[i].Code == code {
-			return &issues[i]
+func find(issues []analyze.Issue, code string) (analyze.Issue, bool) {
+	for _, is := range issues {
+		if is.Code == code {
+			return is, true
 		}
 	}
-	return nil
+	return analyze.Issue{}, false
 }

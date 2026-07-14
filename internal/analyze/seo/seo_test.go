@@ -98,6 +98,40 @@ func TestSEOEmptyHeading(t *testing.T) {
 	}
 }
 
+// TestSEOLogoInHeadingNotEmpty guards against a false positive: an <h1> whose only content is
+// a logo image is a common, valid pattern — the image's alt text is the heading's effective
+// text — and must not be flagged as empty.
+func TestSEOLogoInHeadingNotEmpty(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>Logo Heading Test</title></head>
+		<body><h1><img src="/logo.png" alt="Acme Corp"></h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	if codes(seo.New().Analyze(context.Background(), res))["seo-empty-heading"] {
+		t.Error("did not expect seo-empty-heading for a logo image with alt text")
+	}
+}
+
+// TestSEOAriaLabelHeadingNotEmpty guards against the same false positive via aria-label
+// instead of an image alt.
+func TestSEOAriaLabelHeadingNotEmpty(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>Aria Label Heading Test</title></head>
+		<body><h1 aria-label="Acme Corp"><svg></svg></h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	if codes(seo.New().Analyze(context.Background(), res))["seo-empty-heading"] {
+		t.Error("did not expect seo-empty-heading for a heading with aria-label")
+	}
+}
+
+// TestSEOImageWithoutAltStillEmpty ensures the fix doesn't over-correct: an image with no
+// (or empty) alt text provides no accessible name, so the heading is still genuinely empty.
+func TestSEOImageWithoutAltStillEmpty(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>No Alt Heading Test</title></head>
+		<body><h1><img src="/logo.png"></h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	if !codes(seo.New().Analyze(context.Background(), res))["seo-empty-heading"] {
+		t.Error("expected seo-empty-heading for an image with no alt text")
+	}
+}
+
 func TestSEOXRobotsAndMetaRefresh(t *testing.T) {
 	p := htmlPage(t, `<html><head><title>Header Robots And Refresh</title>
 		<meta http-equiv="refresh" content="3;url=/elsewhere"></head><body><h1>x</h1></body></html>`)
