@@ -11,6 +11,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 func wantBasicAuthHeader(user, pass string) string {
@@ -351,5 +354,82 @@ func TestFetchDoesNotFlagBodyExactlyAtCap(t *testing.T) {
 	}
 	if len(page.Body) != 50 {
 		t.Errorf("got %d body bytes, want 50", len(page.Body))
+	}
+}
+
+// windows1252 encodes s (assumed to contain only characters representable in windows-1252)
+// into its windows-1252 byte form, for building non-UTF-8 test fixtures.
+func windows1252(t *testing.T, s string) []byte {
+	t.Helper()
+	b, err := charmap.Windows1252.NewEncoder().Bytes([]byte(s))
+	if err != nil {
+		t.Fatalf("encoding %q as windows-1252: %v", s, err)
+	}
+	return b
+}
+
+// TestFetchDecodesWindows1252ToUTF8 guards against a real correctness bug: without charset
+// detection, a non-UTF-8 page (declared via its Content-Type header, here) was parsed as if
+// it were UTF-8, corrupting every high-byte character into mojibake for every analyzer that
+// reads Body or Doc.Text().
+func TestFetchDecodesWindows1252ToUTF8(t *testing.T) {
+	const title = "Café Müller"
+	html := "<html><head><title>" + title + "</title></head><body>" + title + "</body></html>"
+	body := windows1252(t, html)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=windows-1252")
+		_, _ = w.Write(body)
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:       &http.Client{},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+	}
+	page, err := f.Fetch(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !utf8.Valid(page.Body) {
+		t.Error("page.Body is not valid UTF-8")
+	}
+	if !strings.Contains(string(page.Body), title) {
+		t.Errorf("page.Body doesn't contain the decoded title %q: %q", title, page.Body)
+	}
+	if page.Doc == nil {
+		t.Fatal("expected a parsed Doc")
+	}
+	if got := strings.TrimSpace(page.Doc.Find("title").Text()); got != title {
+		t.Errorf("parsed title = %q, want %q (mojibake if this fails)", got, title)
+	}
+}
+
+// TestFetchLeavesDeclaredUTF8Unchanged confirms the fix doesn't corrupt the common case: HTML
+// already served as UTF-8 (declared or merely valid) must pass through byte-for-byte.
+func TestFetchLeavesDeclaredUTF8Unchanged(t *testing.T) {
+	const title = "Café Müller" // valid UTF-8, no charset declared in the Content-Type header
+	html := "<html><head><title>" + title + "</title></head><body>" + title + "</body></html>"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, html)
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:       &http.Client{},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+	}
+	page, err := f.Fetch(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if string(page.Body) != html {
+		t.Errorf("page.Body = %q, want unchanged %q", page.Body, html)
 	}
 }

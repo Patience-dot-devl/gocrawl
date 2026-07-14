@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html/charset"
 )
 
 // HTTPFetcher fetches pages over HTTP(S). It follows redirects manually so the full
@@ -170,15 +172,20 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 		page.FinalURL = current
 		page.Header = resp.Header
 		page.ContentType = resp.Header.Get("Content-Type")
-		page.Body = body
 		page.Truncated = truncated
 		page.Duration = time.Since(start)
 
 		if isHTMLContentType(page.ContentType) {
+			// Decode to UTF-8 before anything else sees the body: without this, a page
+			// served in e.g. Windows-1252 or Shift_JIS is parsed as if it were UTF-8,
+			// corrupting every multi-byte/high-byte character into mojibake for every
+			// analyzer that reads Body or Doc.Text().
+			body = decodeToUTF8(body, page.ContentType)
 			if doc, derr := goquery.NewDocumentFromReader(strings.NewReader(string(body))); derr == nil {
 				page.Doc = doc
 			}
 		}
+		page.Body = body
 		return page, nil
 	}
 
@@ -186,6 +193,23 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 	page.Err = "too many redirects"
 	page.Duration = time.Since(start)
 	return page, nil
+}
+
+// decodeToUTF8 detects body's encoding — from the Content-Type header's charset param, a BOM,
+// or a sniffed <meta charset>/<meta http-equiv> declaration, falling back to a UTF-8-validity
+// check and then windows-1252 per the HTML5 spec — and transcodes it to UTF-8. Already-UTF-8
+// content (declared or merely valid) passes through unchanged. If transcoding fails for any
+// reason, the original bytes are returned rather than dropping the page.
+func decodeToUTF8(body []byte, contentType string) []byte {
+	r, err := charset.NewReader(bytes.NewReader(body), contentType)
+	if err != nil {
+		return body
+	}
+	decoded, err := io.ReadAll(r)
+	if err != nil || len(decoded) == 0 {
+		return body
+	}
+	return decoded
 }
 
 func resolveLocation(base, loc string) (string, bool) {
