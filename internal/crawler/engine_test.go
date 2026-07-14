@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -510,6 +511,40 @@ func TestRetryAfterSeconds(t *testing.T) {
 	}
 	if got := retryAfterSeconds(nil); got != 0 {
 		t.Errorf("retryAfterSeconds(nil)=%v, want 0", got)
+	}
+}
+
+// TestRetryAfterSecondsCapsExtremeValues guards against a real denial-of-service surface: an
+// uncapped Retry-After let a malicious or misconfigured server (e.g. "Retry-After: 86400")
+// stall the entire crawl for as long as it asked, with no overall deadline to recover.
+func TestRetryAfterSecondsCapsExtremeValues(t *testing.T) {
+	h := http.Header{}
+	h.Set("Retry-After", "86400") // 24 hours
+	if got, want := retryAfterSeconds(h), maxRetryAfter.Seconds(); got != want {
+		t.Errorf("retryAfterSeconds(86400s) = %v, want capped at %v", got, want)
+	}
+
+	future := time.Now().Add(24 * time.Hour).UTC().Format(http.TimeFormat)
+	h.Set("Retry-After", future)
+	if got, want := retryAfterSeconds(h), maxRetryAfter.Seconds(); got > want {
+		t.Errorf("retryAfterSeconds(HTTP-date 24h out) = %v, want capped at %v", got, want)
+	}
+}
+
+// TestThrottleAfter429NeverBelowCappedRetryRate ensures the cap actually reaches the rate
+// limiter: throttleAfter429 must not honor an extreme Retry-After by setting a rate slower
+// than 1/maxRetryAfter.
+func TestThrottleAfter429NeverBelowCappedRetryRate(t *testing.T) {
+	opts := DefaultOptions()
+	opts.AdaptiveDelay = true
+	e := New(opts, NewHTTPFetcher(opts))
+	page := &Page{RequestedURL: "https://example.com/", StatusCode: 429, Header: http.Header{
+		"Retry-After": []string{"86400"},
+	}}
+	e.throttleAfter429(page)
+	minAllowedRate := 1.0 / maxRetryAfter.Seconds()
+	if e.curRate < minAllowedRate {
+		t.Errorf("curRate = %v, want >= %v (capped Retry-After)", e.curRate, minAllowedRate)
 	}
 }
 
