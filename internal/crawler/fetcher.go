@@ -21,6 +21,14 @@ type HTTPFetcher struct {
 	maxRedirects  int
 	basicAuthUser string
 	basicAuthPass string
+
+	// allowRedirect, when set, gates each redirect hop against crawl scope, exclude rules,
+	// and robots.txt — the same check applied to a URL before it's ever enqueued. Without
+	// it, a redirect can hop to any host or path (a relevant SSRF surface when gocrawl runs
+	// as an MCP server) and the target is fetched and analyzed as an ordinary page. Set by
+	// Engine.New for the raw fetcher it drives; left nil (unrestricted) for one-off fetchers
+	// such as the robots.txt fetcher, which has no crawl scope to check against.
+	allowRedirect func(ctx context.Context, u *url.URL) bool
 }
 
 // NewHTTPFetcher builds a fetcher from the given options. When opts.Proxies is non-empty the
@@ -97,11 +105,13 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			req.Header.Set("User-Agent", ua)
 		}
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		// Only sent to the host and scheme we were asked to fetch, never carried across a
-		// redirect to a different host or downgraded to plain HTTP, so credentials for the
-		// crawled site can't leak to a redirect target on another domain or over the wire in
-		// cleartext.
-		if f.basicAuthUser != "" && req.URL.Hostname() == origHost && req.URL.Scheme == origScheme {
+		// Only sent to the host we were asked to fetch, and never downgraded to plain HTTP
+		// once escalated to HTTPS, so credentials for the crawled site can't leak to a
+		// redirect target on another domain or over the wire in cleartext. An http seed that
+		// redirects to https on the same host (an extremely common pattern) is allowed to
+		// carry auth forward, since that's a scheme upgrade, not a downgrade.
+		schemeOK := req.URL.Scheme == origScheme || (origScheme == "http" && req.URL.Scheme == "https")
+		if f.basicAuthUser != "" && req.URL.Hostname() == origHost && schemeOK {
 			req.SetBasicAuth(f.basicAuthUser, f.basicAuthPass)
 		}
 
@@ -129,19 +139,39 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 				return page, nil
 			}
 			page.Redirects = append(page.Redirects, Redirect{From: current, To: next, Status: resp.StatusCode})
+			if f.allowRedirect != nil {
+				nu, perr := url.Parse(next)
+				if perr != nil || !f.allowRedirect(ctx, nu) {
+					page.FinalURL = current
+					page.Err = fmt.Sprintf("redirect to %q blocked by crawl scope, exclude rules, or robots.txt", next)
+					page.Duration = time.Since(start)
+					return page, nil
+				}
+			}
 			current = next
 			continue
 		}
 
-		// Final (non-redirect) response.
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, f.maxBody))
+		// Final (non-redirect) response. Read one byte past the cap so a response that's
+		// exactly maxBody long isn't mistaken for a truncated one: only exceeding the cap
+		// means real content was cut off. A read error partway through the body is the same
+		// class of problem — Body is incomplete either way — so it's flagged the same way
+		// rather than silently discarded.
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, f.maxBody+1))
 		_ = resp.Body.Close()
+
+		truncated := readErr != nil
+		if int64(len(body)) > f.maxBody {
+			body = body[:f.maxBody]
+			truncated = true
+		}
 
 		page.StatusCode = resp.StatusCode
 		page.FinalURL = current
 		page.Header = resp.Header
 		page.ContentType = resp.Header.Get("Content-Type")
 		page.Body = body
+		page.Truncated = truncated
 		page.Duration = time.Since(start)
 
 		if isHTMLContentType(page.ContentType) {

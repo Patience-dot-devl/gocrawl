@@ -3,6 +3,7 @@ package crawler
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +25,12 @@ const (
 	backoffStartRate = 1.0             // req/s to drop to when the crawl was previously unrestricted
 	backoffMinRate   = 0.1             // floor: one request every 10s
 	backoffDebounce  = 2 * time.Second // ignore repeat triggers within this window
+	// maxRetryAfter bounds how long a server-supplied Retry-After is honored for. A
+	// misconfigured or hostile server can send an enormous value (e.g. Retry-After: 86400)
+	// which would otherwise stall the entire crawl for as long as it asks, with no overall
+	// deadline to recover; five minutes is generous headroom for a genuine rate-limit window
+	// while still bounding the worst case.
+	maxRetryAfter = 5 * time.Minute
 )
 
 // Engine crawls a website concurrently within the configured scope.
@@ -52,13 +59,21 @@ func New(opts Options, fetcher Fetcher) *Engine {
 	if opts.RatePerSecond > 0 {
 		limit = rate.Limit(opts.RatePerSecond)
 	}
-	return &Engine{
+	e := &Engine{
 		opts:     opts,
 		fetcher:  fetcher,
 		robots:   newRobotsManager(NewHTTPFetcher(opts), opts.UserAgent),
 		limiter:  rate.NewLimiter(limit, 1),
 		baseRate: opts.RatePerSecond,
 	}
+	// Gate every redirect hop the raw fetcher follows against the same scope/exclude/robots
+	// check applied before a URL is ever enqueued, so a redirect can't escape crawl scope
+	// mid-fetch. Only applies to the manual-hop HTTPFetcher; headless rendering follows
+	// redirects inside the browser and isn't covered by this check.
+	if hf, ok := fetcher.(*HTTPFetcher); ok {
+		hf.allowRedirect = e.crawlable
+	}
+	return e
 }
 
 // logf writes a crawl progress line to stderr when verbose logging is enabled.
@@ -170,11 +185,29 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			page.Referrer = t.referrer
 			page.Links = e.extractLinks(page)
 
+			var finalNorm string
+			if page.FinalURL != "" {
+				finalNorm = normalizeURL(page.FinalURL, e.opts.StripQuery)
+			}
+
 			mu.Lock()
+			if finalNorm != "" && result.index[finalNorm] != nil {
+				// A concurrent fetch already recorded this exact final URL — e.g. two
+				// links discovered on the same page, one a redirect and one pointing
+				// directly at the redirect's destination, enqueued before either fetch
+				// completed. Drop this duplicate rather than double-reporting every
+				// per-page analyzer issue for the same content.
+				mu.Unlock()
+				return
+			}
 			result.Pages = append(result.Pages, page)
 			result.index[normalizeURL(page.RequestedURL, e.opts.StripQuery)] = page
-			if page.FinalURL != "" {
-				result.index[normalizeURL(page.FinalURL, e.opts.StripQuery)] = page
+			if finalNorm != "" {
+				result.index[finalNorm] = page
+				// Mark the redirect's destination visited too, so a separate link pointing
+				// directly at it doesn't trigger a second fetch (and duplicate per-page
+				// issues) for content already covered by this page.
+				visited[finalNorm] = true
 			}
 			mu.Unlock()
 
@@ -286,7 +319,9 @@ func (e *Engine) throttleAfter429(page *Page) {
 }
 
 // retryAfterSeconds parses a Retry-After header, supporting both the delay-seconds and
-// HTTP-date forms. It returns 0 when the header is absent, unparseable, or in the past.
+// HTTP-date forms. It returns 0 when the header is absent, unparseable, or in the past, and
+// clamps the result to maxRetryAfter so an extreme server-supplied value can't stall the crawl
+// indefinitely.
 func retryAfterSeconds(h http.Header) float64 {
 	if h == nil {
 		return 0
@@ -299,11 +334,11 @@ func retryAfterSeconds(h http.Header) float64 {
 		if secs < 0 {
 			return 0
 		}
-		return float64(secs)
+		return math.Min(float64(secs), maxRetryAfter.Seconds())
 	}
 	if t, err := http.ParseTime(v); err == nil {
 		if d := time.Until(t).Seconds(); d > 0 {
-			return d
+			return math.Min(d, maxRetryAfter.Seconds())
 		}
 	}
 	return 0

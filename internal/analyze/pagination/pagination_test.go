@@ -91,3 +91,32 @@ func TestPaginationBroken(t *testing.T) {
 		t.Error("expected pagination-broken when the rel=next target returns 404")
 	}
 }
+
+// TestPaginationResolvesRelativeHref guards against a real bug: a relative rel=next/prev href
+// was passed straight to result.Page (an exact-match lookup), so it never matched the crawled
+// page's absolute URL and a genuinely broken relative link went unreported.
+func TestPaginationResolvesRelativeHref(t *testing.T) {
+	p1 := mkPage(t, "https://example.com/page/1", 200,
+		`<html><head><link rel="next" href="/page/2"></head><body></body></html>`)
+	p2 := mkPage(t, "https://example.com/page/2", 404, `<html><head></head><body></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p1, p2}}
+	res.Reindex()
+	if !codes(pagination.New().Analyze(context.Background(), res))["pagination-broken"] {
+		t.Error("expected pagination-broken for a relative href resolving to a 404 target")
+	}
+}
+
+// TestPaginationTrailingSlashRedirectNotBroken guards against a false positive: a rel=next
+// target reached via its canonical trailing-slash form is not a genuinely broken link.
+func TestPaginationTrailingSlashRedirectNotBroken(t *testing.T) {
+	p1 := mkPage(t, "https://example.com/page/1", 200,
+		`<html><head><link rel="next" href="https://example.com/page/2/"></head><body></body></html>`)
+	p2 := mkPage(t, "https://example.com/page/2/", 200, `<html><head></head><body></body></html>`)
+	p2.RequestedURL = "https://example.com/page/2"
+	p2.Redirects = []crawler.Redirect{{From: "https://example.com/page/2", To: "https://example.com/page/2/", Status: 301}}
+	res := &crawler.Result{Pages: []*crawler.Page{p1, p2}}
+	res.Reindex()
+	if codes(pagination.New().Analyze(context.Background(), res))["pagination-broken"] {
+		t.Error("a trailing-slash-only redirect should not be flagged pagination-broken")
+	}
+}

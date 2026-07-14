@@ -8,9 +8,88 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+// TestEngineDoesNotDoubleReportRedirectTarget guards against a real bug: a redirect's
+// destination was never marked visited, so a separate direct link to that same URL produced a
+// second *Page entry for identical content, and every per-page analyzer would report its
+// issues twice. Both links here are discovered on the same page and enqueued back-to-back, so
+// the redirect ("/old") and the direct link ("/new") are always in flight concurrently — this
+// is the race the fix can't eliminate (both requests reach the server), but it must still
+// collapse to exactly one recorded page.
+func TestEngineDoesNotDoubleReportRedirectTarget(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body>
+			<a href="/old">Old link</a>
+			<a href="/new">Direct link</a>
+		</body></html>`)
+	})
+	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/new", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/new", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>New Page</title></head><body>ok</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.MaxDepth = 1
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+
+	newPages := 0
+	for _, p := range result.Pages {
+		if p.FinalURL == ts.URL+"/new" {
+			newPages++
+		}
+	}
+	if newPages != 1 {
+		t.Errorf("result.Pages has %d entries for /new, want 1 (duplicate content would double-report every analyzer issue)", newPages)
+	}
+}
+
+// TestEngineSkipsSequentialDuplicateFetch is the non-racing case the fix fully closes: the
+// redirect resolves (and its destination is marked visited) before a separate page's link to
+// that same destination is ever discovered, so the second fetch never even starts.
+func TestEngineSkipsSequentialDuplicateFetch(t *testing.T) {
+	var newHits int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body><a href="/old">Old link</a></body></html>`)
+	})
+	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/new", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/new", func(w http.ResponseWriter, _ *http.Request) {
+		newHits++
+		fmt.Fprint(w, `<html><head><title>New Page</title></head><body><a href="/also-links-here">Another</a></body></html>`)
+	})
+	mux.HandleFunc("/also-links-here", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Also Links Here</title></head><body><a href="/new">Direct link, discovered later</a></body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.MaxDepth = 3    // deep enough that the direct /new link (discovered 2 hops later) is still enqueued
+	opts.Concurrency = 1 // force strictly sequential fetches so the race can't occur
+	engine := New(opts, NewHTTPFetcher(opts))
+	if _, err := engine.Crawl(context.Background(), ts.URL); err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+
+	if newHits != 1 {
+		t.Errorf("/new was fetched %d times, want 1", newHits)
+	}
+}
 
 func extractLinksFromHTML(t *testing.T, finalURL, html string) []Link {
 	t.Helper()
@@ -27,6 +106,38 @@ func extractLinksFromHTML(t *testing.T, finalURL, html string) []Link {
 	}
 	e.seedHost = u.Host
 	return e.extractLinks(page)
+}
+
+// TestEngineWiresAllowRedirectOnHTTPFetcher guards against a real SSRF/scope-escape surface:
+// New must wire the HTTPFetcher's allowRedirect to the engine's own scope check, so a redirect
+// mid-fetch is gated exactly like an ordinary link, rather than escaping scope unchecked (a
+// relevant concern when gocrawl runs as an MCP server). RespectRobots is disabled here so the
+// in-scope case doesn't perform a real network fetch of robots.txt; the robots half of the
+// check is covered separately by TestRobotsManagerFetch and TestFetchBlocksRedirectRejectedByAllowRedirect.
+func TestEngineWiresAllowRedirectOnHTTPFetcher(t *testing.T) {
+	opts := DefaultOptions()
+	opts.RespectRobots = false
+	hf := NewHTTPFetcher(opts)
+	e := New(opts, hf)
+	if hf.allowRedirect == nil {
+		t.Fatal("expected Engine.New to wire allowRedirect onto the HTTPFetcher")
+	}
+	e.seedHost = "example.com"
+
+	inScope, err := url.Parse("https://example.com/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outOfScope, err := url.Parse("https://evil.example/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hf.allowRedirect(context.Background(), inScope) {
+		t.Error("expected an in-scope redirect target to be allowed")
+	}
+	if hf.allowRedirect(context.Background(), outOfScope) {
+		t.Error("expected an out-of-scope redirect target to be blocked")
+	}
 }
 
 func TestExtractLinksHonorsBaseHref(t *testing.T) {
@@ -400,6 +511,40 @@ func TestRetryAfterSeconds(t *testing.T) {
 	}
 	if got := retryAfterSeconds(nil); got != 0 {
 		t.Errorf("retryAfterSeconds(nil)=%v, want 0", got)
+	}
+}
+
+// TestRetryAfterSecondsCapsExtremeValues guards against a real denial-of-service surface: an
+// uncapped Retry-After let a malicious or misconfigured server (e.g. "Retry-After: 86400")
+// stall the entire crawl for as long as it asked, with no overall deadline to recover.
+func TestRetryAfterSecondsCapsExtremeValues(t *testing.T) {
+	h := http.Header{}
+	h.Set("Retry-After", "86400") // 24 hours
+	if got, want := retryAfterSeconds(h), maxRetryAfter.Seconds(); got != want {
+		t.Errorf("retryAfterSeconds(86400s) = %v, want capped at %v", got, want)
+	}
+
+	future := time.Now().Add(24 * time.Hour).UTC().Format(http.TimeFormat)
+	h.Set("Retry-After", future)
+	if got, want := retryAfterSeconds(h), maxRetryAfter.Seconds(); got > want {
+		t.Errorf("retryAfterSeconds(HTTP-date 24h out) = %v, want capped at %v", got, want)
+	}
+}
+
+// TestThrottleAfter429NeverBelowCappedRetryRate ensures the cap actually reaches the rate
+// limiter: throttleAfter429 must not honor an extreme Retry-After by setting a rate slower
+// than 1/maxRetryAfter.
+func TestThrottleAfter429NeverBelowCappedRetryRate(t *testing.T) {
+	opts := DefaultOptions()
+	opts.AdaptiveDelay = true
+	e := New(opts, NewHTTPFetcher(opts))
+	page := &Page{RequestedURL: "https://example.com/", StatusCode: 429, Header: http.Header{
+		"Retry-After": []string{"86400"},
+	}}
+	e.throttleAfter429(page)
+	minAllowedRate := 1.0 / maxRetryAfter.Seconds()
+	if e.curRate < minAllowedRate {
+		t.Errorf("curRate = %v, want >= %v (capped Retry-After)", e.curRate, minAllowedRate)
 	}
 }
 

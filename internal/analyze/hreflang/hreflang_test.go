@@ -55,6 +55,24 @@ func TestHreflangValidCodes(t *testing.T) {
 	}
 }
 
+// TestHreflangValidCodesRealWorldVariants guards against a real false-positive bug: a
+// hand-rolled regex (^[a-z]{2}(-[A-Z]{2})?$) rejected several legitimate real-world hreflang
+// values seen in production sites.
+func TestHreflangValidCodesRealWorldVariants(t *testing.T) {
+	for _, code := range []string{"es-419", "zh-Hant", "zh-Hans", "en-us", "fil"} {
+		t.Run(code, func(t *testing.T) {
+			p := htmlPage(t, `<html><head>
+				<link rel="alternate" hreflang="`+code+`" href="https://example.com/x">
+				<link rel="alternate" hreflang="x-default" href="https://example.com/">
+			</head><body></body></html>`)
+			res := &crawler.Result{Pages: []*crawler.Page{p}}
+			if got := codes(hreflang.New().Analyze(context.Background(), res)); got["hreflang-invalid-code"] {
+				t.Errorf("hreflang=%q incorrectly flagged as hreflang-invalid-code", code)
+			}
+		})
+	}
+}
+
 func TestHreflangMissingXDefault(t *testing.T) {
 	p := htmlPage(t, `<html><head>
 		<link rel="alternate" hreflang="en" href="https://example.com/en">

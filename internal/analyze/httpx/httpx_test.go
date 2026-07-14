@@ -3,10 +3,89 @@ package httpx
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/PuerkitoBio/goquery"
 )
+
+func htmlPage(t *testing.T, html string) *crawler.Page {
+	t.Helper()
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	return &crawler.Page{FinalURL: "https://example.com/", StatusCode: 200, ContentType: "text/html", Doc: doc}
+}
+
+func hasCode(issues []analyze.Issue, code string) bool {
+	for _, iss := range issues {
+		if iss.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func TestMixedContentDetectsRealSubresources(t *testing.T) {
+	tags := []string{
+		`<img src="http://insecure.example/x.png">`,
+		`<script src="http://insecure.example/x.js"></script>`,
+		`<iframe src="http://insecure.example/embed"></iframe>`,
+		`<video src="http://insecure.example/v.mp4"></video>`,
+		`<audio src="http://insecure.example/a.mp3"></audio>`,
+		`<video><source src="http://insecure.example/v2.mp4"></video>`,
+		`<embed src="http://insecure.example/e.swf">`,
+		`<object data="http://insecure.example/o.swf"></object>`,
+		`<input type="image" src="http://insecure.example/i.png">`,
+		`<link rel="stylesheet" href="http://insecure.example/s.css">`,
+	}
+	for _, tag := range tags {
+		t.Run(tag, func(t *testing.T) {
+			p := htmlPage(t, `<html><head></head><body>`+tag+`</body></html>`)
+			result := &crawler.Result{Pages: []*crawler.Page{p}}
+			if !hasCode(New().Analyze(context.Background(), result), "http-mixed-content") {
+				t.Errorf("expected http-mixed-content for %s", tag)
+			}
+		})
+	}
+}
+
+func TestMixedContentIgnoresNonLoadingLinkRels(t *testing.T) {
+	tags := []string{
+		`<link rel="alternate" type="application/rss+xml" href="http://insecure.example/feed.xml">`,
+		`<link rel="canonical" href="http://insecure.example/canonical">`,
+		`<link rel="amphtml" href="http://insecure.example/amp">`,
+		`<link rel="dns-prefetch" href="http://insecure.example/">`,
+		`<link rel="next" href="http://insecure.example/page/2">`,
+	}
+	for _, tag := range tags {
+		t.Run(tag, func(t *testing.T) {
+			p := htmlPage(t, `<html><head>`+tag+`</head><body></body></html>`)
+			result := &crawler.Result{Pages: []*crawler.Page{p}}
+			if hasCode(New().Analyze(context.Background(), result), "http-mixed-content") {
+				t.Errorf("did not expect http-mixed-content for %s", tag)
+			}
+		})
+	}
+}
+
+func TestTruncatedBodyReported(t *testing.T) {
+	result := &crawler.Result{Pages: []*crawler.Page{
+		{RequestedURL: "https://example.com/big", StatusCode: 200, Truncated: true},
+	}}
+	gotTruncated := false
+	for _, iss := range New().Analyze(context.Background(), result) {
+		if iss.Code == "http-body-truncated" {
+			gotTruncated = true
+		}
+	}
+	if !gotTruncated {
+		t.Error("expected http-body-truncated for a page with Truncated=true")
+	}
+}
 
 func TestClientErrorReportsReferrer(t *testing.T) {
 	result := &crawler.Result{Pages: []*crawler.Page{

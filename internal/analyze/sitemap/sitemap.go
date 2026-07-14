@@ -3,8 +3,11 @@
 package sitemap
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/xml"
+	"io"
 	"net/url"
 	"strings"
 
@@ -45,8 +48,9 @@ type sitemapindex struct {
 // parsed counts candidates that successfully parsed as an urlset or index (0 means nothing
 // usable was found at any candidate); invalidDeclared lists declared candidates whose response
 // parsed as neither (a guessed path that fails to parse is almost always a soft-404 and isn't
-// reported).
-func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]bool) (urls map[string]bool, parsed int, invalidDeclared []string) {
+// reported); truncatedDeclared lists declared candidates whose body was cut short by the
+// fetcher's size cap before it could be parsed, so they aren't misreported as invalid.
+func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]bool) (urls map[string]bool, parsed int, invalidDeclared, truncatedDeclared []string) {
 	urls = map[string]bool{}
 	visited := map[string]bool{}
 
@@ -61,9 +65,22 @@ func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]b
 		if ferr != nil || page == nil || page.StatusCode != 200 || len(page.Body) == 0 {
 			return
 		}
+		if page.Truncated {
+			if declared {
+				truncatedDeclared = append(truncatedDeclared, smURL)
+			}
+			return
+		}
+		body, gzErr := maybeGunzip(smURL, page)
+		if gzErr != nil {
+			if declared {
+				invalidDeclared = append(invalidDeclared, smURL)
+			}
+			return
+		}
 
 		var idx sitemapindex
-		if xml.Unmarshal(page.Body, &idx) == nil && len(idx.Sitemaps) > 0 {
+		if xml.Unmarshal(body, &idx) == nil && len(idx.Sitemaps) > 0 {
 			parsed++
 			for _, s := range idx.Sitemaps {
 				if loc := strings.TrimSpace(s.Loc); loc != "" {
@@ -74,7 +91,7 @@ func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]b
 			return
 		}
 		var us urlset
-		if xml.Unmarshal(page.Body, &us) == nil {
+		if xml.Unmarshal(body, &us) == nil {
 			parsed++
 			for _, u := range us.URLs {
 				if loc := strings.TrimSpace(u.Loc); loc != "" {
@@ -94,7 +111,23 @@ func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]b
 	for c, declared := range candidates {
 		fetchOne(c, 0, declared)
 	}
-	return urls, parsed, invalidDeclared
+	return urls, parsed, invalidDeclared, truncatedDeclared
+}
+
+// maybeGunzip decompresses page.Body when smURL or the response's Content-Type indicates a
+// gzip-compressed sitemap (e.g. sitemap.xml.gz), otherwise it returns the body unchanged.
+func maybeGunzip(smURL string, page *crawler.Page) ([]byte, error) {
+	isGzip := strings.HasSuffix(strings.ToLower(smURL), ".gz") ||
+		strings.Contains(strings.ToLower(page.ContentType), "gzip")
+	if !isGzip {
+		return page.Body, nil
+	}
+	r, err := gzip.NewReader(bytes.NewReader(page.Body))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+	return io.ReadAll(r)
 }
 
 func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze.Issue {
@@ -122,19 +155,27 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 		}
 	}
 
-	sitemapURLs, parsed, invalidDeclared := Fetch(ctx, a.fetcher, candidates)
+	sitemapURLs, parsed, invalidDeclared, truncatedDeclared := Fetch(ctx, a.fetcher, candidates)
 	for _, u := range invalidDeclared {
 		issues = append(issues, analyze.Issue{
 			Analyzer: "sitemap", URL: u, Severity: analyze.Warning,
 			Code: "sitemap-invalid", Message: "Could not parse sitemap as urlset or index",
 		})
 	}
+	for _, u := range truncatedDeclared {
+		issues = append(issues, analyze.Issue{
+			Analyzer: "sitemap", URL: u, Severity: analyze.Warning,
+			Code: "sitemap-truncated", Message: "Sitemap exceeds the crawler's fetch size limit and was cut off before it could be parsed",
+		})
+	}
 
 	if parsed == 0 {
-		issues = append(issues, analyze.Issue{
-			Analyzer: "sitemap", URL: base, Severity: analyze.Warning,
-			Code: "sitemap-missing", Message: "No sitemap found at robots.txt or conventional locations",
-		})
+		if len(truncatedDeclared) == 0 {
+			issues = append(issues, analyze.Issue{
+				Analyzer: "sitemap", URL: base, Severity: analyze.Warning,
+				Code: "sitemap-missing", Message: "No sitemap found at robots.txt or conventional locations",
+			})
+		}
 		return issues
 	}
 

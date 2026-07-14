@@ -82,3 +82,49 @@ func TestToOptionsRejectsBasicAuthWithoutColon(t *testing.T) {
 		t.Fatal("expected an error for basic_auth missing a colon, got nil")
 	}
 }
+
+// TestLoadPicksUpEnvVarsForEveryField guards against a real gap: viper's AutomaticEnv only
+// resolves a GOCRAWL_* env var for a key already registered via SetDefault (it doesn't add
+// unbound keys to AllKeys()), so any Config field missing from setDefaults had its env var
+// silently ignored — e.g. GOCRAWL_CRAWL_BASIC_AUTH would run the crawl unauthenticated with no
+// error. This checks a representative field of each previously-unregistered kind: a string,
+// a bool, and a string slice (which also exercises viper's comma-split decode hook).
+func TestLoadPicksUpEnvVarsForEveryField(t *testing.T) {
+	t.Setenv("GOCRAWL_CRAWL_BASIC_AUTH", "alice:s3cret")
+	t.Setenv("GOCRAWL_CRAWL_ALLOW_SUBDOMAINS", "true")
+	t.Setenv("GOCRAWL_CRAWL_INCLUDE", "/blog,/docs")
+	t.Setenv("GOCRAWL_ANALYZERS_SPECIALIZED", "true")
+	t.Setenv("GOCRAWL_OUTPUT_PATH", "/tmp/report.json")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Crawl.BasicAuth != "alice:s3cret" {
+		t.Errorf("Crawl.BasicAuth = %q, want alice:s3cret", cfg.Crawl.BasicAuth)
+	}
+	if !cfg.Crawl.AllowSubdomains {
+		t.Error("Crawl.AllowSubdomains = false, want true")
+	}
+	if want := []string{"/blog", "/docs"}; !equalSlices(cfg.Crawl.Include, want) {
+		t.Errorf("Crawl.Include = %v, want %v", cfg.Crawl.Include, want)
+	}
+	if !cfg.Analyzers.Specialized {
+		t.Error("Analyzers.Specialized = false, want true")
+	}
+	if cfg.Output.Path != "/tmp/report.json" {
+		t.Errorf("Output.Path = %q, want /tmp/report.json", cfg.Output.Path)
+	}
+}
+
+func equalSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
