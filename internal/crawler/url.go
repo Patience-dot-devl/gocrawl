@@ -34,6 +34,11 @@ func canonicalURL(raw string, stripQuery, trimSlash bool) string {
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
+	// Credentials should never survive normalization: they're routed through
+	// Options.BasicAuthUser/Pass at seed intake (see SanitizeSeed), and any that arrive by
+	// another path (e.g. a redirect Location header) must not round-trip into the URL index
+	// or reports.
+	u.User = nil
 	if stripQuery {
 		u.RawQuery = ""
 		u.ForceQuery = false

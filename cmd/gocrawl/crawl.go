@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 	"github.com/Patience-dot-devl/gocrawl/internal/store"
@@ -71,6 +72,11 @@ func runCrawl(cmd *cobra.Command, args []string) error {
 	}
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
+	}
+	var user, pass string
+	seed, user, pass = crawler.SanitizeSeed(seed)
+	if user != "" && cfg.Crawl.BasicAuth == "" {
+		cfg.Crawl.BasicAuth = user + ":" + pass
 	}
 
 	rep, err := runner.Run(context.Background(), cfg, seed)
