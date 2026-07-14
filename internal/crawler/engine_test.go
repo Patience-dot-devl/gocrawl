@@ -412,6 +412,7 @@ func TestEngineCanceledContextReturnsPartialResultNotError(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected a non-nil result even when interrupted")
+		return
 	}
 	if !result.Coverage.Interrupted {
 		t.Error("expected Coverage.Interrupted to be true")

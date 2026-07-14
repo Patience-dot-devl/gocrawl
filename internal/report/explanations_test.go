@@ -39,6 +39,7 @@ func TestExplainKnownCode(t *testing.T) {
 	got := explain("seo-missing-title")
 	if got == nil {
 		t.Fatal("explain(missing-title) = nil, want explanation")
+		return
 	}
 	if got.Fix == "" {
 		t.Error("expected a non-empty Fix for missing-title")
