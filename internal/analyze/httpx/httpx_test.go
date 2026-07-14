@@ -8,6 +8,21 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
+func TestTruncatedBodyReported(t *testing.T) {
+	result := &crawler.Result{Pages: []*crawler.Page{
+		{RequestedURL: "https://example.com/big", StatusCode: 200, Truncated: true},
+	}}
+	gotTruncated := false
+	for _, iss := range New().Analyze(context.Background(), result) {
+		if iss.Code == "http-body-truncated" {
+			gotTruncated = true
+		}
+	}
+	if !gotTruncated {
+		t.Error("expected http-body-truncated for a page with Truncated=true")
+	}
+}
+
 func TestClientErrorReportsReferrer(t *testing.T) {
 	result := &crawler.Result{Pages: []*crawler.Page{
 		{RequestedURL: "https://example.com/missing", StatusCode: 404, Referrer: "https://example.com/blog"},

@@ -300,3 +300,56 @@ func TestFetchAllowsRedirectWhenAllowRedirectNil(t *testing.T) {
 		t.Errorf("unexpected page.Err: %q", page.Err)
 	}
 }
+
+// TestFetchFlagsTruncatedBody guards against a real correctness bug: a body cut off at the
+// fetcher's size cap was silently treated as a complete page, so downstream analyzers (e.g.
+// "missing title") could misreport content that was simply never read.
+func TestFetchFlagsTruncatedBody(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, strings.Repeat("x", 100))
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:       &http.Client{},
+		ua:           NewUAPool(Options{}),
+		maxBody:      50,
+		maxRedirects: 5,
+	}
+	page, err := f.Fetch(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !page.Truncated {
+		t.Error("expected Truncated=true for a body over the cap")
+	}
+	if len(page.Body) != 50 {
+		t.Errorf("got %d body bytes, want exactly the 50-byte cap", len(page.Body))
+	}
+}
+
+// TestFetchDoesNotFlagBodyExactlyAtCap ensures a response that happens to be exactly maxBody
+// long — not actually truncated — isn't mistaken for one.
+func TestFetchDoesNotFlagBodyExactlyAtCap(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, strings.Repeat("x", 50))
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:       &http.Client{},
+		ua:           NewUAPool(Options{}),
+		maxBody:      50,
+		maxRedirects: 5,
+	}
+	page, err := f.Fetch(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if page.Truncated {
+		t.Error("a response exactly at the cap should not be flagged Truncated")
+	}
+	if len(page.Body) != 50 {
+		t.Errorf("got %d body bytes, want 50", len(page.Body))
+	}
+}

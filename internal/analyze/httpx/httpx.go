@@ -88,6 +88,10 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		add(analyze.Error, "http-client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
 	}
 
+	if p.Truncated {
+		add(analyze.Warning, "http-body-truncated", "Page body was truncated before it could be fully read (hit the fetch size limit, or the connection failed partway through)", nil)
+	}
+
 	// Slow response.
 	if a.SlowThreshold > 0 && p.Duration > a.SlowThreshold {
 		add(analyze.Warning, "http-slow-response", "Response slower than threshold", map[string]any{"duration_ms": p.Duration.Milliseconds()})

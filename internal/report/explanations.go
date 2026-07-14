@@ -437,6 +437,11 @@ var explanations = map[string]Explanation{
 		Impact: "Browsers may block the resources or warn users, breaking functionality and eroding trust.",
 		Fix:    "Update all subresource URLs (scripts, images, styles, iframes) to https://.",
 	},
+	"http-body-truncated": {
+		What:   "The page body was cut short — either it exceeded the crawler's fetch size limit, or the connection failed partway through the read.",
+		Impact: "Other findings on this page (missing title/H1, invalid structured data, broken markup) may be false positives caused by content past the cutoff never being seen, not an actual issue with the page.",
+		Fix:    "If the page is legitimately large, raise crawl.max_body_bytes in the config (or GOCRAWL_CRAWL_MAX_BODY_BYTES) and re-crawl. If it's not expected to be large, investigate why the response was cut off (a slow/unstable connection, or a server bug producing an unbounded response).",
+	},
 
 	// --- images ---
 	"img-missing-alt": {
@@ -769,6 +774,11 @@ var explanations = map[string]Explanation{
 		What:   "No sitemap was found at the robots.txt declaration or conventional locations.",
 		Impact: "Search engines must rely solely on link discovery, which can miss pages.",
 		Fix:    "Publish a sitemap.xml and reference it from robots.txt.",
+	},
+	"sitemap-truncated": {
+		What:   "A declared sitemap is larger than the crawler's fetch size limit, so it was cut off before it could be parsed.",
+		Impact: "The sitemap's URLs weren't read at all, so the coverage cross-check is incomplete or skipped — this is not the same as an invalid/malformed sitemap.",
+		Fix:    "Raise crawl.max_body_bytes (or GOCRAWL_CRAWL_MAX_BODY_BYTES) enough to cover the sitemap and re-crawl, or split the sitemap into smaller files per the sitemaps.org 50MB/50,000-URL limits.",
 	},
 	"sitemap-coverage": {
 		What:   "A comparison of sitemap URLs against crawled pages (gaps in both directions).",

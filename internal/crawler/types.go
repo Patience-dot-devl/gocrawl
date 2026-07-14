@@ -94,6 +94,12 @@ type Page struct {
 	FetchedAt    time.Time         `json:"fetched_at"`
 	Err          string            `json:"error,omitempty"`
 	Render       *RenderResult     `json:"render,omitempty"`
+	// Truncated reports whether Body was cut short of the real response — either because it
+	// hit the fetcher's body-size cap or because the connection failed partway through the
+	// read. A truncated body may be missing elements (e.g. </head>, the closing tag of a
+	// sitemap) that a downstream analyzer would otherwise expect to find, so treat findings
+	// like "missing title" or "invalid sitemap" on a truncated page with that in mind.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // IsHTML reports whether the page body was parsed as an HTML document.

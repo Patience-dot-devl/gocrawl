@@ -152,15 +152,26 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			continue
 		}
 
-		// Final (non-redirect) response.
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, f.maxBody))
+		// Final (non-redirect) response. Read one byte past the cap so a response that's
+		// exactly maxBody long isn't mistaken for a truncated one: only exceeding the cap
+		// means real content was cut off. A read error partway through the body is the same
+		// class of problem — Body is incomplete either way — so it's flagged the same way
+		// rather than silently discarded.
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, f.maxBody+1))
 		_ = resp.Body.Close()
+
+		truncated := readErr != nil
+		if int64(len(body)) > f.maxBody {
+			body = body[:f.maxBody]
+			truncated = true
+		}
 
 		page.StatusCode = resp.StatusCode
 		page.FinalURL = current
 		page.Header = resp.Header
 		page.ContentType = resp.Header.Get("Content-Type")
 		page.Body = body
+		page.Truncated = truncated
 		page.Duration = time.Since(start)
 
 		if isHTMLContentType(page.ContentType) {
