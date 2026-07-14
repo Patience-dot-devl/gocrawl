@@ -101,4 +101,13 @@ func TestCoverageNote(t *testing.T) {
 	if strings.Contains(i, "--max-pages") || strings.Contains(i, "--depth") {
 		t.Errorf("interrupted note shouldn't mention a limit flag: %s", i)
 	}
+	// Duration limit (--max-duration) → distinct message, takes priority over the generic
+	// Interrupted wording even though DurationLimitReached implies Interrupted.
+	d := coverageNote(crawler.Coverage{Interrupted: true, DurationLimitReached: true})
+	if !strings.Contains(d, "--max-duration") {
+		t.Errorf("duration-limit note missing --max-duration: %s", d)
+	}
+	if strings.Contains(d, "Ctrl-C") {
+		t.Errorf("duration-limit note shouldn't use the generic Ctrl-C wording: %s", d)
+	}
 }

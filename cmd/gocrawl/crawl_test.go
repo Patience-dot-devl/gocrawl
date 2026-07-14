@@ -118,3 +118,59 @@ func TestCrawlExplicitBasicAuthWinsOverSeedCredentials(t *testing.T) {
 		t.Errorf("expected the explicit --basic-auth credentials to authenticate the crawl, pages_crawled=%d", rep.PagesCrawled)
 	}
 }
+
+// TestCrawlMaxDurationStopsEarly guards against the --max-duration flag never reaching the
+// crawl: a home page linking to a page that hangs past the budget must still produce a report,
+// labeled as partial coverage, rather than hanging or erroring.
+func TestCrawlMaxDurationStopsEarly(t *testing.T) {
+	release := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body><a href="/slow">slow</a></body></html>`)
+	})
+	mux.HandleFunc("/slow", func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+		fmt.Fprint(w, `<html><body>too late</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer func() {
+		close(release)
+		ts.Close()
+	}()
+
+	out := filepath.Join(t.TempDir(), "report.json")
+	cmd := newCrawlCmd()
+	for flag, value := range map[string]string{
+		"format":       "json",
+		"out":          out,
+		"max-duration": "50ms",
+	} {
+		if err := cmd.Flags().Set(flag, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd.SetContext(context.Background())
+	if err := runCrawl(cmd, []string{ts.URL}); err != nil {
+		t.Fatalf("runCrawl: %v", err)
+	}
+
+	var rep struct {
+		Coverage struct {
+			Complete             bool `json:"complete"`
+			DurationLimitReached bool `json:"duration_limit_reached"`
+		} `json:"coverage"`
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("reading report: %v", err)
+	}
+	if err := json.Unmarshal(data, &rep); err != nil {
+		t.Fatalf("unmarshal report: %v", err)
+	}
+	if !rep.Coverage.DurationLimitReached {
+		t.Error("expected coverage.duration_limit_reached = true")
+	}
+	if rep.Coverage.Complete {
+		t.Error("expected coverage.complete = false")
+	}
+}

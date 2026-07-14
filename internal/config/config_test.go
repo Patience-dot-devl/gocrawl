@@ -2,9 +2,22 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
+
+func TestToOptionsMapsMaxDuration(t *testing.T) {
+	c := Default()
+	c.Crawl.MaxDuration = 90 * time.Minute
+	o, err := c.ToOptions()
+	if err != nil {
+		t.Fatalf("ToOptions: %v", err)
+	}
+	if o.MaxDuration != 90*time.Minute {
+		t.Errorf("MaxDuration = %v, want 90m", o.MaxDuration)
+	}
+}
 
 func TestToOptionsParsesProxiesAndPrependsSingle(t *testing.T) {
 	c := Default()
@@ -95,10 +108,14 @@ func TestLoadPicksUpEnvVarsForEveryField(t *testing.T) {
 	t.Setenv("GOCRAWL_CRAWL_INCLUDE", "/blog,/docs")
 	t.Setenv("GOCRAWL_ANALYZERS_SPECIALIZED", "true")
 	t.Setenv("GOCRAWL_OUTPUT_PATH", "/tmp/report.json")
+	t.Setenv("GOCRAWL_CRAWL_MAX_DURATION", "90m")
 
 	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Crawl.MaxDuration != 90*time.Minute {
+		t.Errorf("Crawl.MaxDuration = %v, want 90m", cfg.Crawl.MaxDuration)
 	}
 	if cfg.Crawl.BasicAuth != "alice:s3cret" {
 		t.Errorf("Crawl.BasicAuth = %q, want alice:s3cret", cfg.Crawl.BasicAuth)

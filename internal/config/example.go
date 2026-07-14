@@ -28,6 +28,8 @@ crawl:
   adaptive_delay: true  # slow down automatically on HTTP 429/503 responses
   user_agent: "gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)"
   timeout: "15s"        # per-request timeout
+  max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
+                        # crawl stops early and still writes a partial report
   max_body_bytes: 5242880  # 5 MiB cap on a single response body
   respect_robots: true  # obey robots.txt while crawling
   allow_subdomains: false  # follow links to subdomains of the seed host

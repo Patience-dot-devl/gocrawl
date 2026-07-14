@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -95,6 +96,12 @@ type task struct {
 
 // Crawl walks the site starting at seed and returns the collected Result.
 func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
+	if e.opts.MaxDuration > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.opts.MaxDuration)
+		defer cancel()
+	}
+
 	seed = normalizeURL(seed, e.opts.StripQuery)
 	su, err := url.Parse(seed)
 	if err != nil {
@@ -106,8 +113,12 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	if e.opts.RatePerSecond > 0 {
 		rateDesc = fmt.Sprintf("%.3g req/s", e.opts.RatePerSecond)
 	}
-	e.logf("starting crawl of %s (depth=%d, max-pages=%d, concurrency=%d, rate=%s, adaptive-delay=%t)",
-		seed, e.opts.MaxDepth, e.opts.MaxPages, e.opts.Concurrency, rateDesc, e.opts.AdaptiveDelay)
+	durationDesc := "unlimited"
+	if e.opts.MaxDuration > 0 {
+		durationDesc = e.opts.MaxDuration.String()
+	}
+	e.logf("starting crawl of %s (depth=%d, max-pages=%d, concurrency=%d, rate=%s, max-duration=%s, adaptive-delay=%t)",
+		seed, e.opts.MaxDepth, e.opts.MaxPages, e.opts.Concurrency, rateDesc, durationDesc, e.opts.AdaptiveDelay)
 
 	result := &Result{
 		Seed:      seed,
@@ -258,12 +269,16 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		}
 	}
 	interrupted := ctx.Err() != nil
+	// A deadline (--max-duration) and an external cancellation (e.g. Ctrl-C) both stop the
+	// crawl via the same context-cancellation path, but are worth reporting distinctly.
+	durationLimitReached := errors.Is(ctx.Err(), context.DeadlineExceeded)
 	result.Coverage = Coverage{
 		Complete:             uncrawled == 0 && !interrupted,
 		DiscoveredNotCrawled: uncrawled,
 		PageLimitReached:     pageLimitReached && uncrawled > 0,
 		DepthLimitReached:    depthLimitReached && uncrawled > 0,
 		Interrupted:          interrupted,
+		DurationLimitReached: durationLimitReached,
 		MaxPages:             e.opts.MaxPages,
 		MaxDepth:             e.opts.MaxDepth,
 	}

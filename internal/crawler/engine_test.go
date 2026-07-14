@@ -422,6 +422,50 @@ func TestEngineCanceledContextReturnsPartialResultNotError(t *testing.T) {
 	}
 }
 
+// TestEngineMaxDurationStopsCrawlEarly guards against the wall-clock budget doing nothing: a
+// crawl whose home page links to a slow page must stop once MaxDuration elapses, returning a
+// partial result (not an error) with Coverage.DurationLimitReached set.
+func TestEngineMaxDurationStopsCrawlEarly(t *testing.T) {
+	release := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body><a href="/slow">slow</a></body></html>`)
+	})
+	mux.HandleFunc("/slow", func(w http.ResponseWriter, _ *http.Request) {
+		<-release // never released during the test; simulates a hang past the budget
+		fmt.Fprint(w, `<html><body>too late</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer func() {
+		close(release)
+		ts.Close()
+	}()
+
+	opts := DefaultOptions()
+	opts.MaxDuration = 50 * time.Millisecond
+	engine := New(opts, NewHTTPFetcher(opts))
+
+	start := time.Now()
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected no error when the duration budget elapses, got: %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("crawl took %v, expected it to stop shortly after the 50ms budget", elapsed)
+	}
+	if !result.Coverage.DurationLimitReached {
+		t.Error("expected Coverage.DurationLimitReached to be true")
+	}
+	if !result.Coverage.Interrupted {
+		t.Error("expected Coverage.Interrupted to also be true (DurationLimitReached implies it)")
+	}
+	if result.Coverage.Complete {
+		t.Error("expected Coverage.Complete to be false")
+	}
+}
+
 func countItemsPages(result *Result) int {
 	n := 0
 	for _, p := range result.Pages {
