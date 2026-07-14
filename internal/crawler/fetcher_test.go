@@ -167,3 +167,52 @@ func TestFetchDropsBasicAuthOnSchemeDowngrade(t *testing.T) {
 		t.Errorf("http Authorization = %q, want empty (credentials leaked on scheme downgrade)", plainAuth)
 	}
 }
+
+// TestFetchKeepsBasicAuthOnSchemeUpgrade guards against a real usability bug: a same-host
+// redirect from http to https (an extremely common pattern — e.g. a plain http seed that gets
+// force-redirected to https) must still carry the Authorization header onto the encrypted
+// request, since that's a scheme upgrade rather than a downgrade.
+func TestFetchKeepsBasicAuthOnSchemeUpgrade(t *testing.T) {
+	var plainAuth, secureAuth string
+	transport := stubRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Scheme == "http" {
+			plainAuth = req.Header.Get("Authorization")
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Header:     http.Header{"Location": []string{"https://plain.invalid/asset"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+			}, nil
+		}
+		secureAuth = req.Header.Get("Authorization")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+
+	f := &HTTPFetcher{
+		client: &http.Client{
+			Transport:     transport,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		ua:            NewUAPool(Options{}),
+		maxBody:       1 << 20,
+		maxRedirects:  5,
+		basicAuthUser: "alice",
+		basicAuthPass: "s3cret",
+	}
+	page, err := f.Fetch(context.Background(), "http://plain.invalid/")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if len(page.Redirects) != 1 {
+		t.Fatalf("got %d redirects, want 1 (fetch didn't reach the upgraded target)", len(page.Redirects))
+	}
+	if want := wantBasicAuthHeader("alice", "s3cret"); plainAuth != want {
+		t.Errorf("http Authorization = %q, want %q", plainAuth, want)
+	}
+	if want := wantBasicAuthHeader("alice", "s3cret"); secureAuth != want {
+		t.Errorf("https Authorization = %q, want %q (credentials should survive a same-host scheme upgrade)", secureAuth, want)
+	}
+}
