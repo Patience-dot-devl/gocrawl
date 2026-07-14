@@ -103,6 +103,46 @@ func TestHeadlessFetchCapturesCWV(t *testing.T) {
 	}
 }
 
+// TestHeadlessFetchCapturesRedirects guards against a data race on navState.redirects: the
+// field is read into the returned Page outside the mutex that the chromedp event-listener
+// goroutine uses to append to it. Run with -race to catch a regression.
+func TestHeadlessFetchCapturesRedirects(t *testing.T) {
+	if !hasBrowser() {
+		t.Skip("no Chromium-class browser available on PATH")
+	}
+
+	const finalHTML = `<!doctype html><html><head><title>final</title></head><body>ok</body></html>`
+	mux := http.NewServeMux()
+	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/final", http.StatusFound)
+	})
+	mux.HandleFunc("/final", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(finalHTML))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	opts := crawler.DefaultOptions()
+	opts.Timeout = 30 * time.Second
+	f, err := NewHeadlessFetcher(opts)
+	if err != nil {
+		t.Skipf("could not launch headless browser: %v", err)
+	}
+	defer f.Close()
+
+	page, err := f.Fetch(context.Background(), srv.URL+"/start")
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if len(page.Redirects) == 0 {
+		t.Fatal("expected the redirect hop to be captured")
+	}
+	if page.FinalURL != srv.URL+"/final" {
+		t.Errorf("FinalURL = %q, want %q", page.FinalURL, srv.URL+"/final")
+	}
+}
+
 func TestUnderRendered(t *testing.T) {
 	cases := []struct {
 		name          string
