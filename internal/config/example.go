@@ -16,12 +16,12 @@ const ExampleYAML = `# gocrawl configuration file
 # Seed URL to start from (the positional CLI argument overrides this).
 seed: "https://example.com"
 
-# Rendering mode: "raw" (HTTP fetch, fast) or "headless" (chromedp — currently stubbed,
-# falls back to raw and annotates pages that rendering is not yet active).
+# Rendering mode: "raw" (HTTP fetch, fast) or "headless" (chromedp — renders JS and captures
+# Core Web Vitals; needs a Chromium browser installed).
 render: "raw"
 
 crawl:
-  max_depth: 2          # link hops from the seed (0 = only the seed page)
+  max_depth: 2          # link hops from the seed (0 = unlimited; bounded by max_pages instead)
   max_pages: 500        # hard cap on the number of pages crawled
   concurrency: 4        # number of parallel fetch workers
   rate_per_second: 0    # max requests/second across the crawl (0 = unlimited)
@@ -41,14 +41,15 @@ crawl:
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
 
 output:
-  format: "json"        # "json" or "csv"
+  format: "json"        # "json", "csv", or "html"
   path: ""              # file to write to; empty = stdout
 
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those
   # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf,
-  # images, urls, security, pagination, hreflang, amp, duplicates, content, wordpress,
-  # the SEA analyzers utm, tracking, landing, and the AI-search analyzers aeo, geo.
+  # images, urls, security, pagination, hreflang, amp, duplicates, content, botwall,
+  # wordpress, the SEA analyzers utm, tracking, datalayer, landing, and the AI-search
+  # analyzers aeo, geo.
   enabled: []
   disabled: []
   # Turn on the opt-in specialized checks (off by default): the AI-search heuristics and
