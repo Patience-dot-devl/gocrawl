@@ -212,22 +212,28 @@ open report.html
 
 ## Re-rendering a saved report
 
-`gocrawl render <report.json>` reads a JSON report you saved earlier and writes it out in
-another format — **without recrawling**. This is the fast way to regenerate an HTML report
-after upgrading gocrawl (e.g. to pick up template improvements), or to produce CSV/HTML from a
-JSON you already have:
+`gocrawl render <ref>` reads a JSON report you saved earlier and writes it out in another
+format — **without recrawling**. This is the fast way to regenerate an HTML report after
+upgrading gocrawl (e.g. to pick up template improvements), or to produce CSV/HTML from a JSON
+you already have. `<ref>` accepts anything `gocrawl compare` does: a path to a JSON report, a
+stored crawl ID (`host/timestamp` from `gocrawl history`), the word `latest`, or a bare host
+name (that site's newest saved crawl):
 
 ```sh
 gocrawl crawl  https://example.com --format json --out report.json   # crawl once
 gocrawl render report.json --out report.html                         # re-render any time, no recrawl
 gocrawl render report.json --format csv --out issues.csv             # or to CSV
 gocrawl render report.json --out report.html --sitemap sitemap.xml   # also (re)emit sitemap.xml
+
+gocrawl crawl https://example.com --save                             # or save straight to the store
+gocrawl render latest --out report.html                              # and render by ID/"latest"/host
 ```
 
 Flags mirror `crawl`'s output flags: `--out`/`-o` (default stdout), `--format`/`-f` (default
-`html`), and `--sitemap`. Because the JSON report carries the [`site_map`](#json-schema) tree,
-the HTML **Site map** tab is reproduced too. Only the page bodies aren't stored (see below),
-so re-rendering can't run new analyzers — for that, recrawl.
+`html`), and `--sitemap`; `--store-dir` selects a non-default store when resolving a crawl ID.
+Because the JSON report carries the [`site_map`](#json-schema) tree, the HTML **Site map** tab
+is reproduced too. Only the page bodies aren't stored (see below), so re-rendering can't run
+new analyzers — for that, recrawl.
 
 ## What is (and isn't) in the report
 
