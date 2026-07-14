@@ -5,9 +5,103 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
 )
+
+func extractLinksFromHTML(t *testing.T, finalURL, html string) []Link {
+	t.Helper()
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	page := &Page{FinalURL: finalURL, Doc: doc}
+	opts := DefaultOptions()
+	e := New(opts, NewHTTPFetcher(opts))
+	u, err := url.Parse(finalURL)
+	if err != nil {
+		t.Fatalf("parse finalURL: %v", err)
+	}
+	e.seedHost = u.Host
+	return e.extractLinks(page)
+}
+
+func TestExtractLinksHonorsBaseHref(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base href="https://other.example/sub/"></head>
+		<body><a href="page2">Page 2</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://other.example/sub/page2"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+	if !links[0].External {
+		t.Error("expected link resolved via a cross-host <base> to be flagged External")
+	}
+}
+
+func TestExtractLinksRelativeBaseHref(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base href="/newroot/"></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/newroot/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksOnlyFirstBaseCounts(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/",
+		`<html><head><base href="/first/"><base href="/second/"></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/first/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q (only the first <base> should count)", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksBaseWithoutHrefIsSkipped(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base target="_blank"></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/dir/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksEmptyBaseHrefFallsBack(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base href=""></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/dir/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksNoBaseUnchanged(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head></head><body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/dir/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
 
 func newTestServer() *httptest.Server {
 	mux := http.NewServeMux()
