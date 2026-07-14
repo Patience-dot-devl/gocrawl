@@ -123,7 +123,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	doc.Find("h1, h2, h3, h4, h5, h6").Each(func(_ int, s *goquery.Selection) {
 		level := int(s.Get(0).Data[1] - '0')
 		text := strings.TrimSpace(s.Text())
-		if text == "" {
+		if text == "" && !headingHasAccessibleText(s) {
 			add(analyze.Warning, "seo-empty-heading", "Heading element has no text content", map[string]any{"tag": s.Get(0).Data})
 		}
 		if prevLevel > 0 && level > prevLevel+1 {
@@ -157,6 +157,25 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	}
 
 	return issues
+}
+
+// headingHasAccessibleText reports whether a heading with no visible text still conveys a
+// name via an accessible-name source: an aria-label on the heading itself, or the alt text of
+// an image inside it — the common "logo wrapped in <h1>" pattern, where the visible content is
+// an image but the heading's effective text is the image's alt attribute.
+func headingHasAccessibleText(s *goquery.Selection) bool {
+	if label, ok := s.Attr("aria-label"); ok && strings.TrimSpace(label) != "" {
+		return true
+	}
+	hasAlt := false
+	s.Find("img[alt]").EachWithBreak(func(_ int, img *goquery.Selection) bool {
+		if alt, ok := img.Attr("alt"); ok && strings.TrimSpace(alt) != "" {
+			hasAlt = true
+			return false
+		}
+		return true
+	})
+	return hasAlt
 }
 
 func metaContent(doc *goquery.Document, attr, val string) (string, bool) {
