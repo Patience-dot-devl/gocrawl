@@ -103,6 +103,51 @@ func TestCSVReporter(t *testing.T) {
 	}
 }
 
+// TestCSVReporterEscapesFormulaInjection guards against CSV formula injection (CWE-1236): a
+// crawled value that starts with =, +, -, or @ would execute as a formula in Excel/Google
+// Sheets when the report CSV is opened (e.g. a page title of "=HYPERLINK(...)"). Every such
+// cell must be prefixed with a single quote so it displays as plain text instead.
+func TestCSVReporterEscapesFormulaInjection(t *testing.T) {
+	startedAt := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
+	result := &crawler.Result{StartedAt: startedAt, Finished: startedAt}
+	issues := []analyze.Issue{
+		{
+			Analyzer: "seo", URL: "=HYPERLINK(\"https://evil.example\",\"click\")",
+			Severity: analyze.Warning, Code: "seo-long-title",
+			Message: "+SUM(1+1)*cmd|' /C calc'!A0",
+			Data:    map[string]any{"title": "@SUM(1+1)"},
+		},
+	}
+	r := report.Build(result, issues)
+
+	var buf bytes.Buffer
+	if err := (report.CSVReporter{}).Write(&buf, r); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	rows, err := csv.NewReader(&buf).ReadAll()
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows: got %d want 2", len(rows))
+	}
+	row := rows[1]
+	for i, cell := range row {
+		if cell == "" {
+			continue
+		}
+		if strings.ContainsAny(string(cell[0]), "=+-@") {
+			t.Errorf("cell[%d] = %q starts with an unescaped formula-trigger character", i, cell)
+		}
+	}
+	if !strings.HasPrefix(row[3], "'=") {
+		t.Errorf("url cell = %q, want a leading '= (escaped)", row[3])
+	}
+	if !strings.HasPrefix(row[4], "'+") {
+		t.Errorf("message cell = %q, want a leading '+ (escaped)", row[4])
+	}
+}
+
 func TestHTMLReporter(t *testing.T) {
 	r := fixtureReport()
 	var buf bytes.Buffer
