@@ -49,22 +49,13 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		return data
 	}
 
-	if p.Err != "" {
-		add(analyze.Error, "http-fetch-error", "Failed to fetch page: "+p.Err, found(nil))
-		return issues
-	}
-
-	switch {
-	case p.StatusCode >= 500:
-		add(analyze.Error, "http-server-error", "Server error response", found(map[string]any{"status": p.StatusCode}))
-	case p.StatusCode >= 400:
-		add(analyze.Error, "http-client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
-	}
-
-	// Redirect chain and loops.
+	// Redirect chain and loops. Checked before the p.Err early return below: a genuine
+	// cycle exhausts the fetcher's hop budget and surfaces as page.Err == "too many
+	// redirects", so this is the only way http-redirect-loop is ever reachable for a real
+	// loop — the fetcher has no cycle detection of its own, it just runs out of hops.
+	loop := false
 	if n := len(p.Redirects); n > 0 {
 		seen := map[string]bool{normalize(p.RequestedURL): true}
-		loop := false
 		for _, r := range p.Redirects {
 			t := normalize(r.To)
 			if seen[t] {
@@ -81,6 +72,20 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		default:
 			add(analyze.Info, "http-redirect", "Page redirects", map[string]any{"to": p.FinalURL, "status": p.Redirects[0].Status})
 		}
+	}
+
+	if p.Err != "" {
+		if !loop {
+			add(analyze.Error, "http-fetch-error", "Failed to fetch page: "+p.Err, found(nil))
+		}
+		return issues
+	}
+
+	switch {
+	case p.StatusCode >= 500:
+		add(analyze.Error, "http-server-error", "Server error response", found(map[string]any{"status": p.StatusCode}))
+	case p.StatusCode >= 400:
+		add(analyze.Error, "http-client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
 	}
 
 	// Slow response.
