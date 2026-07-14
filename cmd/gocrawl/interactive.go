@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
 
@@ -190,6 +191,11 @@ func runInteractive(cmd *cobra.Command) error {
 	seed = strings.TrimSpace(seed)
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
+	}
+	var seedUser, seedPass string
+	seed, seedUser, seedPass = crawler.SanitizeSeed(seed)
+	if seedUser != "" && cfg.Crawl.BasicAuth == "" {
+		cfg.Crawl.BasicAuth = seedUser + ":" + seedPass
 	}
 
 	// Keep the machine awake for the duration of the crawl + report write when requested.

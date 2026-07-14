@@ -108,12 +108,21 @@ type RobotsData struct {
 	data     *robotstxt.RobotsData
 }
 
-// TestAgent reports whether the given path is allowed for userAgent.
+// TestAgent reports whether the given path is allowed for userAgent. Per RFC 9309, a 4xx
+// robots.txt response means no rules apply (allow all); an unreachable robots.txt (network
+// error or 5xx) means we can't know the site's intent, so crawling is disallowed until it's
+// reachable. A 200 response we simply couldn't parse degrades to allow-all.
 func (r *RobotsData) TestAgent(path, userAgent string) bool {
-	if r == nil || r.data == nil {
+	if r == nil {
 		return true
 	}
-	return r.data.TestAgent(path, userAgent)
+	if r.data != nil {
+		return r.data.TestAgent(path, userAgent)
+	}
+	if r.Status == 0 || r.Status >= 500 {
+		return false
+	}
+	return true
 }
 
 // Result is the complete output of a crawl, consumed by analyzers.

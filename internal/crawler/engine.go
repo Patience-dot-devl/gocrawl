@@ -357,6 +357,17 @@ func (e *Engine) extractLinks(page *Page) []Link {
 	if err != nil {
 		return nil
 	}
+	// <base href> overrides the document URL as the resolution base for relative links.
+	// Only the first base element with an href counts, matching HTML semantics; not scoped
+	// to <head> for parser leniency (a stray <base> outside <head> is still honored). A
+	// relative base href is itself resolved against the document URL.
+	if href, ok := page.Doc.Find("base[href]").First().Attr("href"); ok {
+		if href = strings.TrimSpace(href); href != "" {
+			if b, berr := url.Parse(href); berr == nil {
+				base = base.ResolveReference(b)
+			}
+		}
+	}
 	seen := make(map[string]bool)
 	var links []Link
 	page.Doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {

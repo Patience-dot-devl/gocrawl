@@ -273,12 +273,12 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		Duration:     time.Since(start),
 		Body:         []byte(htmlBody),
 		RawBody:      rawBody,
-		Redirects:    state.redirects,
 	}
 	state.mu.Lock()
 	p.FinalURL = state.current
 	p.StatusCode = state.status
 	p.Header = headersToHTTP(state.headers)
+	p.Redirects = append([]crawler.Redirect(nil), state.redirects...)
 	reqs := append([]string(nil), state.requests...)
 	state.mu.Unlock()
 	p.ContentType = p.Header.Get("Content-Type")
