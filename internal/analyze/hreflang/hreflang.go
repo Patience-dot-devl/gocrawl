@@ -4,12 +4,12 @@ package hreflang
 
 import (
 	"context"
-	"regexp"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/text/language"
 )
 
 // Analyzer validates hreflang annotations across pages.
@@ -29,7 +29,14 @@ type entry struct {
 	href string
 }
 
-var langCode = regexp.MustCompile(`^([a-z]{2}(-[A-Z]{2})?|x-default)$`)
+// isValidHreflang reports whether code is a well-formed BCP-47 language tag (which "x-default"
+// itself parses as, being a valid private-use subtag). A hand-rolled regex here previously
+// rejected legitimate real-world tags: UN M49 region codes (es-419), 4-letter script subtags
+// (zh-Hant), lowercase regions (en-us), and 3-letter macrolanguage codes (fil).
+func isValidHreflang(code string) bool {
+	_, err := language.Parse(code)
+	return err == nil
+}
 
 func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
 	// First pass: collect hreflang clusters keyed by page FinalURL.
@@ -58,7 +65,7 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		hasXDefault := false
 		hasSelf := false
 		for _, e := range cluster {
-			if !langCode.MatchString(e.lang) {
+			if !isValidHreflang(e.lang) {
 				add(analyze.Warning, "hreflang-invalid-code", "hreflang code is not a valid language tag", map[string]any{"code": e.lang})
 			}
 			if strings.EqualFold(e.lang, "x-default") {
