@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -214,5 +215,88 @@ func TestFetchKeepsBasicAuthOnSchemeUpgrade(t *testing.T) {
 	}
 	if want := wantBasicAuthHeader("alice", "s3cret"); secureAuth != want {
 		t.Errorf("https Authorization = %q, want %q (credentials should survive a same-host scheme upgrade)", secureAuth, want)
+	}
+}
+
+// TestFetchBlocksRedirectRejectedByAllowRedirect guards against a real SSRF/scope-escape
+// surface: without a scope check, a redirect can hop the fetcher to any host or path (e.g. an
+// internal/metadata endpoint reachable from an MCP server) and the target would be fetched and
+// analyzed as an ordinary page. When allowRedirect rejects a hop, the fetcher must stop
+// following it rather than fetch the target.
+func TestFetchBlocksRedirectRejectedByAllowRedirect(t *testing.T) {
+	var targetHit bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/blocked", http.StatusFound)
+	})
+	mux.HandleFunc("/blocked", func(w http.ResponseWriter, _ *http.Request) {
+		targetHit = true
+		fmt.Fprint(w, "should never be reached")
+	})
+	origin := httptest.NewServer(mux)
+	defer origin.Close()
+
+	f := &HTTPFetcher{
+		client: &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+		allowRedirect: func(_ context.Context, u *url.URL) bool {
+			return !strings.Contains(u.Path, "/blocked")
+		},
+	}
+	page, err := f.Fetch(context.Background(), origin.URL+"/")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if targetHit {
+		t.Error("blocked redirect target was fetched")
+	}
+	if page.Err == "" {
+		t.Error("expected page.Err to explain the blocked redirect")
+	}
+	if len(page.Redirects) != 1 {
+		t.Errorf("expected the blocked hop to still be recorded in Redirects, got %d", len(page.Redirects))
+	}
+}
+
+// TestFetchAllowsRedirectWhenAllowRedirectNil confirms the default (no scope check configured,
+// e.g. the one-off fetcher used for robots.txt) behaves exactly as before: redirects are
+// followed unconditionally.
+func TestFetchAllowsRedirectWhenAllowRedirectNil(t *testing.T) {
+	var targetHit bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/target", http.StatusFound)
+	})
+	mux.HandleFunc("/target", func(w http.ResponseWriter, _ *http.Request) {
+		targetHit = true
+		fmt.Fprint(w, "ok")
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client: &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+	}
+	page, err := f.Fetch(context.Background(), ts.URL+"/")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !targetHit {
+		t.Error("expected the redirect target to be fetched when no allowRedirect is set")
+	}
+	if len(page.Redirects) != 1 {
+		t.Errorf("got %d redirects, want 1", len(page.Redirects))
+	}
+	if page.Err != "" {
+		t.Errorf("unexpected page.Err: %q", page.Err)
 	}
 }

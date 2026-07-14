@@ -29,6 +29,38 @@ func extractLinksFromHTML(t *testing.T, finalURL, html string) []Link {
 	return e.extractLinks(page)
 }
 
+// TestEngineWiresAllowRedirectOnHTTPFetcher guards against a real SSRF/scope-escape surface:
+// New must wire the HTTPFetcher's allowRedirect to the engine's own scope check, so a redirect
+// mid-fetch is gated exactly like an ordinary link, rather than escaping scope unchecked (a
+// relevant concern when gocrawl runs as an MCP server). RespectRobots is disabled here so the
+// in-scope case doesn't perform a real network fetch of robots.txt; the robots half of the
+// check is covered separately by TestRobotsManagerFetch and TestFetchBlocksRedirectRejectedByAllowRedirect.
+func TestEngineWiresAllowRedirectOnHTTPFetcher(t *testing.T) {
+	opts := DefaultOptions()
+	opts.RespectRobots = false
+	hf := NewHTTPFetcher(opts)
+	e := New(opts, hf)
+	if hf.allowRedirect == nil {
+		t.Fatal("expected Engine.New to wire allowRedirect onto the HTTPFetcher")
+	}
+	e.seedHost = "example.com"
+
+	inScope, err := url.Parse("https://example.com/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outOfScope, err := url.Parse("https://evil.example/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hf.allowRedirect(context.Background(), inScope) {
+		t.Error("expected an in-scope redirect target to be allowed")
+	}
+	if hf.allowRedirect(context.Background(), outOfScope) {
+		t.Error("expected an out-of-scope redirect target to be blocked")
+	}
+}
+
 func TestExtractLinksHonorsBaseHref(t *testing.T) {
 	links := extractLinksFromHTML(t, "https://example.com/dir/page",
 		`<html><head><base href="https://other.example/sub/"></head>

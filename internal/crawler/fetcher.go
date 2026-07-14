@@ -21,6 +21,14 @@ type HTTPFetcher struct {
 	maxRedirects  int
 	basicAuthUser string
 	basicAuthPass string
+
+	// allowRedirect, when set, gates each redirect hop against crawl scope, exclude rules,
+	// and robots.txt — the same check applied to a URL before it's ever enqueued. Without
+	// it, a redirect can hop to any host or path (a relevant SSRF surface when gocrawl runs
+	// as an MCP server) and the target is fetched and analyzed as an ordinary page. Set by
+	// Engine.New for the raw fetcher it drives; left nil (unrestricted) for one-off fetchers
+	// such as the robots.txt fetcher, which has no crawl scope to check against.
+	allowRedirect func(ctx context.Context, u *url.URL) bool
 }
 
 // NewHTTPFetcher builds a fetcher from the given options. When opts.Proxies is non-empty the
@@ -131,6 +139,15 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 				return page, nil
 			}
 			page.Redirects = append(page.Redirects, Redirect{From: current, To: next, Status: resp.StatusCode})
+			if f.allowRedirect != nil {
+				nu, perr := url.Parse(next)
+				if perr != nil || !f.allowRedirect(ctx, nu) {
+					page.FinalURL = current
+					page.Err = fmt.Sprintf("redirect to %q blocked by crawl scope, exclude rules, or robots.txt", next)
+					page.Duration = time.Since(start)
+					return page, nil
+				}
+			}
 			current = next
 			continue
 		}

@@ -52,13 +52,21 @@ func New(opts Options, fetcher Fetcher) *Engine {
 	if opts.RatePerSecond > 0 {
 		limit = rate.Limit(opts.RatePerSecond)
 	}
-	return &Engine{
+	e := &Engine{
 		opts:     opts,
 		fetcher:  fetcher,
 		robots:   newRobotsManager(NewHTTPFetcher(opts), opts.UserAgent),
 		limiter:  rate.NewLimiter(limit, 1),
 		baseRate: opts.RatePerSecond,
 	}
+	// Gate every redirect hop the raw fetcher follows against the same scope/exclude/robots
+	// check applied before a URL is ever enqueued, so a redirect can't escape crawl scope
+	// mid-fetch. Only applies to the manual-hop HTTPFetcher; headless rendering follows
+	// redirects inside the browser and isn't covered by this check.
+	if hf, ok := fetcher.(*HTTPFetcher); ok {
+		hf.allowRedirect = e.crawlable
+	}
+	return e
 }
 
 // logf writes a crawl progress line to stderr when verbose logging is enabled.
