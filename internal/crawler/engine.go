@@ -60,9 +60,12 @@ func New(opts Options, fetcher Fetcher) *Engine {
 		limit = rate.Limit(opts.RatePerSecond)
 	}
 	e := &Engine{
-		opts:     opts,
-		fetcher:  fetcher,
-		robots:   newRobotsManager(NewHTTPFetcher(opts), opts.UserAgent),
+		opts:    opts,
+		fetcher: fetcher,
+		// NewUAPool(opts).Default() is the UA actually sent when UserAgents rotation is
+		// configured — opts.UserAgent alone would test robots.txt against an identity the
+		// crawler never sends once a pool supersedes it.
+		robots:   newRobotsManager(NewHTTPFetcher(opts), NewUAPool(opts).Default()),
 		limiter:  rate.NewLimiter(limit, 1),
 		baseRate: opts.RatePerSecond,
 	}

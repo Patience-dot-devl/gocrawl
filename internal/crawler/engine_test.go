@@ -140,6 +140,19 @@ func TestEngineWiresAllowRedirectOnHTTPFetcher(t *testing.T) {
 	}
 }
 
+// TestEngineRobotsUsesRotationPoolUserAgent guards against a real bug: robots.txt checks used
+// opts.UserAgent even when a UserAgents rotation pool superseded it for actual requests, so
+// the crawl could test the wrong identity against a per-agent robots.txt rule.
+func TestEngineRobotsUsesRotationPoolUserAgent(t *testing.T) {
+	opts := DefaultOptions()
+	opts.UserAgent = "gocrawl-default"
+	opts.UserAgents = []string{"BotA", "BotB"}
+	e := New(opts, NewHTTPFetcher(opts))
+	if e.robots.userAgent != "BotA" {
+		t.Errorf("robots.userAgent = %q, want %q (first entry of the rotation pool)", e.robots.userAgent, "BotA")
+	}
+}
+
 func TestExtractLinksHonorsBaseHref(t *testing.T) {
 	links := extractLinksFromHTML(t, "https://example.com/dir/page",
 		`<html><head><base href="https://other.example/sub/"></head>
