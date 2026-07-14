@@ -182,6 +182,31 @@ func (r *Result) Page(rawURL string) (*Page, bool) {
 	return p, ok
 }
 
+// ResolveHref resolves href relative to from's own URL (mirroring how the crawl engine
+// resolves an <a href> against a page's base — including an in-document <base href>, if any —
+// via extractLinks) and looks up the resulting page in the crawl result. It exists for
+// analyzers that read a raw href straight from the DOM (e.g. <link rel="amphtml"|"next"|"prev">)
+// rather than from the engine's own extracted Links, so a relative href is resolved the same
+// way an anchor link would be instead of failing the lookup outright. resolved is the
+// slash-preserving absolute form, suitable for LinkPointsToRedirect. ok is false for an
+// unusable href (empty, fragment-only, non-http(s) after resolution) or one with no match in
+// the crawl.
+func (r *Result) ResolveHref(from *Page, href string) (target *Page, resolved string, ok bool) {
+	if r.index == nil || from == nil {
+		return nil, "", false
+	}
+	base, err := url.Parse(from.FinalURL)
+	if err != nil {
+		return nil, "", false
+	}
+	key, resolvedURL, ok := resolveURL(base, href, r.Opts.StripQuery)
+	if !ok {
+		return nil, "", false
+	}
+	p, found := r.index[key]
+	return p, resolvedURL, found
+}
+
 // Reindex rebuilds the URL lookup index from r.Pages. The engine populates the index
 // incrementally during a crawl, so production code never needs this; it lets callers that
 // construct a Result by hand (notably tests) make Page lookups resolve.

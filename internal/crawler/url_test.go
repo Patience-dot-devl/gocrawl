@@ -34,6 +34,51 @@ func TestNormalizeURLStripQuery(t *testing.T) {
 	}
 }
 
+func TestResultResolveHref(t *testing.T) {
+	from := &Page{RequestedURL: "https://example.com/dir/page", FinalURL: "https://example.com/dir/page"}
+	target := &Page{RequestedURL: "https://example.com/dir/other", FinalURL: "https://example.com/dir/other", StatusCode: 200}
+	result := &Result{Pages: []*Page{from, target}}
+	result.Reindex()
+
+	t.Run("relative href resolves against from's FinalURL", func(t *testing.T) {
+		got, resolved, ok := result.ResolveHref(from, "other")
+		if !ok || got != target {
+			t.Fatalf("ResolveHref(other) ok=%v got=%v, want target", ok, got)
+		}
+		if want := "https://example.com/dir/other"; resolved != want {
+			t.Errorf("resolved = %q, want %q", resolved, want)
+		}
+	})
+
+	t.Run("no match found", func(t *testing.T) {
+		if _, _, ok := result.ResolveHref(from, "/nope"); ok {
+			t.Error("expected no match for an uncrawled path")
+		}
+	})
+
+	t.Run("unusable href", func(t *testing.T) {
+		if _, _, ok := result.ResolveHref(from, "#fragment-only"); ok {
+			t.Error("expected a fragment-only href to be unusable")
+		}
+		if _, _, ok := result.ResolveHref(from, "mailto:a@example.com"); ok {
+			t.Error("expected a mailto: href to be unusable")
+		}
+	})
+
+	t.Run("nil from", func(t *testing.T) {
+		if _, _, ok := result.ResolveHref(nil, "other"); ok {
+			t.Error("expected ResolveHref with a nil page to report not found")
+		}
+	})
+
+	t.Run("no index built", func(t *testing.T) {
+		unindexed := &Result{Pages: []*Page{from, target}}
+		if _, _, ok := unindexed.ResolveHref(from, "other"); ok {
+			t.Error("expected ResolveHref to report not found without Reindex/a live crawl index")
+		}
+	})
+}
+
 func TestSameSite(t *testing.T) {
 	if !sameSite("example.com", "example.com", false) {
 		t.Error("identical hosts should be same site")

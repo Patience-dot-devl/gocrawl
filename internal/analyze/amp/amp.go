@@ -55,7 +55,8 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		if !ok || href == "" {
 			continue
 		}
-		if target, ok := result.Page(href); ok && (target.StatusCode >= 400 || len(target.Redirects) > 0) {
+		target, resolved, found := result.ResolveHref(p, href)
+		if found && (target.StatusCode >= 400 || result.LinkPointsToRedirect(resolved, target)) {
 			add(analyze.Warning, "amp-broken-amphtml", "amphtml link points to a broken or redirecting target", map[string]any{"target": href})
 		} else {
 			add(analyze.Info, "amp-amphtml-linked", "Page links to an AMP version", map[string]any{"target": href})
