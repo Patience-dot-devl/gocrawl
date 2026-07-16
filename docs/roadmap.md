@@ -65,6 +65,52 @@ The current baseline. Everything here works today.
 
 No tracked items at the moment.
 
+## ✅ Shipped — hardening & correctness (July 2026 code review)
+
+A full codebase review (July 2026) of the crawl engine, all analyzers, and the CLI /
+config / report / MCP surface produced 28 verified findings, since fixed across four PRs
+([#43], [#44], [#45], [#47]):
+
+- **Security & credential handling** — seed-URL credentials (`https://user:pass@host`) are
+  now stripped at intake and routed into the Basic Auth path instead of leaking into
+  reports, the store, and resolved URLs; CSV report cells are guarded against formula
+  injection; redirect targets are re-checked against crawl scope and robots.txt (SSRF
+  surface as an MCP server); the crawl store rejects hostile hosts/IDs that could escape
+  its root.
+- **Crawl-engine correctness** — robots.txt 5xx/network errors now disallow (RFC 9309)
+  instead of allowing everything; `<base href>` is honored when resolving links; Basic Auth
+  survives same-host http→https upgrades; truncated bodies are surfaced
+  (`Page.Truncated` → `http-body-truncated`); redirect destinations are marked visited (no
+  more double-fetch/double-report); `Retry-After` is capped at 5 minutes; non-UTF-8 pages
+  are charset-decoded before parsing; a data race in the headless renderer was fixed.
+- **Analyzer correctness** — title/description lengths count runes, not bytes; real
+  redirect loops now reach `http-redirect-loop`; the missing `datalayer-*` and `wp-*`
+  explanations were added plus a contract test asserting every emitted code is explained;
+  hreflang tags are validated with `golang.org/x/text/language` (no more `es-419` /
+  `zh-Hant` false positives); `amp`/`pagination` resolve relative hrefs and ignore
+  trailing-slash redirects via the shared `Result.ResolveHref`; mixed-content checks filter
+  `<link>` rels and cover `iframe`/`video`/`source` et al.; gzip and truncated sitemaps are
+  handled.
+- **CLI & robustness** — SIGINT produces a partial report instead of losing the crawl;
+  `--max-duration` bounds wall-clock time the same way; all config keys resolve from env
+  vars; file outputs are atomic (`internal/atomicfile`); the `gocrawl init` template was
+  refreshed; `gocrawl render` accepts store IDs; a frontier worker pool bounds goroutines
+  and gives true BFS; page bodies/DOMs are released after reporting to bound memory.
+
+[#43]: https://github.com/Patience-dot-devl/gocrawl/pull/43
+[#44]: https://github.com/Patience-dot-devl/gocrawl/pull/44
+[#45]: https://github.com/Patience-dot-devl/gocrawl/pull/45
+[#47]: https://github.com/Patience-dot-devl/gocrawl/pull/47
+
+Remaining follow-ups from the review, still open:
+
+- 📋 **Per-host politeness / `Crawl-delay`** — the frontier worker pool was built as the
+  natural home for per-host rate limiting and robots.txt `Crawl-delay`, but neither is
+  enforced yet.
+- 📋 **Distinguish sitemap fetch failures from a missing sitemap** — a transport error on
+  every sitemap candidate currently produces the same `sitemap-missing` warning as a
+  genuine 404, so a network blip can falsely report "no sitemap".
+
 ## 📋 Planned — engine & data model
 
 Checks and capabilities that need post-crawl graph passes or richer crawl data before an
