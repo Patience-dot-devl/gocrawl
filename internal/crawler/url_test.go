@@ -1,6 +1,11 @@
 package crawler
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/PuerkitoBio/goquery"
+)
 
 func TestNormalizeURL(t *testing.T) {
 	cases := map[string]string{
@@ -77,6 +82,46 @@ func TestResultResolveHref(t *testing.T) {
 			t.Error("expected ResolveHref to report not found without Reindex/a live crawl index")
 		}
 	})
+}
+
+// TestResultReleaseBodies guards against a real memory-footprint bug: every Page retained its
+// Body, RawBody, and parsed Doc for the whole process lifetime, so a large crawl of heavy
+// pages could hold multiple GB in memory long after anything needed it. ReleaseBodies must
+// clear exactly those three fields and leave everything else (used by the report/JSON output)
+// untouched, and must tolerate a nil entry in Pages.
+func TestResultReleaseBodies(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<html><title>x</title></html>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Page{
+		RequestedURL: "https://example.com/",
+		FinalURL:     "https://example.com/",
+		StatusCode:   200,
+		Body:         []byte("<html>...</html>"),
+		RawBody:      []byte("<html>raw</html>"),
+		Doc:          doc,
+		Depth:        2,
+	}
+	result := &Result{Pages: []*Page{p, nil}}
+
+	result.ReleaseBodies() // must not panic on the nil entry
+
+	if p.Body != nil {
+		t.Error("expected Body to be released")
+	}
+	if p.RawBody != nil {
+		t.Error("expected RawBody to be released")
+	}
+	if p.Doc != nil {
+		t.Error("expected Doc to be released")
+	}
+	if p.IsHTML() {
+		t.Error("IsHTML() should be false once Doc is released")
+	}
+	if p.RequestedURL != "https://example.com/" || p.StatusCode != 200 || p.Depth != 2 {
+		t.Errorf("non-body fields were unexpectedly modified: %+v", p)
+	}
 }
 
 func TestSameSite(t *testing.T) {
