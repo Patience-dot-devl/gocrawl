@@ -1,6 +1,11 @@
 package crawler
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/PuerkitoBio/goquery"
+)
 
 func TestNormalizeURL(t *testing.T) {
 	cases := map[string]string{
@@ -34,6 +39,91 @@ func TestNormalizeURLStripQuery(t *testing.T) {
 	}
 }
 
+func TestResultResolveHref(t *testing.T) {
+	from := &Page{RequestedURL: "https://example.com/dir/page", FinalURL: "https://example.com/dir/page"}
+	target := &Page{RequestedURL: "https://example.com/dir/other", FinalURL: "https://example.com/dir/other", StatusCode: 200}
+	result := &Result{Pages: []*Page{from, target}}
+	result.Reindex()
+
+	t.Run("relative href resolves against from's FinalURL", func(t *testing.T) {
+		got, resolved, ok := result.ResolveHref(from, "other")
+		if !ok || got != target {
+			t.Fatalf("ResolveHref(other) ok=%v got=%v, want target", ok, got)
+		}
+		if want := "https://example.com/dir/other"; resolved != want {
+			t.Errorf("resolved = %q, want %q", resolved, want)
+		}
+	})
+
+	t.Run("no match found", func(t *testing.T) {
+		if _, _, ok := result.ResolveHref(from, "/nope"); ok {
+			t.Error("expected no match for an uncrawled path")
+		}
+	})
+
+	t.Run("unusable href", func(t *testing.T) {
+		if _, _, ok := result.ResolveHref(from, "#fragment-only"); ok {
+			t.Error("expected a fragment-only href to be unusable")
+		}
+		if _, _, ok := result.ResolveHref(from, "mailto:a@example.com"); ok {
+			t.Error("expected a mailto: href to be unusable")
+		}
+	})
+
+	t.Run("nil from", func(t *testing.T) {
+		if _, _, ok := result.ResolveHref(nil, "other"); ok {
+			t.Error("expected ResolveHref with a nil page to report not found")
+		}
+	})
+
+	t.Run("no index built", func(t *testing.T) {
+		unindexed := &Result{Pages: []*Page{from, target}}
+		if _, _, ok := unindexed.ResolveHref(from, "other"); ok {
+			t.Error("expected ResolveHref to report not found without Reindex/a live crawl index")
+		}
+	})
+}
+
+// TestResultReleaseBodies guards against a real memory-footprint bug: every Page retained its
+// Body, RawBody, and parsed Doc for the whole process lifetime, so a large crawl of heavy
+// pages could hold multiple GB in memory long after anything needed it. ReleaseBodies must
+// clear exactly those three fields and leave everything else (used by the report/JSON output)
+// untouched, and must tolerate a nil entry in Pages.
+func TestResultReleaseBodies(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<html><title>x</title></html>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Page{
+		RequestedURL: "https://example.com/",
+		FinalURL:     "https://example.com/",
+		StatusCode:   200,
+		Body:         []byte("<html>...</html>"),
+		RawBody:      []byte("<html>raw</html>"),
+		Doc:          doc,
+		Depth:        2,
+	}
+	result := &Result{Pages: []*Page{p, nil}}
+
+	result.ReleaseBodies() // must not panic on the nil entry
+
+	if p.Body != nil {
+		t.Error("expected Body to be released")
+	}
+	if p.RawBody != nil {
+		t.Error("expected RawBody to be released")
+	}
+	if p.Doc != nil {
+		t.Error("expected Doc to be released")
+	}
+	if p.IsHTML() {
+		t.Error("IsHTML() should be false once Doc is released")
+	}
+	if p.RequestedURL != "https://example.com/" || p.StatusCode != 200 || p.Depth != 2 {
+		t.Errorf("non-body fields were unexpectedly modified: %+v", p)
+	}
+}
+
 func TestSameSite(t *testing.T) {
 	if !sameSite("example.com", "example.com", false) {
 		t.Error("identical hosts should be same site")
@@ -46,5 +136,33 @@ func TestSameSite(t *testing.T) {
 	}
 	if sameSite("example.com", "evil.com", true) {
 		t.Error("different registrable domains should never match")
+	}
+}
+
+func TestStripPort(t *testing.T) {
+	cases := map[string]string{
+		"example.com":       "example.com",
+		"example.com:8080":  "example.com",
+		"[::1]":             "[::1]",
+		"[::1]:8080":        "[::1]",
+		"[2001:db8::1]:443": "[2001:db8::1]",
+		"::1":               "::1", // bare IPv6, no unambiguous port separator: left alone
+	}
+	for in, want := range cases {
+		if got := stripPort(in); got != want {
+			t.Errorf("stripPort(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestSameSiteIPv6 guards against a real bug: stripPort used strings.LastIndex(host, ":"),
+// which for a bracketed IPv6 literal with no port (e.g. "[::1]") lands inside the address
+// itself and corrupts it, breaking the same-site comparison.
+func TestSameSiteIPv6(t *testing.T) {
+	if !sameSite("[::1]", "[::1]", false) {
+		t.Error("identical bracketed IPv6 hosts (no port) should be same site")
+	}
+	if !sameSite("[::1]:8080", "[::1]", false) {
+		t.Error("bracketed IPv6 hosts differing only by port should be same site")
 	}
 }

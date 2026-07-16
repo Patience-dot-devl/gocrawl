@@ -23,7 +23,10 @@ func (Analyzer) Description() string {
 
 func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
 	var issues []analyze.Issue
-	ua := result.Opts.UserAgent
+	// result.Opts.UserAgent alone would test against an identity the crawler never actually
+	// sends once UserAgents rotation supersedes it; NewUAPool(...).Default() is the UA really
+	// used (the first configured rotation entry, or the single UserAgent).
+	ua := crawler.NewUAPool(result.Opts).Default()
 
 	for host, data := range result.Robots {
 		base := "host " + host

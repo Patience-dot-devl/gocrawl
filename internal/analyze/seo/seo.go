@@ -6,6 +6,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
@@ -47,24 +48,26 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 
 	// Title.
 	title := strings.TrimSpace(doc.Find("head title").First().Text())
+	titleLen := utf8.RuneCountInString(title)
 	switch {
 	case title == "":
 		add(analyze.Error, "seo-missing-title", "Page has no <title>", nil)
-	case len(title) < titleMin:
-		add(analyze.Warning, "seo-short-title", "Title is very short", map[string]any{"length": len(title), "title": title})
-	case len(title) > titleMax:
-		add(analyze.Warning, "seo-long-title", "Title may be truncated in SERPs", map[string]any{"length": len(title), "title": title})
+	case titleLen < titleMin:
+		add(analyze.Warning, "seo-short-title", "Title is very short", map[string]any{"length": titleLen, "title": title})
+	case titleLen > titleMax:
+		add(analyze.Warning, "seo-long-title", "Title may be truncated in SERPs", map[string]any{"length": titleLen, "title": title})
 	}
 
 	// Meta description.
 	desc, hasDesc := metaContent(doc, "name", "description")
+	descLen := utf8.RuneCountInString(desc)
 	switch {
 	case !hasDesc || strings.TrimSpace(desc) == "":
 		add(analyze.Warning, "seo-missing-meta-description", "Page has no meta description", nil)
-	case len(desc) < descMin:
-		add(analyze.Info, "seo-short-meta-description", "Meta description is short", map[string]any{"length": len(desc)})
-	case len(desc) > descMax:
-		add(analyze.Info, "seo-long-meta-description", "Meta description may be truncated", map[string]any{"length": len(desc)})
+	case descLen < descMin:
+		add(analyze.Info, "seo-short-meta-description", "Meta description is short", map[string]any{"length": descLen})
+	case descLen > descMax:
+		add(analyze.Info, "seo-long-meta-description", "Meta description may be truncated", map[string]any{"length": descLen})
 	}
 
 	// Meta robots noindex / nofollow.
@@ -120,7 +123,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	doc.Find("h1, h2, h3, h4, h5, h6").Each(func(_ int, s *goquery.Selection) {
 		level := int(s.Get(0).Data[1] - '0')
 		text := strings.TrimSpace(s.Text())
-		if text == "" {
+		if text == "" && !headingHasAccessibleText(s) {
 			add(analyze.Warning, "seo-empty-heading", "Heading element has no text content", map[string]any{"tag": s.Get(0).Data})
 		}
 		if prevLevel > 0 && level > prevLevel+1 {
@@ -154,6 +157,25 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	}
 
 	return issues
+}
+
+// headingHasAccessibleText reports whether a heading with no visible text still conveys a
+// name via an accessible-name source: an aria-label on the heading itself, or the alt text of
+// an image inside it — the common "logo wrapped in <h1>" pattern, where the visible content is
+// an image but the heading's effective text is the image's alt attribute.
+func headingHasAccessibleText(s *goquery.Selection) bool {
+	if label, ok := s.Attr("aria-label"); ok && strings.TrimSpace(label) != "" {
+		return true
+	}
+	hasAlt := false
+	s.Find("img[alt]").EachWithBreak(func(_ int, img *goquery.Selection) bool {
+		if alt, ok := img.Attr("alt"); ok && strings.TrimSpace(alt) != "" {
+			hasAlt = true
+			return false
+		}
+		return true
+	})
+	return hasAlt
 }
 
 func metaContent(doc *goquery.Document, attr, val string) (string, bool) {

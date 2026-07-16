@@ -51,8 +51,11 @@ type CrawlConfig struct {
 	// the crawled host — for sites gated by server-level Basic Auth, which is common on
 	// staging/acceptance environments (e.g. a reverse-proxy realm challenge in front of the
 	// whole site, independent of any app-level login).
-	BasicAuth       string        `mapstructure:"basic_auth"`
-	Timeout         time.Duration `mapstructure:"timeout"`
+	BasicAuth string        `mapstructure:"basic_auth"`
+	Timeout   time.Duration `mapstructure:"timeout"`
+	// MaxDuration bounds the crawl's total wall-clock time (0 = unlimited). When it elapses,
+	// the crawl stops early and still produces a report from whatever was fetched so far.
+	MaxDuration     time.Duration `mapstructure:"max_duration"`
 	MaxBodyBytes    int64         `mapstructure:"max_body_bytes"`
 	RespectRobots   bool          `mapstructure:"respect_robots"`
 	AllowSubdomains bool          `mapstructure:"allow_subdomains"`
@@ -97,6 +100,7 @@ func Default() Config {
 			RatePerSecond: o.RatePerSecond,
 			UserAgent:     o.UserAgent,
 			Timeout:       o.Timeout,
+			MaxDuration:   o.MaxDuration,
 			MaxBodyBytes:  o.MaxBodyBytes,
 			RespectRobots: o.RespectRobots,
 			AdaptiveDelay: o.AdaptiveDelay,
@@ -128,20 +132,44 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
+// setDefaults registers every Config field's zero/default value with viper. This is required
+// for more than seeding the YAML-less default: viper's AutomaticEnv only resolves a GOCRAWL_*
+// env var for a key that already appears in v.AllKeys(), and SetDefault is what adds a key
+// there. A field left unregistered here has its environment variable silently ignored by
+// Unmarshal, even though AutomaticEnv is enabled — every field must be listed.
 func setDefaults(v *viper.Viper) {
 	d := Default()
+	v.SetDefault("seed", d.Seed)
 	v.SetDefault("render", d.Render)
 	v.SetDefault("output.format", d.Output.Format)
+	v.SetDefault("output.path", d.Output.Path)
+	v.SetDefault("output.sitemap_path", d.Output.SitemapPath)
 	v.SetDefault("crawl.max_depth", d.Crawl.MaxDepth)
 	v.SetDefault("crawl.max_pages", d.Crawl.MaxPages)
 	v.SetDefault("crawl.concurrency", d.Crawl.Concurrency)
 	v.SetDefault("crawl.rate_per_second", d.Crawl.RatePerSecond)
 	v.SetDefault("crawl.user_agent", d.Crawl.UserAgent)
+	v.SetDefault("crawl.user_agents", d.Crawl.UserAgents)
+	v.SetDefault("crawl.user_agent_rotation", d.Crawl.UserAgentRotation)
+	v.SetDefault("crawl.proxy", d.Crawl.Proxy)
+	v.SetDefault("crawl.proxies", d.Crawl.Proxies)
+	v.SetDefault("crawl.proxy_rotation", d.Crawl.ProxyRotation)
+	v.SetDefault("crawl.basic_auth", d.Crawl.BasicAuth)
 	v.SetDefault("crawl.timeout", d.Crawl.Timeout)
+	v.SetDefault("crawl.max_duration", d.Crawl.MaxDuration)
 	v.SetDefault("crawl.max_body_bytes", d.Crawl.MaxBodyBytes)
 	v.SetDefault("crawl.respect_robots", d.Crawl.RespectRobots)
+	v.SetDefault("crawl.allow_subdomains", d.Crawl.AllowSubdomains)
+	v.SetDefault("crawl.follow_external", d.Crawl.FollowExternal)
+	v.SetDefault("crawl.follow_nofollow", d.Crawl.FollowNofollow)
+	v.SetDefault("crawl.strip_query", d.Crawl.StripQuery)
+	v.SetDefault("crawl.verbose", d.Crawl.Verbose)
 	v.SetDefault("crawl.adaptive_delay", d.Crawl.AdaptiveDelay)
-	// Registered (with an empty default) so GOCRAWL_STORE_DIR is picked up by AutomaticEnv.
+	v.SetDefault("crawl.include", d.Crawl.Include)
+	v.SetDefault("crawl.exclude", d.Crawl.Exclude)
+	v.SetDefault("analyzers.enabled", d.Analyzers.Enabled)
+	v.SetDefault("analyzers.disabled", d.Analyzers.Disabled)
+	v.SetDefault("analyzers.specialized", d.Analyzers.Specialized)
 	v.SetDefault("store.dir", d.Store.Dir)
 }
 
@@ -174,6 +202,7 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	if c.Crawl.Timeout > 0 {
 		o.Timeout = c.Crawl.Timeout
 	}
+	o.MaxDuration = c.Crawl.MaxDuration
 	if c.Crawl.MaxBodyBytes > 0 {
 		o.MaxBodyBytes = c.Crawl.MaxBodyBytes
 	}

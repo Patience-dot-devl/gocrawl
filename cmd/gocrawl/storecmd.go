@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
 	"github.com/Patience-dot-devl/gocrawl/internal/diff"
 	"github.com/Patience-dot-devl/gocrawl/internal/store"
@@ -125,17 +127,10 @@ func runCompare(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		f, err := os.Create(out)
-		if err != nil {
+		if err := atomicfile.Write(out, 0o644, func(w io.Writer) error {
+			return reporter.Write(w, d)
+		}); err != nil {
 			return err
-		}
-		writeErr := reporter.Write(f, d)
-		closeErr := f.Close()
-		if writeErr != nil {
-			return writeErr
-		}
-		if closeErr != nil {
-			return closeErr
 		}
 		fmt.Fprintf(os.Stderr, "Diff written to %s\n", out)
 	}

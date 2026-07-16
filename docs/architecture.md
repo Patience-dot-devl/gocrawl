@@ -44,7 +44,7 @@ analyzers over the result, and hands everything to the report builder.
 | [`cmd/gocrawl`](../cmd/gocrawl) | CLI (Cobra): `crawl`, `analyzers list`, `init`, `mcp`. |
 | [`internal/config`](../internal/config) | Layered config (defaults → YAML → env → flags) and compilation into `crawler.Options`. |
 | [`internal/crawler`](../internal/crawler) | Concurrent crawl engine, HTTP fetcher, robots.txt, URL normalization, scope rules, link extraction. Defines `Page`, `Link`, `Redirect`, `Result`, `Options`. |
-| [`internal/render`](../internal/render) | Render-mode fetcher selection; headless (chromedp) is stubbed. |
+| [`internal/render`](../internal/render) | Render-mode fetcher selection; headless rendering via chromedp (Core Web Vitals). |
 | [`internal/analyze`](../internal/analyze) | The `Analyzer` interface, `Issue`/`Severity` types, and the `Registry`. |
 | `internal/analyze/<name>` | One package per analyzer: `seo`, `httpx` (name `redirects`), `links`, `robotscheck` (name `robots`), `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`, `content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `datalayer`, `landing`, and the AI-search analyzers `aeo`, `geo`. `seaurl` is a shared UTM-parsing helper (not an analyzer). |
 | [`internal/runner`](../internal/runner) | Wires engine + registry + report into `Run`; also `BuildRegistry` and `ListAnalyzers`. |
@@ -54,18 +54,27 @@ analyzers over the result, and hands everything to the report builder.
 ## The crawl engine
 
 [`crawler.Engine.Crawl`](../internal/crawler/engine.go) runs a bounded, concurrent
-breadth-ish walk:
+breadth-first walk:
 
-- A semaphore caps in-flight fetches at `Concurrency`; a `golang.org/x/time/rate` limiter
-  enforces `RatePerSecond`.
+- A [`frontier`](../internal/crawler/frontier.go) — a FIFO queue shared by a fixed pool of
+  `Concurrency` worker goroutines — holds discovered-but-not-yet-fetched URLs. Sizing the
+  queue to the site rather than to concurrency (instead of spawning a goroutine per
+  discovered URL) keeps the goroutine count bounded even with `MaxPages 0`, and pulling in
+  FIFO order gives a true breadth-first traversal. A `golang.org/x/time/rate` limiter
+  enforces `RatePerSecond` per fetch.
 - `inScope` filters each candidate URL by scheme, host (seed host ± subdomains, unless
   `FollowExternal`), and the exclude-then-include regex rules.
 - `RespectRobots` consults a per-host robots manager before fetching; `MaxPages` and
-  `MaxDepth` bound the walk.
-- After fetching, links are extracted from the parsed document and enqueued (skipping
-  external links unless `FollowExternal`, and `nofollow` links unless `FollowNofollow`).
+  `MaxDepth` bound the walk. `MaxDuration` bounds the whole crawl's wall-clock time via a
+  context deadline.
+- After fetching, links are extracted from the parsed document and pushed onto the frontier
+  (skipping external links unless `FollowExternal`, and `nofollow` links unless
+  `FollowNofollow`).
 - `robots.txt` is collected for every crawled host afterward, so the `robots` analyzer has
   data even when `RespectRobots` is off.
+- Stopping early (a canceled context, e.g. Ctrl-C or `MaxDuration`) still returns everything
+  fetched so far as a result, flagged via `Result.Coverage.Interrupted` /
+  `DurationLimitReached` rather than discarded as an error.
 
 The engine produces a [`crawler.Result`](../internal/crawler/types.go): the list of pages
 (each with status, redirects, links, timing, parsed doc), the per-host robots data, and an

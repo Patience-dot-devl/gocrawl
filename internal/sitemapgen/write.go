@@ -2,10 +2,9 @@ package sitemapgen
 
 import (
 	"encoding/xml"
-	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+
+	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
 )
 
 // xmlURLSet mirrors the sitemaps.org 0.9 urlset schema.
@@ -40,25 +39,8 @@ func WriteXML(w io.Writer, m Map) error {
 	return err
 }
 
-// WriteXMLFile writes the sitemap.xml to path, creating parent directories as needed.
+// WriteXMLFile writes the sitemap.xml to path, creating parent directories as needed. The
+// write is atomic: a failure partway through leaves any previous sitemap.xml at path intact.
 func WriteXMLFile(path string, m Map) error {
-	return writeFile(path, func(w io.Writer) error { return WriteXML(w, m) })
-}
-
-func writeFile(path string, write func(io.Writer) error) error {
-	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("creating output directory %q: %w", dir, err)
-		}
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	writeErr := write(f)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return writeErr
-	}
-	return closeErr
+	return atomicfile.Write(path, 0o644, func(w io.Writer) error { return WriteXML(w, m) })
 }

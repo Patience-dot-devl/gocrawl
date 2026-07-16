@@ -93,4 +93,21 @@ func TestCoverageNote(t *testing.T) {
 	if d := coverageNote(crawler.Coverage{DiscoveredNotCrawled: 3, DepthLimitReached: true, MaxDepth: 2}); !strings.Contains(d, "--depth 2") {
 		t.Errorf("depth-limit note missing --depth: %s", d)
 	}
+	// Interrupted (e.g. Ctrl-C) → distinct message, not the limit-reached wording.
+	i := coverageNote(crawler.Coverage{Interrupted: true})
+	if !strings.Contains(i, "interrupted") {
+		t.Errorf("interrupted note missing \"interrupted\": %s", i)
+	}
+	if strings.Contains(i, "--max-pages") || strings.Contains(i, "--depth") {
+		t.Errorf("interrupted note shouldn't mention a limit flag: %s", i)
+	}
+	// Duration limit (--max-duration) → distinct message, takes priority over the generic
+	// Interrupted wording even though DurationLimitReached implies Interrupted.
+	d := coverageNote(crawler.Coverage{Interrupted: true, DurationLimitReached: true})
+	if !strings.Contains(d, "--max-duration") {
+		t.Errorf("duration-limit note missing --max-duration: %s", d)
+	}
+	if strings.Contains(d, "Ctrl-C") {
+		t.Errorf("duration-limit note shouldn't use the generic Ctrl-C wording: %s", d)
+	}
 }

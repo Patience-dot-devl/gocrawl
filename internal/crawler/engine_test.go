@@ -5,9 +5,231 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
+
+// TestEngineDoesNotDoubleReportRedirectTarget guards against a real bug: a redirect's
+// destination was never marked visited, so a separate direct link to that same URL produced a
+// second *Page entry for identical content, and every per-page analyzer would report its
+// issues twice. Both links here are discovered on the same page and enqueued back-to-back, so
+// the redirect ("/old") and the direct link ("/new") are always in flight concurrently — this
+// is the race the fix can't eliminate (both requests reach the server), but it must still
+// collapse to exactly one recorded page.
+func TestEngineDoesNotDoubleReportRedirectTarget(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body>
+			<a href="/old">Old link</a>
+			<a href="/new">Direct link</a>
+		</body></html>`)
+	})
+	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/new", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/new", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>New Page</title></head><body>ok</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.MaxDepth = 1
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+
+	newPages := 0
+	for _, p := range result.Pages {
+		if p.FinalURL == ts.URL+"/new" {
+			newPages++
+		}
+	}
+	if newPages != 1 {
+		t.Errorf("result.Pages has %d entries for /new, want 1 (duplicate content would double-report every analyzer issue)", newPages)
+	}
+}
+
+// TestEngineSkipsSequentialDuplicateFetch is the non-racing case the fix fully closes: the
+// redirect resolves (and its destination is marked visited) before a separate page's link to
+// that same destination is ever discovered, so the second fetch never even starts.
+func TestEngineSkipsSequentialDuplicateFetch(t *testing.T) {
+	var newHits int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body><a href="/old">Old link</a></body></html>`)
+	})
+	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/new", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/new", func(w http.ResponseWriter, _ *http.Request) {
+		newHits++
+		fmt.Fprint(w, `<html><head><title>New Page</title></head><body><a href="/also-links-here">Another</a></body></html>`)
+	})
+	mux.HandleFunc("/also-links-here", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Also Links Here</title></head><body><a href="/new">Direct link, discovered later</a></body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.MaxDepth = 3    // deep enough that the direct /new link (discovered 2 hops later) is still enqueued
+	opts.Concurrency = 1 // force strictly sequential fetches so the race can't occur
+	engine := New(opts, NewHTTPFetcher(opts))
+	if _, err := engine.Crawl(context.Background(), ts.URL); err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+
+	if newHits != 1 {
+		t.Errorf("/new was fetched %d times, want 1", newHits)
+	}
+}
+
+func extractLinksFromHTML(t *testing.T, finalURL, html string) []Link {
+	t.Helper()
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	page := &Page{FinalURL: finalURL, Doc: doc}
+	opts := DefaultOptions()
+	e := New(opts, NewHTTPFetcher(opts))
+	u, err := url.Parse(finalURL)
+	if err != nil {
+		t.Fatalf("parse finalURL: %v", err)
+	}
+	e.seedHost = u.Host
+	return e.extractLinks(page)
+}
+
+// TestEngineWiresAllowRedirectOnHTTPFetcher guards against a real SSRF/scope-escape surface:
+// New must wire the HTTPFetcher's allowRedirect to the engine's own scope check, so a redirect
+// mid-fetch is gated exactly like an ordinary link, rather than escaping scope unchecked (a
+// relevant concern when gocrawl runs as an MCP server). RespectRobots is disabled here so the
+// in-scope case doesn't perform a real network fetch of robots.txt; the robots half of the
+// check is covered separately by TestRobotsManagerFetch and TestFetchBlocksRedirectRejectedByAllowRedirect.
+func TestEngineWiresAllowRedirectOnHTTPFetcher(t *testing.T) {
+	opts := DefaultOptions()
+	opts.RespectRobots = false
+	hf := NewHTTPFetcher(opts)
+	e := New(opts, hf)
+	if hf.allowRedirect == nil {
+		t.Fatal("expected Engine.New to wire allowRedirect onto the HTTPFetcher")
+	}
+	e.seedHost = "example.com"
+
+	inScope, err := url.Parse("https://example.com/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outOfScope, err := url.Parse("https://evil.example/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hf.allowRedirect(context.Background(), inScope) {
+		t.Error("expected an in-scope redirect target to be allowed")
+	}
+	if hf.allowRedirect(context.Background(), outOfScope) {
+		t.Error("expected an out-of-scope redirect target to be blocked")
+	}
+}
+
+// TestEngineRobotsUsesRotationPoolUserAgent guards against a real bug: robots.txt checks used
+// opts.UserAgent even when a UserAgents rotation pool superseded it for actual requests, so
+// the crawl could test the wrong identity against a per-agent robots.txt rule.
+func TestEngineRobotsUsesRotationPoolUserAgent(t *testing.T) {
+	opts := DefaultOptions()
+	opts.UserAgent = "gocrawl-default"
+	opts.UserAgents = []string{"BotA", "BotB"}
+	e := New(opts, NewHTTPFetcher(opts))
+	if e.robots.userAgent != "BotA" {
+		t.Errorf("robots.userAgent = %q, want %q (first entry of the rotation pool)", e.robots.userAgent, "BotA")
+	}
+}
+
+func TestExtractLinksHonorsBaseHref(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base href="https://other.example/sub/"></head>
+		<body><a href="page2">Page 2</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://other.example/sub/page2"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+	if !links[0].External {
+		t.Error("expected link resolved via a cross-host <base> to be flagged External")
+	}
+}
+
+func TestExtractLinksRelativeBaseHref(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base href="/newroot/"></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/newroot/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksOnlyFirstBaseCounts(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/",
+		`<html><head><base href="/first/"><base href="/second/"></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/first/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q (only the first <base> should count)", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksBaseWithoutHrefIsSkipped(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base target="_blank"></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/dir/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksEmptyBaseHrefFallsBack(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head><base href=""></head>
+		<body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/dir/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
+
+func TestExtractLinksNoBaseUnchanged(t *testing.T) {
+	links := extractLinksFromHTML(t, "https://example.com/dir/page",
+		`<html><head></head><body><a href="x">X</a></body></html>`)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if want := "https://example.com/dir/x"; links[0].URL != want {
+		t.Errorf("link URL = %q, want %q", links[0].URL, want)
+	}
+}
 
 func newTestServer() *httptest.Server {
 	mux := http.NewServeMux()
@@ -174,6 +396,203 @@ func TestEngineCoveragePartialOnDepthLimit(t *testing.T) {
 	}
 }
 
+// TestEngineCanceledContextReturnsPartialResultNotError guards against a real bug: an
+// interrupted crawl (e.g. an operator's Ctrl-C canceling the context) used to return
+// ctx.Err() alongside the partial Result, and the caller (runner.Run) discarded the whole
+// result on any non-nil error — losing everything that had already been crawled. A canceled
+// context must now be reported honestly via Coverage.Interrupted instead of as an error.
+func TestEngineCanceledContextReturnsPartialResultNotError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled before the crawl starts
+
+	opts := DefaultOptions()
+	engine := New(opts, NewHTTPFetcher(opts))
+	result, err := engine.Crawl(ctx, ts.URL)
+	if err != nil {
+		t.Fatalf("expected no error on a canceled context, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected a non-nil result even when interrupted")
+		return
+	}
+	if !result.Coverage.Interrupted {
+		t.Error("expected Coverage.Interrupted to be true")
+	}
+	if result.Coverage.Complete {
+		t.Error("expected Coverage.Complete to be false when interrupted")
+	}
+}
+
+// TestEngineMaxDurationStopsCrawlEarly guards against the wall-clock budget doing nothing: a
+// crawl whose home page links to a slow page must stop once MaxDuration elapses, returning a
+// partial result (not an error) with Coverage.DurationLimitReached set.
+func TestEngineMaxDurationStopsCrawlEarly(t *testing.T) {
+	release := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body><a href="/slow">slow</a></body></html>`)
+	})
+	mux.HandleFunc("/slow", func(w http.ResponseWriter, _ *http.Request) {
+		<-release // never released during the test; simulates a hang past the budget
+		fmt.Fprint(w, `<html><body>too late</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer func() {
+		close(release)
+		ts.Close()
+	}()
+
+	opts := DefaultOptions()
+	opts.MaxDuration = 50 * time.Millisecond
+	engine := New(opts, NewHTTPFetcher(opts))
+
+	start := time.Now()
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected no error when the duration budget elapses, got: %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("crawl took %v, expected it to stop shortly after the 50ms budget", elapsed)
+	}
+	if !result.Coverage.DurationLimitReached {
+		t.Error("expected Coverage.DurationLimitReached to be true")
+	}
+	if !result.Coverage.Interrupted {
+		t.Error("expected Coverage.Interrupted to also be true (DurationLimitReached implies it)")
+	}
+	if result.Coverage.Complete {
+		t.Error("expected Coverage.Complete to be false")
+	}
+}
+
+// TestEngineWorkerPoolBoundsGoroutines guards against the exact regression a frontier worker
+// pool exists to fix: a goroutine-per-URL design spawns roughly one goroutine per discovered
+// URL (most of them immediately blocked on the old concurrency semaphore), so with
+// --max-pages 0 the goroutine count scales with the size of the frontier rather than with
+// Concurrency. A single hub page fanning out to many links is exactly that shape.
+func TestEngineWorkerPoolBoundsGoroutines(t *testing.T) {
+	const fanOut = 300
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		var b strings.Builder
+		b.WriteString("<html><body>")
+		for i := range fanOut {
+			fmt.Fprintf(&b, `<a href="/page%d">p</a>`, i)
+		}
+		b.WriteString("</body></html>")
+		fmt.Fprint(w, b.String())
+	})
+	for i := range fanOut {
+		mux.HandleFunc(fmt.Sprintf("/page%d", i), func(w http.ResponseWriter, _ *http.Request) {
+			time.Sleep(2 * time.Millisecond) // keep the frontier busy long enough to sample mid-crawl
+			fmt.Fprint(w, `<html><body>leaf</body></html>`)
+		})
+	}
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.Concurrency = 3
+	opts.MaxPages = 0 // unlimited — exactly the case the regression is about
+	opts.MaxDepth = 0
+	engine := New(opts, NewHTTPFetcher(opts))
+
+	baseline := runtime.NumGoroutine()
+	var peak atomic.Int64
+	stop := make(chan struct{})
+	var samplerDone sync.WaitGroup
+	samplerDone.Add(1)
+	go func() {
+		defer samplerDone.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if n := int64(runtime.NumGoroutine()); n > peak.Load() {
+				peak.Store(n)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	close(stop)
+	samplerDone.Wait()
+	if err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+	if len(result.Pages) != fanOut+1 {
+		t.Fatalf("crawled %d pages, want %d", len(result.Pages), fanOut+1)
+	}
+
+	extra := peak.Load() - int64(baseline)
+	if extra > int64(opts.Concurrency)+20 {
+		t.Errorf("peak extra goroutines during the crawl = %d, want at most ~%d for Concurrency=%d "+
+			"— goroutine count is scaling with the frontier (fanOut=%d), not concurrency",
+			extra, opts.Concurrency+20, opts.Concurrency, fanOut)
+	}
+}
+
+// TestEngineFrontierIsBreadthFirst guards against the frontier losing FIFO ordering: with a
+// single worker (so fetch order is fully deterministic), pages must be visited layer by layer
+// rather than depth-first.
+func TestEngineFrontierIsBreadthFirst(t *testing.T) {
+	var mu sync.Mutex
+	var order []string
+	record := func(path string) {
+		mu.Lock()
+		order = append(order, path)
+		mu.Unlock()
+	}
+
+	mux := http.NewServeMux()
+	// Registered explicitly so it doesn't fall through to the "/" catch-all pattern and get
+	// recorded as an extra hit on the home page: RespectRobots (on by default) fetches
+	// /robots.txt on the first crawlability check.
+	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		record("/")
+		fmt.Fprint(w, `<html><body><a href="/a">a</a><a href="/b">b</a></body></html>`)
+	})
+	mux.HandleFunc("/a", func(w http.ResponseWriter, _ *http.Request) {
+		record("/a")
+		fmt.Fprint(w, `<html><body><a href="/a1">a1</a><a href="/a2">a2</a></body></html>`)
+	})
+	mux.HandleFunc("/b", func(w http.ResponseWriter, _ *http.Request) {
+		record("/b")
+		fmt.Fprint(w, `<html><body><a href="/b1">b1</a><a href="/b2">b2</a></body></html>`)
+	})
+	for _, leaf := range []string{"/a1", "/a2", "/b1", "/b2"} {
+		mux.HandleFunc(leaf, func(w http.ResponseWriter, _ *http.Request) {
+			record(leaf)
+			fmt.Fprint(w, `<html><body>leaf</body></html>`)
+		})
+	}
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.Concurrency = 1 // deterministic fetch order
+	engine := New(opts, NewHTTPFetcher(opts))
+	if _, err := engine.Crawl(context.Background(), ts.URL); err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+
+	want := []string{"/", "/a", "/b", "/a1", "/a2", "/b1", "/b2"}
+	if !reflect.DeepEqual(order, want) {
+		t.Errorf("fetch order = %v, want %v (breadth-first)", order, want)
+	}
+}
+
 func countItemsPages(result *Result) int {
 	n := 0
 	for _, p := range result.Pages {
@@ -232,80 +651,47 @@ func TestEngineStripQuery(t *testing.T) {
 	}
 }
 
-func TestThrottleAfter429(t *testing.T) {
+func TestEngineUsesAdaptiveLimiter(t *testing.T) {
 	opts := DefaultOptions()
 	opts.AdaptiveDelay = true
 	engine := New(opts, NewHTTPFetcher(opts))
 
 	page := &Page{StatusCode: http.StatusTooManyRequests, FinalURL: "https://example.test/"}
-
-	// First 429 on an unrestricted crawl drops to the start rate.
-	engine.throttleAfter429(page)
-	if got := float64(engine.limiter.Limit()); got != backoffStartRate {
-		t.Fatalf("after first 429: limit=%v, want %v", got, backoffStartRate)
-	}
-
-	// A repeat within the debounce window is ignored.
-	engine.throttleAfter429(page)
-	if got := float64(engine.limiter.Limit()); got != backoffStartRate {
-		t.Fatalf("repeat within debounce changed limit to %v", got)
-	}
-
-	// Force the next adjustment past the debounce window; rate halves.
-	engine.lastAdjust = engine.lastAdjust.Add(-2 * backoffDebounce)
-	engine.throttleAfter429(page)
-	if got := float64(engine.limiter.Limit()); got != backoffStartRate/2 {
-		t.Fatalf("after second 429: limit=%v, want %v", got, backoffStartRate/2)
+	adjusted, next := engine.limiter.OnResponse(page.StatusCode, page.Header)
+	if !adjusted || next != backoffStartRate {
+		t.Fatalf("first 429: adjusted=%v next=%v, want true/%v", adjusted, next, backoffStartRate)
 	}
 }
 
-func TestThrottleAfter429Disabled(t *testing.T) {
+// TestRetryAfterSecondsCapsExtremeValues guards against a real denial-of-service surface: an
+// uncapped Retry-After let a malicious or misconfigured server (e.g. "Retry-After: 86400")
+// stall the entire crawl for as long as it asked, with no overall deadline to recover.
+func TestRetryAfterSecondsCapsExtremeValues(t *testing.T) {
+	h := http.Header{}
+	h.Set("Retry-After", "86400") // 24 hours
+	if got, want := retryAfterSeconds(h), maxRetryAfter.Seconds(); got != want {
+		t.Errorf("retryAfterSeconds(86400s) = %v, want capped at %v", got, want)
+	}
+
+	future := time.Now().Add(24 * time.Hour).UTC().Format(http.TimeFormat)
+	h.Set("Retry-After", future)
+	if got, want := retryAfterSeconds(h), maxRetryAfter.Seconds(); got > want {
+		t.Errorf("retryAfterSeconds(HTTP-date 24h out) = %v, want capped at %v", got, want)
+	}
+}
+
+// TestThrottleAfter429NeverBelowCappedRetryRate ensures the cap actually reaches the rate
+// limiter: OnResponse must not honor an extreme Retry-After by setting a rate slower than
+// 1/maxRetryAfter.
+func TestThrottleAfter429NeverBelowCappedRetryRate(t *testing.T) {
 	opts := DefaultOptions()
-	opts.AdaptiveDelay = false
-	opts.RatePerSecond = 5
-	engine := New(opts, NewHTTPFetcher(opts))
-
-	engine.throttleAfter429(&Page{StatusCode: http.StatusTooManyRequests})
-	if got := float64(engine.limiter.Limit()); got != 5 {
-		t.Fatalf("disabled adaptive delay still changed limit to %v", got)
-	}
-}
-
-func TestThrottleHonorsRetryAfter(t *testing.T) {
-	opts := DefaultOptions()
-	opts.RatePerSecond = 4 // would otherwise halve to 2 req/s
-	engine := New(opts, NewHTTPFetcher(opts))
-
-	page := &Page{StatusCode: http.StatusServiceUnavailable, Header: http.Header{}}
-	page.Header.Set("Retry-After", "20") // asks for 0.05 req/s
-
-	engine.throttleAfter429(page)
-	if got := float64(engine.limiter.Limit()); got != 0.05 {
-		t.Fatalf("Retry-After not honored: limit=%v, want 0.05", got)
-	}
-}
-
-func TestRetryAfterSeconds(t *testing.T) {
-	cases := []struct {
-		val  string
-		want float64
-	}{
-		{"", 0},
-		{"30", 30},
-		{"-5", 0},
-		{"garbage", 0},
-	}
-	for _, c := range cases {
-		h := http.Header{}
-		if c.val != "" {
-			h.Set("Retry-After", c.val)
-		}
-		if got := retryAfterSeconds(h); got != c.want {
-			t.Errorf("retryAfterSeconds(%q)=%v, want %v", c.val, got, c.want)
-		}
-	}
-	if got := retryAfterSeconds(nil); got != 0 {
-		t.Errorf("retryAfterSeconds(nil)=%v, want 0", got)
+	opts.AdaptiveDelay = true
+	e := New(opts, NewHTTPFetcher(opts))
+	header := http.Header{"Retry-After": []string{"86400"}}
+	e.limiter.OnResponse(429, header)
+	minAllowedRate := 1.0 / maxRetryAfter.Seconds()
+	if got := e.limiter.CurrentRate(); got < minAllowedRate {
+		t.Errorf("curRate = %v, want >= %v (capped Retry-After)", got, minAllowedRate)
 	}
 }
 

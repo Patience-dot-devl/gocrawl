@@ -106,15 +106,24 @@ coverage is the context you need to trust that result.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `complete` | bool | `true` when no in-scope, robots-allowed URL was left un-fetched because of a limit. |
+| `complete` | bool | `true` when no in-scope, robots-allowed URL was left un-fetched because of a limit or an interruption. |
 | `discovered_not_crawled` | int | Count of distinct in-scope URLs discovered but never fetched. Omitted when 0. |
 | `page_limit_reached` | bool | The `--max-pages` budget cut the crawl short. Omitted when false. |
 | `depth_limit_reached` | bool | The `--depth` limit cut the crawl short. Omitted when false. |
+| `interrupted` | bool | The crawl was stopped early by context cancellation (e.g. Ctrl-C or `--max-duration`) rather than a configured limit. Omitted when false. |
+| `duration_limit_reached` | bool | The `--max-duration` wall-clock budget elapsed. Implies `interrupted`. Omitted when false. |
 | `max_pages` / `max_depth` | int | The limits in effect (`0` = unlimited). |
 
-When `complete` is false, a `notes` entry spells out which limit was hit and how to lift it,
-and the **HTML report shows a prominent banner** at the top of the page. By default the crawl
-is bounded by `--max-pages` (500) with unlimited depth, so it walks the whole site up to that
+A first Ctrl-C during `gocrawl crawl` cancels the crawl gracefully and still writes whatever
+was fetched so far as a report with `interrupted: true`, rather than losing everything; a
+second Ctrl-C falls through to the OS default (immediate termination) if the crawl is slow to
+unwind. `--max-duration` (e.g. `--max-duration 90m`) stops the crawl the same way once its
+wall-clock budget elapses, reported as `duration_limit_reached: true`.
+
+When `complete` is false, a `notes` entry spells out what happened (which limit was hit, or
+that the crawl was interrupted) and how to get full coverage, and the **HTML report shows a
+prominent banner** at the top of the page. By default the crawl is bounded by `--max-pages`
+(500) with unlimited depth, so it walks the whole site up to that
 budget rather than stopping at a shallow depth — re-crawl with a higher `--max-pages` (or `0`)
 when you see the partial-coverage banner.
 
@@ -212,30 +221,39 @@ open report.html
 
 ## Re-rendering a saved report
 
-`gocrawl render <report.json>` reads a JSON report you saved earlier and writes it out in
-another format — **without recrawling**. This is the fast way to regenerate an HTML report
-after upgrading gocrawl (e.g. to pick up template improvements), or to produce CSV/HTML from a
-JSON you already have:
+`gocrawl render <ref>` reads a JSON report you saved earlier and writes it out in another
+format — **without recrawling**. This is the fast way to regenerate an HTML report after
+upgrading gocrawl (e.g. to pick up template improvements), or to produce CSV/HTML from a JSON
+you already have. `<ref>` accepts anything `gocrawl compare` does: a path to a JSON report, a
+stored crawl ID (`host/timestamp` from `gocrawl history`), the word `latest`, or a bare host
+name (that site's newest saved crawl):
 
 ```sh
 gocrawl crawl  https://example.com --format json --out report.json   # crawl once
 gocrawl render report.json --out report.html                         # re-render any time, no recrawl
 gocrawl render report.json --format csv --out issues.csv             # or to CSV
 gocrawl render report.json --out report.html --sitemap sitemap.xml   # also (re)emit sitemap.xml
+
+gocrawl crawl https://example.com --save                             # or save straight to the store
+gocrawl render latest --out report.html                              # and render by ID/"latest"/host
 ```
 
 Flags mirror `crawl`'s output flags: `--out`/`-o` (default stdout), `--format`/`-f` (default
-`html`), and `--sitemap`. Because the JSON report carries the [`site_map`](#json-schema) tree,
-the HTML **Site map** tab is reproduced too. Only the page bodies aren't stored (see below),
-so re-rendering can't run new analyzers — for that, recrawl.
+`html`), and `--sitemap`; `--store-dir` selects a non-default store when resolving a crawl ID.
+Because the JSON report carries the [`site_map`](#json-schema) tree, the HTML **Site map** tab
+is reproduced too. Only the page bodies aren't stored (see below), so re-rendering can't run
+new analyzers — for that, recrawl.
 
 ## What is (and isn't) in the report
 
 The report contains the **issues** analyzers produced, not the raw crawled page bodies. Each
 crawled [`Page`](../internal/crawler/types.go) holds the response body, parsed HTML document,
 and headers while analyzers run, but those fields are intentionally **not serialized** — only
-findings reach the report. If you need raw page data, it lives in the in-memory
-`crawler.Result`, consumed by the analyzer pipeline.
+findings reach the report. `runner.Run` (used by `gocrawl crawl` and the MCP server) also
+releases them from memory (`Result.ReleaseBodies`) once the report is built, so a large crawl
+doesn't hold every page's body and parsed DOM for the rest of the process's life — this
+matters most for the MCP server, which stays running across many crawls. A caller driving
+`crawler.Engine.Crawl` directly still gets the full `Result` with bodies intact.
 
 ## See also
 

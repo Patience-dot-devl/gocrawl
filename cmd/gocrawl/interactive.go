@@ -1,17 +1,18 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
 
@@ -33,6 +34,7 @@ func runInteractive(cmd *cobra.Command) error {
 		maxPages    = strconv.Itoa(cfg.Crawl.MaxPages)
 		concurrency = strconv.Itoa(cfg.Crawl.Concurrency)
 		rate        = strconv.FormatFloat(cfg.Crawl.RatePerSecond, 'f', -1, 64)
+		maxDuration = cfg.Crawl.MaxDuration.String()
 
 		respectRobots   = cfg.Crawl.RespectRobots
 		allowSubdomains = cfg.Crawl.AllowSubdomains
@@ -106,6 +108,7 @@ func runInteractive(cmd *cobra.Command) error {
 			huh.NewInput().Title("Max pages").Description("Hard cap on pages crawled (0 = unlimited).").Value(&maxPages).Validate(validInt),
 			huh.NewInput().Title("Concurrency").Description("Parallel fetch workers.").Value(&concurrency).Validate(validInt),
 			huh.NewInput().Title("Rate limit").Description("Max requests per second (0 = unlimited).").Value(&rate).Validate(validFloat),
+			huh.NewInput().Title("Max duration").Description("Wall-clock budget for the whole crawl, e.g. 90m (0s = unlimited).").Value(&maxDuration).Validate(validDuration),
 		),
 		// Scope toggles kept in their own group: huh renders every field of a group on one
 		// screen, so an overcrowded group overflows a short terminal and clips the top fields.
@@ -166,6 +169,7 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Crawl.MaxPages = atoiOr(maxPages, cfg.Crawl.MaxPages)
 	cfg.Crawl.Concurrency = atoiOr(concurrency, cfg.Crawl.Concurrency)
 	cfg.Crawl.RatePerSecond = atofOr(rate, cfg.Crawl.RatePerSecond)
+	cfg.Crawl.MaxDuration = durationOr(maxDuration, cfg.Crawl.MaxDuration)
 	cfg.Crawl.RespectRobots = respectRobots
 	cfg.Crawl.AllowSubdomains = allowSubdomains
 	cfg.Crawl.FollowExternal = followExternal
@@ -180,16 +184,16 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Output.Path = strings.TrimSpace(outputPath)
 	cfg.Analyzers.Specialized = specialized
 
-	// An empty Enabled list means "run all"; only set it when a strict subset is chosen.
-	if len(selected) > 0 && len(selected) < len(all) {
-		cfg.Analyzers.Enabled = selected
-	} else {
-		cfg.Analyzers.Enabled = nil
-	}
+	cfg.Analyzers.Enabled, cfg.Analyzers.Disabled = analyzerSelection(selected, all)
 
 	seed = strings.TrimSpace(seed)
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
+	}
+	var seedUser, seedPass string
+	seed, seedUser, seedPass = crawler.SanitizeSeed(seed)
+	if seedUser != "" && cfg.Crawl.BasicAuth == "" {
+		cfg.Crawl.BasicAuth = seedUser + ":" + seedPass
 	}
 
 	// Keep the machine awake for the duration of the crawl + report write when requested.
@@ -197,7 +201,7 @@ func runInteractive(cmd *cobra.Command) error {
 		defer startCaffeinate()()
 	}
 
-	rep, err := runner.Run(context.Background(), cfg, seed)
+	rep, err := runner.Run(cmd.Context(), cfg, seed)
 	if err != nil {
 		return err
 	}
@@ -211,6 +215,26 @@ func runInteractive(cmd *cobra.Command) error {
 		fmt.Fprintln(os.Stderr, line)
 	}
 	return nil
+}
+
+// analyzerSelection maps the interactive analyzer multi-select onto Enabled/Disabled. An empty
+// Enabled list conventionally means "run all" (see runner/analyze.Registry.Select), so
+// deselecting every analyzer can't be expressed that way — it would silently run all of them
+// instead of none. Disabling every analyzer by name achieves the same "run none" result
+// through the existing deny-list mechanism instead.
+func analyzerSelection(selected []string, all []runner.AnalyzerInfo) (enabled, disabled []string) {
+	switch {
+	case len(selected) == 0:
+		names := make([]string, len(all))
+		for i, a := range all {
+			names[i] = a.Name
+		}
+		return nil, names
+	case len(selected) < len(all):
+		return selected, nil
+	default:
+		return nil, nil
+	}
 }
 
 // runForm runs the form, converting the panic that huh v1.0.0 raises when bubbletea cannot
@@ -250,6 +274,20 @@ func atoiOr(s string, fallback int) int {
 func atofOr(s string, fallback float64) float64 {
 	if f, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
 		return f
+	}
+	return fallback
+}
+
+func validDuration(s string) error {
+	if _, err := time.ParseDuration(strings.TrimSpace(s)); err != nil {
+		return errors.New(`must be a duration like "90m" or "0" for unlimited`)
+	}
+	return nil
+}
+
+func durationOr(s string, fallback time.Duration) time.Duration {
+	if d, err := time.ParseDuration(strings.TrimSpace(s)); err == nil {
+		return d
 	}
 	return fallback
 }

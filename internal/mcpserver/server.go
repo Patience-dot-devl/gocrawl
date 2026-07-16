@@ -7,10 +7,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
@@ -21,6 +23,7 @@ type CrawlInput struct {
 	Depth         *int     `json:"depth,omitempty" jsonschema:"Maximum link hops from the seed (default 0 = unlimited; the crawl is bounded by max_pages)"`
 	MaxPages      *int     `json:"max_pages,omitempty" jsonschema:"Hard cap on the number of pages crawled (default 500)"`
 	Concurrency   *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
+	MaxDuration   string   `json:"max_duration,omitempty" jsonschema:"Wall-clock budget for the whole crawl as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
 	Render        string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
 	Analyzers     []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
 	Specialized   *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density); off by default"`
@@ -87,6 +90,13 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 	if in.Concurrency != nil {
 		cfg.Crawl.Concurrency = *in.Concurrency
 	}
+	if strings.TrimSpace(in.MaxDuration) != "" {
+		d, derr := time.ParseDuration(strings.TrimSpace(in.MaxDuration))
+		if derr != nil {
+			return nil, CrawlOutput{}, fmt.Errorf("max_duration %q: %w", in.MaxDuration, derr)
+		}
+		cfg.Crawl.MaxDuration = d
+	}
 	if in.Render != "" {
 		cfg.Render = in.Render
 	}
@@ -111,6 +121,12 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 	cfg.Crawl.Proxies = in.Proxies
 	cfg.Crawl.ProxyRotation = in.ProxyRotation
 	cfg.Crawl.BasicAuth = in.BasicAuth
+
+	var user, pass string
+	seed, user, pass = crawler.SanitizeSeed(seed)
+	if user != "" && cfg.Crawl.BasicAuth == "" {
+		cfg.Crawl.BasicAuth = user + ":" + pass
+	}
 
 	rep, err := runner.Run(ctx, cfg, seed)
 	if err != nil {

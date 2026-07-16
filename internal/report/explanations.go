@@ -106,6 +106,215 @@ var explanations = map[string]Explanation{
 		Fix:    "No action needed unless the widget is unexpected. Ensure it loads only where required to limit third-party script weight.",
 	},
 
+	// --- datalayer: GTM/gtag wiring and dataLayer event stream audit ---
+	"datalayer-not-collected": {
+		What:   "dataLayer/event checks were skipped because the crawl did not use headless rendering.",
+		Impact: "Event inventory, GA4 e-commerce validation, duplicate-conversion detection, PII scanning, and tag-firing checks all require a rendered DOM and are not run.",
+		Fix:    "Re-run the crawl with --render headless to enable the full dataLayer audit.",
+	},
+	"datalayer-gtm-noscript-missing": {
+		What:   "A GTM container is present but the <noscript> fallback iframe is missing.",
+		Impact: "Visitors with JavaScript disabled (or blocked before GTM loads) are not tracked at all for this container.",
+		Fix:    "Add the GTM-provided <noscript><iframe src=\"https://www.googletagmanager.com/ns.html?id=GTM-XXXX\">...</iframe></noscript> snippet immediately after the opening <body> tag.",
+	},
+	"datalayer-gtm-snippet-not-in-head": {
+		What:   "The GTM container snippet is not placed inside <head>.",
+		Impact: "Loading GTM later in the document delays every tag it manages, including analytics and consent signals that ideally fire as early as possible.",
+		Fix:    "Move the GTM snippet as high in <head> as possible, per Google's installation instructions.",
+	},
+	"datalayer-push-before-init": {
+		What:   "dataLayer.push() is called before the dataLayer array is initialized.",
+		Impact: "Pushes that run before initialization are silently lost, so early events (and any data they carry) never reach GTM/gtag.",
+		Fix:    "Ensure the dataLayer initialization (e.g. window.dataLayer = window.dataLayer || []) runs before any push() call, ideally as the very first script in <head>.",
+	},
+	"datalayer-init-missing": {
+		What:   "A tag manager (GTM or a GA4 measurement ID) is present, but no dataLayer initialization was found anywhere in the page HTML.",
+		Impact: "Without an initialized dataLayer, events pushed by on-page scripts or tag configurations have nowhere to go, silently breaking measurement.",
+		Fix:    "Add the standard dataLayer initialization snippet before any code that pushes to it or configures a tag.",
+	},
+	"datalayer-gtag-config-id-mismatch": {
+		What:   "gtag('config', ID) targets an ID that isn't loaded by any googletagmanager.com/gtag/js script on the page.",
+		Impact: "A config call with no matching loader typically means the tag never actually initializes, so its data (pageviews, conversions) is not collected.",
+		Fix:    "Load the gtag.js library with the same ID via <script async src=\"https://www.googletagmanager.com/gtag/js?id=ID\">, or correct the ID in the config call.",
+	},
+	"datalayer-consent-mode-present": {
+		What:   "Google Consent Mode default/update signals were detected.",
+		Impact: "Positive signal. Consent Mode lets analytics/ads tags adjust behavior based on visitor consent, which is required in several jurisdictions.",
+		Fix:    "No action needed. Keep the consent defaults in sync with your cookie/consent banner.",
+	},
+	"datalayer-consent-mode-missing": {
+		What:   "Analytics and/or ads tags are present, but no Google Consent Mode default was found.",
+		Impact: "Tags may fire before a visitor has made a consent choice, which can violate privacy regulations (e.g. GDPR) in applicable regions.",
+		Fix:    "Call gtag('consent', 'default', {...}) with appropriate defaults before the tag configuration, and update it when the visitor responds to your consent banner.",
+	},
+	"datalayer-empty": {
+		What:   "A tag manager is present in the HTML, but window.dataLayer was empty or absent after the page rendered.",
+		Impact: "No events are reaching GTM/gtag at runtime, so analytics, conversions, and any dependent audits (e-commerce, duplicates, PII) have nothing to inspect — tracking is effectively broken.",
+		Fix:    "Check the browser console for JavaScript errors, verify the dataLayer variable name matches what GTM expects, and confirm no consent/ad-blocking tool is stripping it.",
+	},
+	"datalayer-events": {
+		What:   "Informational inventory of the distinct event names observed in the dataLayer and how many times each fired.",
+		Impact: "No impact by itself; useful for confirming the expected events are present and firing the expected number of times.",
+		Fix:    "No action needed. Cross-check the inventory against your tagging plan.",
+	},
+	"datalayer-page-view-missing": {
+		What:   "No page_view (or GTM lifecycle event such as gtm.js/gtm.load) was found in the dataLayer.",
+		Impact: "The page load itself isn't being measured, so pageview counts and any funnel that starts from a page view will undercount this page.",
+		Fix:    "Confirm GTM's built-in page-view trigger or gtag's automatic page_view is enabled and not blocked by a misconfigured trigger or consent setting.",
+	},
+	"datalayer-ecommerce-event-invalid": {
+		What:   "A GA4 recommended e-commerce event (e.g. purchase, add_to_cart) is missing one or more of its required parameters.",
+		Impact: "Incomplete e-commerce events produce gaps or errors in GA4 revenue/e-commerce reporting.",
+		Fix:    "Add the missing parameters listed in the issue's data (e.g. transaction_id, value, currency, items) to the event payload.",
+	},
+	"datalayer-param-type": {
+		What:   "An e-commerce event parameter has the wrong shape (e.g. value/currency not the expected type, or items not a non-empty array).",
+		Impact: "GA4 may silently drop or misinterpret the parameter, corrupting revenue and item-level reporting for the event.",
+		Fix:    "Send value as a number, currency as an ISO-4217 code (e.g. \"USD\"), and items as a non-empty array of item objects.",
+	},
+	"datalayer-duplicate-event": {
+		What:   "A conversion-tracked event (e.g. purchase, generate_lead, sign_up) fired more than once for the same page load.",
+		Impact: "Double-firing inflates the reported conversion count, skewing campaign performance and ROAS calculations.",
+		Fix:    "Guard the event push so it only fires once per conversion (e.g. dedupe on a transaction/session ID, or fix a trigger that's firing twice).",
+	},
+	"datalayer-duplicate-transaction": {
+		What:   "The same purchase transaction_id appeared in more than one purchase event.",
+		Impact: "The same order is counted as multiple purchases, inflating revenue and order-count metrics in GA4.",
+		Fix:    "Ensure the purchase event fires exactly once per order (e.g. guard against a page refresh or back-navigation re-firing the tag).",
+	},
+	"datalayer-pii": {
+		What:   "A value that looks like an email address or phone number was pushed into the dataLayer.",
+		Impact: "Personal data flowing into Google/GTM's dataLayer without safeguards can violate GA4's terms of service and privacy regulations (e.g. GDPR).",
+		Fix:    "Remove or hash/pseudonymize personal data before pushing to the dataLayer; if you need user-level identifiers, use GA4's User-ID feature with proper consent instead.",
+	},
+	"datalayer-tag-not-firing": {
+		What:   "A tag detected in the page HTML (GA4, Google Ads, Meta Pixel, or GTM) issued no matching network beacon during render.",
+		Impact: "The tag's data isn't reaching its destination — could be a broken installation, a trigger that never fires, consent gating, or ad-blocking, so its metrics are silently missing.",
+		Fix:    "Check the tag's trigger conditions, confirm it isn't blocked by consent settings or an ad blocker, and verify the beacon fires in the browser's network tab.",
+	},
+	"datalayer-tags-firing": {
+		What:   "Informational confirmation that a detected tag issued a matching network beacon during render.",
+		Impact: "No impact; this confirms the tag is actually collecting data, not just installed.",
+		Fix:    "No action needed.",
+	},
+
+	// --- wordpress: WordPress fingerprinting and WP-specific checks ---
+	"wp-detected": {
+		What:   "The site is built on WordPress.",
+		Impact: "Informational. Enables the WordPress-specific checks below; no action needed by itself.",
+		Fix:    "No action needed.",
+	},
+	"wp-version-exposed": {
+		What:   "The WordPress core version is disclosed via the generator meta tag.",
+		Impact: "Publishing the exact version makes it trivial for an attacker to look up known CVEs affecting that release.",
+		Fix:    "Remove or blank the generator tag (many SEO plugins offer this, or filter it out with remove_action('wp_head', 'wp_generator')).",
+	},
+	"wp-emoji-enabled": {
+		What:   "The wp-emoji script is loaded sitewide.",
+		Impact: "Adds an extra script and inline configuration to every page for a feature modern browsers render natively, at minor performance cost.",
+		Fix:    "Dequeue wp-emoji-release.min.js (e.g. via disable-emojis in a plugin or theme) unless you specifically need the polyfill.",
+	},
+	"wp-jquery-migrate": {
+		What:   "The jQuery Migrate compatibility shim is loaded.",
+		Impact: "Adds an extra script sitewide that only matters if older jQuery-plugin code depends on removed APIs.",
+		Fix:    "Remove jQuery Migrate if no theme/plugin code needs it, or confirm it's still required before dropping it.",
+	},
+	"wp-many-plugin-assets": {
+		What:   "A large number of distinct plugins are enqueuing their own front-end CSS/JS.",
+		Impact: "Each plugin's assets add HTTP requests and often render-blocking resources, compounding page weight and load time.",
+		Fix:    "Audit plugins for ones that can be consolidated or removed, and consider an asset-combining/critical-CSS strategy for the rest.",
+	},
+	"wp-default-tagline": {
+		What:   `The site still uses WordPress's default "Just another WordPress site" tagline.`,
+		Impact: "A visible sign the site wasn't fully configured, and a missed opportunity to use the tagline slot for something SEO-relevant.",
+		Fix:    "Set a real tagline under Settings → General, or remove it from the theme if unused.",
+	},
+	"wp-no-seo-plugin": {
+		What:   "No recognized SEO plugin (Yoast, Rank Math, All in One SEO) was detected.",
+		Impact: "Without one, the site likely lacks convenient control over titles, meta descriptions, canonical tags, and sitemaps — informational, not necessarily a problem if these are handled another way.",
+		Fix:    "Install a maintained SEO plugin if titles/meta/sitemaps aren't otherwise managed, or confirm they're handled via theme code or another mechanism.",
+	},
+	"wp-multiple-seo-plugins": {
+		What:   "More than one SEO plugin is active at the same time.",
+		Impact: "Competing plugins can each inject their own titles, meta tags, or sitemaps, producing conflicting or duplicate output that confuses search engines.",
+		Fix:    "Deactivate all but one SEO plugin, and verify the surviving plugin's settings after removing the others.",
+	},
+	"wp-multilingual-detected": {
+		What:   "A multilingual plugin (WPML, Polylang, TranslatePress, or Weglot) is active.",
+		Impact: "Informational. Enables the hreflang-related checks below.",
+		Fix:    "No action needed.",
+	},
+	"wp-i18n-no-hreflang": {
+		What:   "A multilingual plugin is active, but no hreflang alternate links were found on any crawled page.",
+		Impact: "Search engines can't see the language/region relationships between the site's translated pages, so they may serve the wrong language version in search results.",
+		Fix:    "Configure the multilingual plugin to emit <link rel=\"alternate\" hreflang=\"...\"> tags for every translated page.",
+	},
+	"wp-ugly-permalink": {
+		What:   "The page uses a default plain permalink (e.g. ?p=123) instead of a pretty URL.",
+		Impact: "Plain permalinks are less readable, less memorable, and typically carry less descriptive/keyword signal than a pretty URL structure.",
+		Fix:    "Switch to a pretty permalink structure under Settings → Permalinks, and redirect old plain-permalink URLs to their pretty equivalents.",
+	},
+	"wp-i18n-lang-query-param": {
+		What:   "Language is selected via a ?lang= query parameter rather than a per-language path or subdomain.",
+		Impact: "Query-parameter language negotiation is the weakest option for SEO: it's easy to miss in crawls, doesn't cleanly separate language variants as distinct URLs, and complicates hreflang mapping.",
+		Fix:    "Configure the multilingual plugin to use per-language paths (e.g. /fr/) or subdomains instead of a query parameter.",
+	},
+	"wp-html-lang-mismatch": {
+		What:   "The <html lang> attribute disagrees with the language requested in the URL.",
+		Impact: "Browsers, screen readers, and search engines may apply the wrong language's rules (pronunciation, hyphenation, indexing) to the page.",
+		Fix:    "Ensure the theme/plugin sets <html lang> to match the language actually being served for that URL.",
+	},
+	"wp-acf-leaked-markup": {
+		What:   "Unrendered Advanced Custom Fields markup (a field tag or shortcode) is leaking into the visible page content instead of being executed.",
+		Impact: "Visitors see raw template code or shortcode text instead of the intended field value, which looks broken and can expose implementation details.",
+		Fix:    "Fix the template/shortcode context so the ACF tag or shortcode is actually executed (e.g. ensure the shortcode is registered and do_shortcode() is applied, or the PHP field call runs in a template, not printed as text).",
+	},
+	"wp-indexable-attachment": {
+		What:   "A WordPress attachment page is indexable.",
+		Impact: "Attachment pages are thin, auto-generated pages with little unique content; indexing them dilutes site quality and wastes crawl budget.",
+		Fix:    "Set attachment pages to noindex, or redirect them to their parent post/page.",
+	},
+	"wp-indexable-search": {
+		What:   "An internal search-results page is indexable.",
+		Impact: "Search-results pages are typically thin, duplicative, and can expose internal query strings; indexing them adds low-value pages to search results.",
+		Fix:    "Set internal search-results pages to noindex (most SEO plugins offer this as a toggle).",
+	},
+	"wp-indexable-author-archive": {
+		What:   "An author archive page is indexable.",
+		Impact: "On single-author sites, the author archive usually duplicates the blog index, diluting ranking signals across two near-identical pages.",
+		Fix:    "Noindex author archives on single-author sites, or disable them entirely if they add no value.",
+	},
+	"wp-indexable-date-archive": {
+		What:   "A date-based archive (year/month/day) is indexable.",
+		Impact: "Date archives are thin, duplicate-prone listings of existing content that add little unique value and can dilute ranking signals.",
+		Fix:    "Noindex date archives, or disable them if the theme doesn't rely on them.",
+	},
+	"wp-xmlrpc-enabled": {
+		What:   "xmlrpc.php is reachable and responding.",
+		Impact: "xmlrpc.php is a well-known brute-force amplification vector (multiple login attempts per request) and can be abused for pingback-based DDoS against other sites.",
+		Fix:    "Disable XML-RPC entirely if not needed (e.g. via a security plugin or by blocking the endpoint at the server/WAF level), or restrict it to trusted IPs if a specific integration requires it.",
+	},
+	"wp-user-enumeration-rest": {
+		What:   "The REST API exposes valid usernames via /wp-json/wp/v2/users.",
+		Impact: "Leaked usernames narrow a brute-force or credential-stuffing attack to real accounts, removing half the guesswork for an attacker.",
+		Fix:    "Restrict or filter the REST users endpoint (e.g. require authentication, or use a security plugin to disable public user enumeration).",
+	},
+	"wp-user-enumeration-author": {
+		What:   "Requesting /?author=1 redirects to /author/<login>/, leaking a valid username.",
+		Impact: "Like the REST endpoint, this narrows brute-force/credential-stuffing attempts to confirmed real usernames.",
+		Fix:    "Block or rewrite author-ID-based query redirects (a security plugin, or custom rewrite rules, can prevent the username from leaking).",
+	},
+	"wp-directory-listing": {
+		What:   "The wp-content/uploads directory is browsable (directory listing enabled).",
+		Impact: "Visitors and attackers can browse and download every uploaded file, including anything not meant to be publicly linked.",
+		Fix:    "Disable directory listing on the web server (e.g. Options -Indexes in Apache, or the equivalent Nginx/other-server configuration) for the uploads directory.",
+	},
+	"wp-readme-exposed": {
+		What:   "readme.html is reachable and discloses the exact WordPress core version.",
+		Impact: "Like the generator meta tag, this lets an attacker map the install to known CVEs for that specific release.",
+		Fix:    "Delete or block access to readme.html in production (many security plugins/server rules can do this automatically).",
+	},
+
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {
 		What:   "The page body is identical to one or more other crawled pages.",
@@ -227,6 +436,11 @@ var explanations = map[string]Explanation{
 		What:   "An HTTPS page loads insecure http:// resources.",
 		Impact: "Browsers may block the resources or warn users, breaking functionality and eroding trust.",
 		Fix:    "Update all subresource URLs (scripts, images, styles, iframes) to https://.",
+	},
+	"http-body-truncated": {
+		What:   "The page body was cut short — either it exceeded the crawler's fetch size limit, or the connection failed partway through the read.",
+		Impact: "Other findings on this page (missing title/H1, invalid structured data, broken markup) may be false positives caused by content past the cutoff never being seen, not an actual issue with the page.",
+		Fix:    "If the page is legitimately large, raise crawl.max_body_bytes in the config (or GOCRAWL_CRAWL_MAX_BODY_BYTES) and re-crawl. If it's not expected to be large, investigate why the response was cut off (a slow/unstable connection, or a server bug producing an unbounded response).",
 	},
 
 	// --- images ---
@@ -560,6 +774,11 @@ var explanations = map[string]Explanation{
 		What:   "No sitemap was found at the robots.txt declaration or conventional locations.",
 		Impact: "Search engines must rely solely on link discovery, which can miss pages.",
 		Fix:    "Publish a sitemap.xml and reference it from robots.txt.",
+	},
+	"sitemap-truncated": {
+		What:   "A declared sitemap is larger than the crawler's fetch size limit, so it was cut off before it could be parsed.",
+		Impact: "The sitemap's URLs weren't read at all, so the coverage cross-check is incomplete or skipped — this is not the same as an invalid/malformed sitemap.",
+		Fix:    "Raise crawl.max_body_bytes (or GOCRAWL_CRAWL_MAX_BODY_BYTES) enough to cover the sitemap and re-crawl, or split the sitemap into smaller files per the sitemaps.org 50MB/50,000-URL limits.",
 	},
 	"sitemap-coverage": {
 		What:   "A comparison of sitemap URLs against crawled pages (gaps in both directions).",

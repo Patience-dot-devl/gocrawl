@@ -38,6 +38,7 @@ default** (the value used when you set nothing).
 | `crawl.proxy_rotation` | `--proxy-rotation` | string | `round-robin` | How a multi-entry proxy pool is picked: `off`, `round-robin`, `random`, or `sticky-host`. |
 | `crawl.basic_auth` | `--basic-auth` | string | *(none)* | HTTP Basic Auth credentials as `user:pass`, for sites gated by server-level Basic Auth (common on staging/acceptance environments). See [HTTP Basic Auth](#http-basic-auth). The interactive menu has separate username/password fields for this. |
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
+| `crawl.max_duration` | `--max-duration` | duration | `0` (unlimited) | Wall-clock budget for the whole crawl (e.g. `"90m"`). On expiry the crawl stops early and still writes a report from whatever was fetched, flagged as **partial coverage** (see [Output](output.md#coverage)) — the same mechanism a Ctrl-C interruption uses. |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
 | `crawl.respect_robots` | `--respect-robots` | bool | `true` | Obey `robots.txt` while crawling. |
 | `crawl.allow_subdomains` | `--subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
@@ -235,6 +236,7 @@ replaced by underscores. They override the YAML file and are overridden by CLI f
 | `crawl.adaptive_delay` | `GOCRAWL_CRAWL_ADAPTIVE_DELAY` |
 | `crawl.user_agent` | `GOCRAWL_CRAWL_USER_AGENT` |
 | `crawl.timeout` | `GOCRAWL_CRAWL_TIMEOUT` |
+| `crawl.max_duration` | `GOCRAWL_CRAWL_MAX_DURATION` |
 | `crawl.max_body_bytes` | `GOCRAWL_CRAWL_MAX_BODY_BYTES` |
 | `crawl.respect_robots` | `GOCRAWL_CRAWL_RESPECT_ROBOTS` |
 | `render` | `GOCRAWL_RENDER` |

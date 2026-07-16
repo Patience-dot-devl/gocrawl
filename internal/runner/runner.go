@@ -139,6 +139,12 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	issues := analyze.Run(ctx, analyzers, result)
 
 	rep := report.Build(result, issues)
+	// Every analyzer has read what it needs from each page's body/DOM (analyze.Run, above),
+	// and report.Build just finished the one remaining reader (the site-map tree's per-page
+	// title, extracted from Doc). Nothing touches them after this point, so release them now
+	// rather than holding a large crawl's raw bytes and parsed DOM trees in memory for the
+	// rest of the process's life.
+	result.ReleaseBodies()
 	if len(skipped) > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("strip_query is on, so query-dependent analyzers were skipped: %s", strings.Join(skipped, ", ")))
 	}
@@ -164,6 +170,17 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 // limit that cut the crawl short and how to lift it. This is the signal that keeps "0 broken
 // links" from being misread as "no broken links" when the crawl simply didn't reach them.
 func coverageNote(c crawler.Coverage) string {
+	if c.DurationLimitReached {
+		return "partial coverage: the crawl was stopped after reaching its --max-duration time " +
+			"budget. Findings reflect only what was fetched within that window, and many in-scope " +
+			"pages may not have been discovered at all — raise --max-duration (or set 0 for " +
+			"unlimited) and re-run for full coverage."
+	}
+	if c.Interrupted {
+		return "partial coverage: the crawl was interrupted before it finished (e.g. Ctrl-C). " +
+			"Findings reflect only what was fetched before the interruption, and many in-scope " +
+			"pages may not have been discovered at all — re-run to completion for full coverage."
+	}
 	var reasons []string
 	if c.PageLimitReached {
 		reasons = append(reasons, fmt.Sprintf("the page limit (--max-pages %d) was reached — raise it or set 0 for unlimited", c.MaxPages))
