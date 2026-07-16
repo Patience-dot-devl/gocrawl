@@ -65,6 +65,89 @@ The current baseline. Everything here works today.
 
 No tracked items at the moment.
 
+## 📋 Planned — hardening & correctness (July 2026 code review)
+
+Findings from a full codebase review (July 2026). Build, vet, tests, and the race detector
+all pass; the items below are verified bugs and robustness gaps, grouped by theme and
+ordered roughly by impact within each group.
+
+### Security & credential handling
+
+- **Strip userinfo from seed URLs** — credentials embedded in a seed
+  (`https://user:pass@host`) currently survive `canonicalURL`, propagate into every resolved
+  page/issue URL, and leak into JSON/CSV/HTML reports, the crawl store, and `gocrawl history`.
+  Move them into the Basic Auth options at seed intake (CLI, MCP, and interactive mode) and
+  strip them from the URL. This path also bypasses the headless-mode Basic Auth rejection.
+- **CSV formula-injection guard** — crawled page content (titles etc.) flows into CSV report
+  cells unescaped; prefix cells starting with `=`, `+`, `-`, `@` so audit CSVs are safe to
+  open in Excel/Sheets.
+- **Scope-check redirect targets** — the fetcher follows redirects to any host, bypassing
+  crawl scope, include/exclude rules, and robots.txt (SSRF surface when running as an MCP
+  server). Re-check scope and robots per redirect hop.
+- **Harden the crawl store against hostile paths** — `url.Hostname()` can return `..`, and
+  store IDs are joined unvalidated, so saves/reads can escape the store root. Sanitize hosts
+  and verify resolved paths stay under the root.
+
+### Crawl-engine correctness
+
+- **Treat robots.txt 5xx as disallow-all** — a 5xx (or network error) on `/robots.txt`
+  currently means "allow everything"; RFC 9309 requires the opposite. 4xx → allow stays
+  correct. Add direct tests for `internal/crawler/robots.go` (currently untested).
+- **Honor `<base href>` when resolving links** — relative links on base-tag sites resolve
+  against the wrong base today, producing phantom 404s and missed pages.
+- **Allow Basic Auth on same-host http→https upgrades** — the scheme-equality check that
+  closed the downgrade leak also blocks the safe upgrade direction, so an http seed that
+  301s to https gets every page 401'd.
+- **Surface truncated bodies** — mid-body read errors and the `MaxBodyBytes` cap are silent,
+  so analyzers report "missing title/H1" for pages that were cut off. Record the error or a
+  `Truncated` flag.
+- **Mark redirect final URLs as visited** — `/old` → `/new` plus a direct link to `/new`
+  fetches the page twice and duplicates every per-page issue for it.
+- **Cap honored `Retry-After`** — a `503` with `Retry-After: 86400` currently stalls the
+  crawl for up to a day with no output; cap it (~5 min) and log when the cap is hit.
+- **Decode non-UTF-8 pages** — bodies are parsed as UTF-8 regardless of charset, degrading
+  text-based analyzers on ISO-8859-1 / Shift-JIS sites
+  (`golang.org/x/net/html/charset`).
+
+### Analyzer correctness
+
+- **Count runes, not bytes, in title/description length checks** (`seo`) — non-ASCII sites
+  get systematic `seo-long-title` false positives today.
+- **Detect real redirect loops** (`redirects`) — a genuine loop exits the fetcher as a
+  generic "too many redirects" fetch error, so the `http-redirect-loop` code is unreachable;
+  run loop detection over the recorded chain when the fetch errored.
+- **Add the missing `datalayer-*` explanations** — all 18 codes emitted by the `datalayer`
+  analyzer lack entries in `internal/report/explanations.go`; add them, plus a contract test
+  asserting every emitted code is explained.
+- **Accept valid BCP-47 hreflang tags** (`hreflang`) — `es-419`, `zh-Hant`, lowercase
+  regions, and 3-letter language codes are all falsely flagged; validate with
+  `golang.org/x/text/language` instead of the hand-rolled regex.
+- **Resolve relative hrefs and ignore trailing-slash redirects in `amp`/`pagination`** —
+  both diverge from the `links` analyzer; factor a shared "is this target broken?" helper
+  on `crawler.Result`.
+- **Restrict mixed-content checks to loading `<link>` rels** (`redirects`) — RSS/hreflang
+  alternates over http are false positives; `iframe`/`video`/`source` are missed.
+- **Handle gzip and >5 MB sitemaps** (`sitemap`) — `.xml.gz` and large sitemaps are falsely
+  reported as `sitemap-invalid`; also distinguish fetch failures from a genuinely missing
+  sitemap.
+
+### CLI & robustness
+
+- **Graceful SIGINT with a partial report** — Ctrl-C on a long crawl currently loses
+  everything; the engine is context-aware and the coverage banner can label partial results.
+- **Register all config keys for env-var resolution** — viper only resolves env vars for
+  keys with registered defaults, so e.g. `GOCRAWL_CRAWL_BASIC_AUTH` is silently ignored.
+- **Atomic report/store/sitemap writes** — write to a temp file and rename, so a failed
+  write can't truncate yesterday's good artifact.
+- **Refresh the `gocrawl init` template** — it still calls headless rendering "stubbed",
+  omits the `html` format and the `botwall`/`datalayer` analyzers, and mislabels
+  `max_depth: 0` as "seed only" (it means unlimited).
+- **Let `gocrawl render` accept store IDs** — `gocrawl history` says its IDs work with
+  `render`, but `render` only reads file paths.
+- **Bound memory on large crawls** — every page retains its body and parsed DOM for the
+  whole run; add an option to drop them post-analysis, and replace goroutine-per-URL with a
+  worker pool so `--max-pages 0` doesn't grow goroutines with the frontier.
+
 ## 📋 Planned — engine & data model
 
 Checks and capabilities that need post-crawl graph passes or richer crawl data before an
