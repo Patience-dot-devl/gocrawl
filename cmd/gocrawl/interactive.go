@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -33,6 +34,7 @@ func runInteractive(cmd *cobra.Command) error {
 		maxPages    = strconv.Itoa(cfg.Crawl.MaxPages)
 		concurrency = strconv.Itoa(cfg.Crawl.Concurrency)
 		rate        = strconv.FormatFloat(cfg.Crawl.RatePerSecond, 'f', -1, 64)
+		maxDuration = cfg.Crawl.MaxDuration.String()
 
 		respectRobots   = cfg.Crawl.RespectRobots
 		allowSubdomains = cfg.Crawl.AllowSubdomains
@@ -106,6 +108,7 @@ func runInteractive(cmd *cobra.Command) error {
 			huh.NewInput().Title("Max pages").Description("Hard cap on pages crawled (0 = unlimited).").Value(&maxPages).Validate(validInt),
 			huh.NewInput().Title("Concurrency").Description("Parallel fetch workers.").Value(&concurrency).Validate(validInt),
 			huh.NewInput().Title("Rate limit").Description("Max requests per second (0 = unlimited).").Value(&rate).Validate(validFloat),
+			huh.NewInput().Title("Max duration").Description("Wall-clock budget for the whole crawl, e.g. 90m (0s = unlimited).").Value(&maxDuration).Validate(validDuration),
 		),
 		// Scope toggles kept in their own group: huh renders every field of a group on one
 		// screen, so an overcrowded group overflows a short terminal and clips the top fields.
@@ -166,6 +169,7 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Crawl.MaxPages = atoiOr(maxPages, cfg.Crawl.MaxPages)
 	cfg.Crawl.Concurrency = atoiOr(concurrency, cfg.Crawl.Concurrency)
 	cfg.Crawl.RatePerSecond = atofOr(rate, cfg.Crawl.RatePerSecond)
+	cfg.Crawl.MaxDuration = durationOr(maxDuration, cfg.Crawl.MaxDuration)
 	cfg.Crawl.RespectRobots = respectRobots
 	cfg.Crawl.AllowSubdomains = allowSubdomains
 	cfg.Crawl.FollowExternal = followExternal
@@ -270,6 +274,20 @@ func atoiOr(s string, fallback int) int {
 func atofOr(s string, fallback float64) float64 {
 	if f, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
 		return f
+	}
+	return fallback
+}
+
+func validDuration(s string) error {
+	if _, err := time.ParseDuration(strings.TrimSpace(s)); err != nil {
+		return errors.New(`must be a duration like "90m" or "0" for unlimited`)
+	}
+	return nil
+}
+
+func durationOr(s string, fallback time.Duration) time.Duration {
+	if d, err := time.ParseDuration(strings.TrimSpace(s)); err == nil {
+		return d
 	}
 	return fallback
 }

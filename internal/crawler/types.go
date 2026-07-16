@@ -105,6 +105,24 @@ type Page struct {
 // IsHTML reports whether the page body was parsed as an HTML document.
 func (p *Page) IsHTML() bool { return p.Doc != nil }
 
+// ReleaseBodies drops every page's Body, RawBody, and parsed Doc, freeing the memory they
+// hold. Call this once analysis and report-building have both finished reading pages —
+// nothing in this codebase reads a page's body or DOM afterward, and a large crawl of heavy
+// pages can otherwise hold multiple GB of raw bytes and parsed DOM trees in memory for the
+// rest of the process's life. That matters most for a long-lived caller handling many crawls
+// in one process (e.g. the MCP server), where the memory would otherwise accumulate across
+// calls until the next GC cycle catches up.
+func (r *Result) ReleaseBodies() {
+	for _, p := range r.Pages {
+		if p == nil {
+			continue
+		}
+		p.Body = nil
+		p.RawBody = nil
+		p.Doc = nil
+	}
+}
+
 // RobotsData is the parsed robots.txt for a single host.
 type RobotsData struct {
 	Host     string   `json:"host"`
@@ -172,6 +190,10 @@ type Coverage struct {
 	// be far less covered than DiscoveredNotCrawled reflects, since much of it may never have
 	// been discovered at all.
 	Interrupted bool `json:"interrupted,omitempty"`
+	// DurationLimitReached is true when the crawl stopped because it hit its --max-duration
+	// wall-clock budget rather than being interrupted externally. Also implies Interrupted,
+	// since the same context-cancellation path stops the crawl either way.
+	DurationLimitReached bool `json:"duration_limit_reached,omitempty"`
 	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
 	MaxPages int `json:"max_pages,omitempty"`
 	MaxDepth int `json:"max_depth,omitempty"`
@@ -267,6 +289,11 @@ type Options struct {
 	// AdaptiveDelay automatically slows the crawl (halving requests-per-second, honoring any
 	// Retry-After header) when the server responds with HTTP 429 or 503.
 	AdaptiveDelay bool
+	// MaxDuration bounds the crawl's total wall-clock time. Zero means unlimited. When it
+	// elapses, the crawl stops early and still returns everything fetched so far as a
+	// partial result (see Coverage.DurationLimitReached), the same way a canceled context
+	// (e.g. an operator's Ctrl-C) does.
+	MaxDuration time.Duration
 }
 
 // DefaultOptions returns conservative, polite defaults. By default the crawl is bounded by

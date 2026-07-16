@@ -128,8 +128,10 @@ before opening a PR. golangci-lint enables `errcheck`, `govet`, `ineffassign`, `
   printing.
 - Add tests for new behavior, with HTML fixtures under the analyzer's `testdata/`.
 - Crawl scope (depth, page cap, include/exclude regex, subdomains, rate limiting, robots
-  compliance, follow-external, follow-nofollow) is all configurable; the engine bounds the
-  walk with a concurrency semaphore and a `golang.org/x/time/rate` limiter.
+  compliance, follow-external, follow-nofollow, max duration) is all configurable; the engine
+  bounds the walk with a fixed-size worker pool pulling from a FIFO frontier queue (bounding
+  goroutines by `Concurrency` regardless of frontier size, and giving a true breadth-first
+  traversal) and a `golang.org/x/time/rate` limiter.
 - Headless rendering (`--render headless`) uses chromedp and needs a Chromium browser
   installed; raw-HTML crawling is the default and needs nothing extra.
 

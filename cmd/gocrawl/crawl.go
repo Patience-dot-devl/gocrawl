@@ -28,6 +28,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Int("max-pages", 0, "max pages to crawl")
 	f.Int("concurrency", 0, "parallel fetch workers")
 	f.Float64("rate", 0, "max requests per second (0 = unlimited)")
+	f.Duration("max-duration", 0, "wall-clock budget for the whole crawl, e.g. 90m (0 = unlimited); on expiry the crawl stops early and still writes a partial report")
 	f.String("render", "", "rendering mode: raw or headless")
 	f.StringP("out", "o", "", "output file (default: stdout)")
 	f.StringP("format", "f", "", "output format: json, csv, or html")
@@ -116,6 +117,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("rate") {
 		cfg.Crawl.RatePerSecond, _ = f.GetFloat64("rate")
+	}
+	if f.Changed("max-duration") {
+		cfg.Crawl.MaxDuration, _ = f.GetDuration("max-duration")
 	}
 	if f.Changed("render") {
 		cfg.Render, _ = f.GetString("render")

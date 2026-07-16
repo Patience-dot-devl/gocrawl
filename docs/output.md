@@ -110,13 +110,15 @@ coverage is the context you need to trust that result.
 | `discovered_not_crawled` | int | Count of distinct in-scope URLs discovered but never fetched. Omitted when 0. |
 | `page_limit_reached` | bool | The `--max-pages` budget cut the crawl short. Omitted when false. |
 | `depth_limit_reached` | bool | The `--depth` limit cut the crawl short. Omitted when false. |
-| `interrupted` | bool | The crawl was stopped early by context cancellation (e.g. Ctrl-C) rather than a configured limit. Omitted when false. |
+| `interrupted` | bool | The crawl was stopped early by context cancellation (e.g. Ctrl-C or `--max-duration`) rather than a configured limit. Omitted when false. |
+| `duration_limit_reached` | bool | The `--max-duration` wall-clock budget elapsed. Implies `interrupted`. Omitted when false. |
 | `max_pages` / `max_depth` | int | The limits in effect (`0` = unlimited). |
 
 A first Ctrl-C during `gocrawl crawl` cancels the crawl gracefully and still writes whatever
 was fetched so far as a report with `interrupted: true`, rather than losing everything; a
 second Ctrl-C falls through to the OS default (immediate termination) if the crawl is slow to
-unwind.
+unwind. `--max-duration` (e.g. `--max-duration 90m`) stops the crawl the same way once its
+wall-clock budget elapses, reported as `duration_limit_reached: true`.
 
 When `complete` is false, a `notes` entry spells out what happened (which limit was hit, or
 that the crawl was interrupted) and how to get full coverage, and the **HTML report shows a
@@ -247,8 +249,11 @@ new analyzers — for that, recrawl.
 The report contains the **issues** analyzers produced, not the raw crawled page bodies. Each
 crawled [`Page`](../internal/crawler/types.go) holds the response body, parsed HTML document,
 and headers while analyzers run, but those fields are intentionally **not serialized** — only
-findings reach the report. If you need raw page data, it lives in the in-memory
-`crawler.Result`, consumed by the analyzer pipeline.
+findings reach the report. `runner.Run` (used by `gocrawl crawl` and the MCP server) also
+releases them from memory (`Result.ReleaseBodies`) once the report is built, so a large crawl
+doesn't hold every page's body and parsed DOM for the rest of the process's life — this
+matters most for the MCP server, which stays running across many crawls. A caller driving
+`crawler.Engine.Crawl` directly still gets the full `Result` with bodies intact.
 
 ## See also
 

@@ -51,8 +51,11 @@ type CrawlConfig struct {
 	// the crawled host — for sites gated by server-level Basic Auth, which is common on
 	// staging/acceptance environments (e.g. a reverse-proxy realm challenge in front of the
 	// whole site, independent of any app-level login).
-	BasicAuth       string        `mapstructure:"basic_auth"`
-	Timeout         time.Duration `mapstructure:"timeout"`
+	BasicAuth string        `mapstructure:"basic_auth"`
+	Timeout   time.Duration `mapstructure:"timeout"`
+	// MaxDuration bounds the crawl's total wall-clock time (0 = unlimited). When it elapses,
+	// the crawl stops early and still produces a report from whatever was fetched so far.
+	MaxDuration     time.Duration `mapstructure:"max_duration"`
 	MaxBodyBytes    int64         `mapstructure:"max_body_bytes"`
 	RespectRobots   bool          `mapstructure:"respect_robots"`
 	AllowSubdomains bool          `mapstructure:"allow_subdomains"`
@@ -97,6 +100,7 @@ func Default() Config {
 			RatePerSecond: o.RatePerSecond,
 			UserAgent:     o.UserAgent,
 			Timeout:       o.Timeout,
+			MaxDuration:   o.MaxDuration,
 			MaxBodyBytes:  o.MaxBodyBytes,
 			RespectRobots: o.RespectRobots,
 			AdaptiveDelay: o.AdaptiveDelay,
@@ -152,6 +156,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("crawl.proxy_rotation", d.Crawl.ProxyRotation)
 	v.SetDefault("crawl.basic_auth", d.Crawl.BasicAuth)
 	v.SetDefault("crawl.timeout", d.Crawl.Timeout)
+	v.SetDefault("crawl.max_duration", d.Crawl.MaxDuration)
 	v.SetDefault("crawl.max_body_bytes", d.Crawl.MaxBodyBytes)
 	v.SetDefault("crawl.respect_robots", d.Crawl.RespectRobots)
 	v.SetDefault("crawl.allow_subdomains", d.Crawl.AllowSubdomains)
@@ -197,6 +202,7 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	if c.Crawl.Timeout > 0 {
 		o.Timeout = c.Crawl.Timeout
 	}
+	o.MaxDuration = c.Crawl.MaxDuration
 	if c.Crawl.MaxBodyBytes > 0 {
 		o.MaxBodyBytes = c.Crawl.MaxBodyBytes
 	}

@@ -6,7 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -419,6 +423,173 @@ func TestEngineCanceledContextReturnsPartialResultNotError(t *testing.T) {
 	}
 	if result.Coverage.Complete {
 		t.Error("expected Coverage.Complete to be false when interrupted")
+	}
+}
+
+// TestEngineMaxDurationStopsCrawlEarly guards against the wall-clock budget doing nothing: a
+// crawl whose home page links to a slow page must stop once MaxDuration elapses, returning a
+// partial result (not an error) with Coverage.DurationLimitReached set.
+func TestEngineMaxDurationStopsCrawlEarly(t *testing.T) {
+	release := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body><a href="/slow">slow</a></body></html>`)
+	})
+	mux.HandleFunc("/slow", func(w http.ResponseWriter, _ *http.Request) {
+		<-release // never released during the test; simulates a hang past the budget
+		fmt.Fprint(w, `<html><body>too late</body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer func() {
+		close(release)
+		ts.Close()
+	}()
+
+	opts := DefaultOptions()
+	opts.MaxDuration = 50 * time.Millisecond
+	engine := New(opts, NewHTTPFetcher(opts))
+
+	start := time.Now()
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected no error when the duration budget elapses, got: %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("crawl took %v, expected it to stop shortly after the 50ms budget", elapsed)
+	}
+	if !result.Coverage.DurationLimitReached {
+		t.Error("expected Coverage.DurationLimitReached to be true")
+	}
+	if !result.Coverage.Interrupted {
+		t.Error("expected Coverage.Interrupted to also be true (DurationLimitReached implies it)")
+	}
+	if result.Coverage.Complete {
+		t.Error("expected Coverage.Complete to be false")
+	}
+}
+
+// TestEngineWorkerPoolBoundsGoroutines guards against the exact regression a frontier worker
+// pool exists to fix: a goroutine-per-URL design spawns roughly one goroutine per discovered
+// URL (most of them immediately blocked on the old concurrency semaphore), so with
+// --max-pages 0 the goroutine count scales with the size of the frontier rather than with
+// Concurrency. A single hub page fanning out to many links is exactly that shape.
+func TestEngineWorkerPoolBoundsGoroutines(t *testing.T) {
+	const fanOut = 300
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		var b strings.Builder
+		b.WriteString("<html><body>")
+		for i := range fanOut {
+			fmt.Fprintf(&b, `<a href="/page%d">p</a>`, i)
+		}
+		b.WriteString("</body></html>")
+		fmt.Fprint(w, b.String())
+	})
+	for i := range fanOut {
+		mux.HandleFunc(fmt.Sprintf("/page%d", i), func(w http.ResponseWriter, _ *http.Request) {
+			time.Sleep(2 * time.Millisecond) // keep the frontier busy long enough to sample mid-crawl
+			fmt.Fprint(w, `<html><body>leaf</body></html>`)
+		})
+	}
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.Concurrency = 3
+	opts.MaxPages = 0 // unlimited — exactly the case the regression is about
+	opts.MaxDepth = 0
+	engine := New(opts, NewHTTPFetcher(opts))
+
+	baseline := runtime.NumGoroutine()
+	var peak atomic.Int64
+	stop := make(chan struct{})
+	var samplerDone sync.WaitGroup
+	samplerDone.Add(1)
+	go func() {
+		defer samplerDone.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if n := int64(runtime.NumGoroutine()); n > peak.Load() {
+				peak.Store(n)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	result, err := engine.Crawl(context.Background(), ts.URL)
+	close(stop)
+	samplerDone.Wait()
+	if err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+	if len(result.Pages) != fanOut+1 {
+		t.Fatalf("crawled %d pages, want %d", len(result.Pages), fanOut+1)
+	}
+
+	extra := peak.Load() - int64(baseline)
+	if extra > int64(opts.Concurrency)+20 {
+		t.Errorf("peak extra goroutines during the crawl = %d, want at most ~%d for Concurrency=%d "+
+			"— goroutine count is scaling with the frontier (fanOut=%d), not concurrency",
+			extra, opts.Concurrency+20, opts.Concurrency, fanOut)
+	}
+}
+
+// TestEngineFrontierIsBreadthFirst guards against the frontier losing FIFO ordering: with a
+// single worker (so fetch order is fully deterministic), pages must be visited layer by layer
+// rather than depth-first.
+func TestEngineFrontierIsBreadthFirst(t *testing.T) {
+	var mu sync.Mutex
+	var order []string
+	record := func(path string) {
+		mu.Lock()
+		order = append(order, path)
+		mu.Unlock()
+	}
+
+	mux := http.NewServeMux()
+	// Registered explicitly so it doesn't fall through to the "/" catch-all pattern and get
+	// recorded as an extra hit on the home page: RespectRobots (on by default) fetches
+	// /robots.txt on the first crawlability check.
+	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		record("/")
+		fmt.Fprint(w, `<html><body><a href="/a">a</a><a href="/b">b</a></body></html>`)
+	})
+	mux.HandleFunc("/a", func(w http.ResponseWriter, _ *http.Request) {
+		record("/a")
+		fmt.Fprint(w, `<html><body><a href="/a1">a1</a><a href="/a2">a2</a></body></html>`)
+	})
+	mux.HandleFunc("/b", func(w http.ResponseWriter, _ *http.Request) {
+		record("/b")
+		fmt.Fprint(w, `<html><body><a href="/b1">b1</a><a href="/b2">b2</a></body></html>`)
+	})
+	for _, leaf := range []string{"/a1", "/a2", "/b1", "/b2"} {
+		mux.HandleFunc(leaf, func(w http.ResponseWriter, _ *http.Request) {
+			record(leaf)
+			fmt.Fprint(w, `<html><body>leaf</body></html>`)
+		})
+	}
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.Concurrency = 1 // deterministic fetch order
+	engine := New(opts, NewHTTPFetcher(opts))
+	if _, err := engine.Crawl(context.Background(), ts.URL); err != nil {
+		t.Fatalf("crawl error: %v", err)
+	}
+
+	want := []string{"/", "/a", "/b", "/a1", "/a2", "/b1", "/b2"}
+	if !reflect.DeepEqual(order, want) {
+		t.Errorf("fetch order = %v, want %v (breadth-first)", order, want)
 	}
 }
 
