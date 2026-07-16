@@ -139,6 +139,12 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	issues := analyze.Run(ctx, analyzers, result)
 
 	rep := report.Build(result, issues)
+	// Every analyzer has read what it needs from each page's body/DOM (analyze.Run, above),
+	// and report.Build just finished the one remaining reader (the site-map tree's per-page
+	// title, extracted from Doc). Nothing touches them after this point, so release them now
+	// rather than holding a large crawl's raw bytes and parsed DOM trees in memory for the
+	// rest of the process's life.
+	result.ReleaseBodies()
 	if len(skipped) > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("strip_query is on, so query-dependent analyzers were skipped: %s", strings.Join(skipped, ", ")))
 	}

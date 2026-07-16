@@ -249,8 +249,11 @@ new analyzers — for that, recrawl.
 The report contains the **issues** analyzers produced, not the raw crawled page bodies. Each
 crawled [`Page`](../internal/crawler/types.go) holds the response body, parsed HTML document,
 and headers while analyzers run, but those fields are intentionally **not serialized** — only
-findings reach the report. If you need raw page data, it lives in the in-memory
-`crawler.Result`, consumed by the analyzer pipeline.
+findings reach the report. `runner.Run` (used by `gocrawl crawl` and the MCP server) also
+releases them from memory (`Result.ReleaseBodies`) once the report is built, so a large crawl
+doesn't hold every page's body and parsed DOM for the rest of the process's life — this
+matters most for the MCP server, which stays running across many crawls. A caller driving
+`crawler.Engine.Crawl` directly still gets the full `Result` with bodies intact.
 
 ## See also
 
