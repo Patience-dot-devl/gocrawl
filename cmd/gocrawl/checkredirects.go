@@ -30,6 +30,7 @@ func newCheckRedirectsCmd() *cobra.Command {
 	f.String("sitemap-url", "", "sitemap URL to use if the default locations (/sitemap.xml, /sitemap_index.xml) don't work")
 	f.Int("concurrency", 4, "parallel fetch workers")
 	f.Float64("rate", 0, "max requests per second (0 = unlimited)")
+	f.Bool("adaptive-delay", true, "automatically slow requests when the site returns HTTP 429/503")
 	f.Duration("timeout", 15*time.Second, "per-request timeout")
 	f.String("user-agent", "gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)", "User-Agent header")
 	_ = cmd.MarkFlagRequired("input")
@@ -45,6 +46,7 @@ func runCheckRedirects(cmd *cobra.Command, _ []string) error {
 	sitemapURL, _ := f.GetString("sitemap-url")
 	concurrency, _ := f.GetInt("concurrency")
 	rateLimit, _ := f.GetFloat64("rate")
+	adaptiveDelay, _ := f.GetBool("adaptive-delay")
 	timeout, _ := f.GetDuration("timeout")
 	userAgent, _ := f.GetString("user-agent")
 
@@ -66,15 +68,22 @@ func runCheckRedirects(cmd *cobra.Command, _ []string) error {
 		MaxBodyBytes: 5 << 20,
 	})
 
+	var stats redirectcheck.RunStats
 	results, err := redirectcheck.Run(cmd.Context(), rules, redirectcheck.RunOptions{
 		Domain:        domain,
 		SitemapURL:    sitemapURL,
 		Fetcher:       fetcher,
 		Concurrency:   concurrency,
 		RatePerSecond: rateLimit,
+		AdaptiveDelay: adaptiveDelay,
+		Stats:         &stats,
 	})
 	if err != nil {
 		return err
+	}
+	if stats.ThrottleEvents > 0 {
+		fmt.Fprintf(os.Stderr, "server returned HTTP 429/503: adaptive delay slowed requests %d time(s), down to %.3g req/s (disable with --adaptive-delay=false)\n",
+			stats.ThrottleEvents, stats.FinalRate)
 	}
 
 	if outputPath == "" {

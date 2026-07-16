@@ -18,6 +18,7 @@ gocrawl check-redirects --input redirects.csv --domain example.com --output resu
 | `--sitemap-url` | Sitemap URL to use if `/sitemap.xml` and `/sitemap_index.xml` aren't reachable. |
 | `--concurrency` | Parallel fetch workers (default 4). |
 | `--rate` | Max requests per second (default unlimited). |
+| `--adaptive-delay` | Automatically slow requests when the site returns HTTP 429/503, honoring any `Retry-After` header (default true). Same backoff the crawl engine uses; disable with `--adaptive-delay=false`. |
 | `--timeout` | Per-request timeout (default 15s). |
 | `--user-agent` | User-Agent header to send. |
 
