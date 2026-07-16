@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"golang.org/x/time/rate"
-
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
@@ -16,13 +14,32 @@ type RunOptions struct {
 	Fetcher       crawler.Fetcher
 	Concurrency   int
 	RatePerSecond float64
+	// AdaptiveDelay automatically slows requests (halving requests-per-second, honoring any
+	// Retry-After header) when the site responds with HTTP 429/503, the same way the crawl
+	// engine does. Without it, a fixed concurrency/rate that's too aggressive for the target
+	// can trip bot-mitigation (e.g. Cloudflare) partway through a run.
+	AdaptiveDelay bool
+	// Stats, if non-nil, is filled in with adaptive-delay activity once Run returns.
+	Stats *RunStats
+}
+
+// RunStats reports adaptive-delay activity for a Run call.
+type RunStats struct {
+	ThrottleEvents int
+	FinalRate      float64
 }
 
 // Run classifies every rule, fetches the site's sitemap once, then checks each in-scope rule
-// concurrently (bounded by opts.Concurrency and opts.RatePerSecond). Results are returned in
-// the same order as rules. Rows classified external or dynamic-pattern are not fetched.
+// concurrently (bounded by opts.Concurrency and opts.RatePerSecond). Every fetch — sitemap
+// discovery included — goes through a shared AdaptiveLimiter, so a run that starts too
+// aggressively for the target site backs itself off instead of hammering it into a
+// bot-mitigation block. Results are returned in the same order as rules. Rows classified
+// external or dynamic-pattern are not fetched.
 func Run(ctx context.Context, rules []Rule, opts RunOptions) ([]RowResult, error) {
-	sitemapURLs, err := DiscoverSitemap(ctx, opts.Fetcher, opts.Domain, opts.SitemapURL)
+	limiter := crawler.NewAdaptiveLimiter(opts.RatePerSecond, opts.AdaptiveDelay)
+	fetcher := &crawler.AdaptiveFetcher{Fetcher: opts.Fetcher, Limiter: limiter}
+
+	sitemapURLs, err := DiscoverSitemap(ctx, fetcher, opts.Domain, opts.SitemapURL)
 	if err != nil {
 		return nil, err
 	}
@@ -30,10 +47,6 @@ func Run(ctx context.Context, rules []Rule, opts RunOptions) ([]RowResult, error
 	concurrency := opts.Concurrency
 	if concurrency <= 0 {
 		concurrency = 1
-	}
-	var limiter *rate.Limiter
-	if opts.RatePerSecond > 0 {
-		limiter = rate.NewLimiter(rate.Limit(opts.RatePerSecond), 1)
 	}
 
 	results := make([]RowResult, len(rules))
@@ -60,12 +73,14 @@ func Run(ctx context.Context, rules []Rule, opts RunOptions) ([]RowResult, error
 		go func(i int, rule Rule) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if limiter != nil {
-				_ = limiter.Wait(ctx)
-			}
-			results[i] = CheckRule(ctx, opts.Fetcher, opts.Domain, rule, sitemapURLs)
+			results[i] = CheckRule(ctx, fetcher, opts.Domain, rule, sitemapURLs)
 		}(i, rule)
 	}
 	wg.Wait()
+
+	if opts.Stats != nil {
+		opts.Stats.ThrottleEvents = limiter.ThrottleCount()
+		opts.Stats.FinalRate = limiter.CurrentRate()
+	}
 	return results, nil
 }

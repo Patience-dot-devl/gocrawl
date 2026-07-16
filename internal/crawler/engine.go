@@ -3,27 +3,14 @@ package crawler
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"golang.org/x/time/rate"
-)
-
-// Adaptive-delay tuning. When the server signals overload (HTTP 429/503) the engine halves
-// its requests-per-second down to backoffMinRate, ignoring repeat triggers that arrive within
-// backoffDebounce of the last adjustment (a single burst of 429s should back off once, not
-// once per concurrent worker).
-const (
-	backoffStartRate = 1.0             // req/s to drop to when the crawl was previously unrestricted
-	backoffMinRate   = 0.1             // floor: one request every 10s
-	backoffDebounce  = 2 * time.Second // ignore repeat triggers within this window
 )
 
 // Engine crawls a website concurrently within the configured scope.
@@ -31,15 +18,8 @@ type Engine struct {
 	opts     Options
 	fetcher  Fetcher
 	robots   *robotsManager
-	limiter  *rate.Limiter
+	limiter  *AdaptiveLimiter
 	seedHost string
-
-	// Adaptive-delay state, guarded by backoffMu.
-	backoffMu     sync.Mutex
-	baseRate      float64 // configured req/s (0 = unlimited)
-	curRate       float64 // current req/s after any backoff (0 = still unlimited)
-	lastAdjust    time.Time
-	throttleCount int // number of rate reductions made during the crawl
 }
 
 // New creates an Engine. fetcher is used to retrieve pages (raw or headless); a separate
@@ -48,16 +28,11 @@ func New(opts Options, fetcher Fetcher) *Engine {
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = 1
 	}
-	limit := rate.Inf
-	if opts.RatePerSecond > 0 {
-		limit = rate.Limit(opts.RatePerSecond)
-	}
 	return &Engine{
-		opts:     opts,
-		fetcher:  fetcher,
-		robots:   newRobotsManager(NewHTTPFetcher(opts), opts.UserAgent),
-		limiter:  rate.NewLimiter(limit, 1),
-		baseRate: opts.RatePerSecond,
+		opts:    opts,
+		fetcher: fetcher,
+		robots:  newRobotsManager(NewHTTPFetcher(opts), opts.UserAgent),
+		limiter: NewAdaptiveLimiter(opts.RatePerSecond, opts.AdaptiveDelay),
 	}
 }
 
@@ -163,8 +138,12 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			} else {
 				e.logf("fetched %s -> %d (%s, depth=%d)", norm, page.StatusCode, page.Duration.Round(time.Millisecond), t.depth)
 			}
-			if page.StatusCode == http.StatusTooManyRequests || page.StatusCode == http.StatusServiceUnavailable {
-				e.throttleAfter429(page)
+			if adjusted, next := e.limiter.OnResponse(page.StatusCode, page.Header); adjusted {
+				target := page.FinalURL
+				if target == "" {
+					target = page.RequestedURL
+				}
+				e.logf("HTTP %d from %s — reducing crawl rate to %.3g req/s", page.StatusCode, target, next)
 			}
 			page.Depth = t.depth
 			page.Referrer = t.referrer
@@ -207,10 +186,8 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	enqueue(task{url: seed, depth: 0})
 	wg.Wait()
 
-	e.backoffMu.Lock()
-	result.ThrottleEvents = e.throttleCount
-	result.FinalRate = e.curRate
-	e.backoffMu.Unlock()
+	result.ThrottleEvents = e.limiter.ThrottleCount()
+	result.FinalRate = e.limiter.CurrentRate()
 
 	// Reconcile the discovered-but-declined set against what actually got crawled: a URL we
 	// declined on one path may have been reached by a shorter one. Whatever remains is a real
@@ -233,80 +210,6 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	result.Finished = time.Now()
 	e.collectRobots(ctx, result)
 	return result, ctx.Err()
-}
-
-// throttleAfter429 slows the crawl after the server signals it is overloaded (HTTP 429 or
-// 503). It halves the effective requests-per-second on each trigger, never going faster than
-// any Retry-After header asks for and never slower than backoffMinRate. Triggers arriving
-// within backoffDebounce of the last adjustment are ignored so a burst of concurrent 429s
-// backs the crawl off once rather than collapsing straight to the floor.
-func (e *Engine) throttleAfter429(page *Page) {
-	if !e.opts.AdaptiveDelay {
-		return
-	}
-	e.backoffMu.Lock()
-	defer e.backoffMu.Unlock()
-
-	now := time.Now()
-	if !e.lastAdjust.IsZero() && now.Sub(e.lastAdjust) < backoffDebounce {
-		return
-	}
-	e.lastAdjust = now
-
-	prev := e.curRate
-	if prev <= 0 {
-		prev = e.baseRate
-	}
-	var next float64
-	if prev <= 0 {
-		next = backoffStartRate // crawl was previously unrestricted
-	} else {
-		next = prev / 2
-	}
-	// The floor only bounds our halving heuristic.
-	if next < backoffMinRate {
-		next = backoffMinRate
-	}
-	// An explicit Retry-After is a direct server instruction, so honor it even below the
-	// heuristic floor: never crawl faster than it asks.
-	if ra := retryAfterSeconds(page.Header); ra > 0 {
-		if byRetry := 1.0 / ra; byRetry < next {
-			next = byRetry
-		}
-	}
-	e.curRate = next
-	e.throttleCount++
-	e.limiter.SetLimit(rate.Limit(next))
-
-	target := page.FinalURL
-	if target == "" {
-		target = page.RequestedURL
-	}
-	e.logf("HTTP %d from %s — reducing crawl rate to %.3g req/s", page.StatusCode, target, next)
-}
-
-// retryAfterSeconds parses a Retry-After header, supporting both the delay-seconds and
-// HTTP-date forms. It returns 0 when the header is absent, unparseable, or in the past.
-func retryAfterSeconds(h http.Header) float64 {
-	if h == nil {
-		return 0
-	}
-	v := strings.TrimSpace(h.Get("Retry-After"))
-	if v == "" {
-		return 0
-	}
-	if secs, err := strconv.Atoi(v); err == nil {
-		if secs < 0 {
-			return 0
-		}
-		return float64(secs)
-	}
-	if t, err := http.ParseTime(v); err == nil {
-		if d := time.Until(t).Seconds(); d > 0 {
-			return d
-		}
-	}
-	return 0
 }
 
 // crawlable reports whether u is eligible to be fetched: in scope and not robots-disallowed.
