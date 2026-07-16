@@ -122,6 +122,45 @@ func TestListEmptyStore(t *testing.T) {
 	}
 }
 
+// TestLoadRejectsPathTraversal guards against a real arbitrary-file-read: an ID containing
+// ".." must not be allowed to escape the store root via pathForID's filepath.Join.
+func TestLoadRejectsPathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	storeDir := filepath.Join(dir, "store")
+	s := New(storeDir)
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A secret file one level above the store root.
+	secret := filepath.Join(dir, "secret.json")
+	if err := writeJSON(secret, rep("https://secret.test", "2026-06-30T00:00:00Z", 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Load("../secret"); err == nil {
+		t.Fatal("expected Load to reject a traversal ID, got nil error")
+	}
+	if _, _, err := s.Resolve("../secret"); err == nil {
+		t.Fatal("expected Resolve to reject a traversal ID, got nil error")
+	}
+}
+
+// TestSaveRejectsHostileHost guards against a hostile seed URL whose "host" is literally ".."
+// (Go's net/url will parse one), which would otherwise let Save's directory join escape the
+// store root by one level.
+func TestSaveRejectsHostileHost(t *testing.T) {
+	dir := t.TempDir()
+	storeDir := filepath.Join(dir, "store")
+	s := New(storeDir)
+	_, err := s.Save(rep("https://../evil", "2026-06-30T00:00:00Z", 1))
+	if err == nil {
+		t.Fatal("expected Save to reject a seed whose host escapes the store root, got nil error")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "evil")); !os.IsNotExist(err) {
+		t.Error("Save must not have written outside the store root")
+	}
+}
+
 func mustSave(t *testing.T, s *Store, r *report.Report) string {
 	t.Helper()
 	id, err := s.Save(r)

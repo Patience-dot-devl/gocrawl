@@ -49,22 +49,13 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		return data
 	}
 
-	if p.Err != "" {
-		add(analyze.Error, "http-fetch-error", "Failed to fetch page: "+p.Err, found(nil))
-		return issues
-	}
-
-	switch {
-	case p.StatusCode >= 500:
-		add(analyze.Error, "http-server-error", "Server error response", found(map[string]any{"status": p.StatusCode}))
-	case p.StatusCode >= 400:
-		add(analyze.Error, "http-client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
-	}
-
-	// Redirect chain and loops.
+	// Redirect chain and loops. Checked before the p.Err early return below: a genuine
+	// cycle exhausts the fetcher's hop budget and surfaces as page.Err == "too many
+	// redirects", so this is the only way http-redirect-loop is ever reachable for a real
+	// loop — the fetcher has no cycle detection of its own, it just runs out of hops.
+	loop := false
 	if n := len(p.Redirects); n > 0 {
 		seen := map[string]bool{normalize(p.RequestedURL): true}
-		loop := false
 		for _, r := range p.Redirects {
 			t := normalize(r.To)
 			if seen[t] {
@@ -81,6 +72,24 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		default:
 			add(analyze.Info, "http-redirect", "Page redirects", map[string]any{"to": p.FinalURL, "status": p.Redirects[0].Status})
 		}
+	}
+
+	if p.Err != "" {
+		if !loop {
+			add(analyze.Error, "http-fetch-error", "Failed to fetch page: "+p.Err, found(nil))
+		}
+		return issues
+	}
+
+	switch {
+	case p.StatusCode >= 500:
+		add(analyze.Error, "http-server-error", "Server error response", found(map[string]any{"status": p.StatusCode}))
+	case p.StatusCode >= 400:
+		add(analyze.Error, "http-client-error", "Client error response", found(map[string]any{"status": p.StatusCode}))
+	}
+
+	if p.Truncated {
+		add(analyze.Warning, "http-body-truncated", "Page body was truncated before it could be fully read (hit the fetch size limit, or the connection failed partway through)", nil)
 	}
 
 	// Slow response.
@@ -106,15 +115,53 @@ func chain(p *crawler.Page) []string {
 	return out
 }
 
+// linkRelsThatLoad are the <link> relation types that actually cause the browser to fetch and
+// use a subresource, as opposed to metadata/navigation hints (alternate, canonical, amphtml,
+// dns-prefetch, prev/next, ...) that never load anything and so can't be a mixed-content risk.
+var linkRelsThatLoad = map[string]bool{
+	"stylesheet":       true,
+	"icon":             true,
+	"shortcut icon":    true,
+	"apple-touch-icon": true,
+	"manifest":         true,
+	"preload":          true,
+	"modulepreload":    true,
+}
+
+// insecureSubresources returns up to 5 http:// URLs the page actually loads as a subresource.
 func insecureSubresources(doc *goquery.Document) []string {
 	var out []string
-	doc.Find("img[src], script[src], link[href]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
-		for _, attr := range []string{"src", "href"} {
-			if v, ok := s.Attr(attr); ok && strings.HasPrefix(strings.ToLower(strings.TrimSpace(v)), "http://") {
-				out = append(out, v)
-			}
+	add := func(v string) bool {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(v)), "http://") {
+			out = append(out, v)
 		}
 		return len(out) < 5
+	}
+	attr := func(name string) func(int, *goquery.Selection) bool {
+		return func(_ int, s *goquery.Selection) bool {
+			v, ok := s.Attr(name)
+			if !ok {
+				return true
+			}
+			return add(v)
+		}
+	}
+
+	doc.Find(`img[src], script[src], iframe[src], video[src], audio[src], source[src], embed[src], input[type="image"][src]`).
+		EachWithBreak(attr("src"))
+	if len(out) >= 5 {
+		return out
+	}
+	doc.Find("object[data]").EachWithBreak(attr("data"))
+	if len(out) >= 5 {
+		return out
+	}
+	doc.Find("link[href]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		rel, _ := s.Attr("rel")
+		if !linkRelsThatLoad[strings.ToLower(strings.TrimSpace(rel))] {
+			return true
+		}
+		return attr("href")(0, s)
 	})
 	return out
 }

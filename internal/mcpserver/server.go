@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
@@ -111,6 +112,12 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 	cfg.Crawl.Proxies = in.Proxies
 	cfg.Crawl.ProxyRotation = in.ProxyRotation
 	cfg.Crawl.BasicAuth = in.BasicAuth
+
+	var user, pass string
+	seed, user, pass = crawler.SanitizeSeed(seed)
+	if user != "" && cfg.Crawl.BasicAuth == "" {
+		cfg.Crawl.BasicAuth = user + ":" + pass
+	}
 
 	rep, err := runner.Run(ctx, cfg, seed)
 	if err != nil {

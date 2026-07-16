@@ -14,6 +14,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 )
 
@@ -66,42 +68,40 @@ type Entry struct {
 }
 
 // Save writes rep to the store and returns its crawl ID. The host comes from the report's
-// seed and the timestamp from its StartedAt (falling back to FinishedAt, then now).
+// seed and the timestamp from its StartedAt (falling back to FinishedAt, then now). The write
+// is atomic: a failure partway through leaves any previously saved crawl at that path intact.
 func (s *Store) Save(rep *report.Report) (string, error) {
 	host := hostOf(rep.Seed)
 	if host == "" {
 		host = "unknown-host"
 	}
 	ts := stamp(rep)
-	dir := filepath.Join(s.root, host)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("creating store dir %q: %w", dir, err)
+	dir, err := safeJoin(s.root, host)
+	if err != nil {
+		return "", fmt.Errorf("invalid host in seed %q: %w", rep.Seed, err)
 	}
 	path := filepath.Join(dir, ts+".json")
-	f, err := os.Create(path)
-	if err != nil {
+	if err := atomicfile.Write(path, 0o644, func(w io.Writer) error {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rep)
+	}); err != nil {
 		return "", err
-	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	writeErr := enc.Encode(rep)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return "", writeErr
-	}
-	if closeErr != nil {
-		return "", closeErr
 	}
 	return host + "/" + ts, nil
 }
 
 // Load reads the report stored under the given crawl ID ("<host>/<timestamp>").
 func (s *Store) Load(id string) (*report.Report, error) {
-	return readReport(s.pathForID(id))
+	path, err := s.pathForID(id)
+	if err != nil {
+		return nil, err
+	}
+	return readReport(path)
 }
 
-func (s *Store) pathForID(id string) string {
-	return filepath.Join(s.root, filepath.FromSlash(id)+".json")
+func (s *Store) pathForID(id string) (string, error) {
+	return safeJoin(s.root, filepath.FromSlash(id)+".json")
 }
 
 // List returns every saved crawl, newest first. An optional host filters to one site
@@ -163,7 +163,11 @@ func (s *Store) Resolve(ref string) (*report.Report, string, error) {
 	}
 	// A "<host>/<timestamp>" ID addresses a stored file directly.
 	if strings.Contains(ref, "/") {
-		if fi, err := os.Stat(s.pathForID(ref)); err == nil && !fi.IsDir() {
+		path, perr := s.pathForID(ref)
+		if perr != nil {
+			return nil, "", perr
+		}
+		if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
 			rep, rerr := s.Load(ref)
 			return rep, ref, rerr
 		}
@@ -216,6 +220,18 @@ func readReport(path string) (*report.Report, error) {
 		return nil, fmt.Errorf("parsing report %q as JSON: %w", path, err)
 	}
 	return &rep, nil
+}
+
+// safeJoin joins root with elem and ensures the result stays within root, rejecting a
+// path-traversal attempt smuggled in via a hostile hostname (e.g. a seed whose host is
+// literally "..") or a crawl ID containing "..".
+func safeJoin(root string, elem ...string) (string, error) {
+	full := filepath.Join(append([]string{root}, elem...)...)
+	rel, err := filepath.Rel(root, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path %q escapes the store root", filepath.Join(elem...))
+	}
+	return full, nil
 }
 
 // hostOf extracts the host from a seed URL, tolerating a missing scheme.

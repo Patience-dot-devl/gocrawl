@@ -59,11 +59,11 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 			if rel.href == "" {
 				continue
 			}
-			target, ok := result.Page(rel.href)
+			target, resolved, ok := result.ResolveHref(p, rel.href)
 			if !ok {
 				continue
 			}
-			if target.StatusCode >= 400 || len(target.Redirects) > 0 {
+			if target.StatusCode >= 400 || result.LinkPointsToRedirect(resolved, target) {
 				issues = append(issues, analyze.Issue{
 					Analyzer: "pagination", URL: url, Severity: analyze.Warning,
 					Code: "pagination-broken", Message: "Pagination link points to a broken or redirecting target",

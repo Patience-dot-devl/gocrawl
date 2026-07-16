@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
 
@@ -180,16 +180,16 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Output.Path = strings.TrimSpace(outputPath)
 	cfg.Analyzers.Specialized = specialized
 
-	// An empty Enabled list means "run all"; only set it when a strict subset is chosen.
-	if len(selected) > 0 && len(selected) < len(all) {
-		cfg.Analyzers.Enabled = selected
-	} else {
-		cfg.Analyzers.Enabled = nil
-	}
+	cfg.Analyzers.Enabled, cfg.Analyzers.Disabled = analyzerSelection(selected, all)
 
 	seed = strings.TrimSpace(seed)
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
+	}
+	var seedUser, seedPass string
+	seed, seedUser, seedPass = crawler.SanitizeSeed(seed)
+	if seedUser != "" && cfg.Crawl.BasicAuth == "" {
+		cfg.Crawl.BasicAuth = seedUser + ":" + seedPass
 	}
 
 	// Keep the machine awake for the duration of the crawl + report write when requested.
@@ -197,7 +197,7 @@ func runInteractive(cmd *cobra.Command) error {
 		defer startCaffeinate()()
 	}
 
-	rep, err := runner.Run(context.Background(), cfg, seed)
+	rep, err := runner.Run(cmd.Context(), cfg, seed)
 	if err != nil {
 		return err
 	}
@@ -211,6 +211,26 @@ func runInteractive(cmd *cobra.Command) error {
 		fmt.Fprintln(os.Stderr, line)
 	}
 	return nil
+}
+
+// analyzerSelection maps the interactive analyzer multi-select onto Enabled/Disabled. An empty
+// Enabled list conventionally means "run all" (see runner/analyze.Registry.Select), so
+// deselecting every analyzer can't be expressed that way — it would silently run all of them
+// instead of none. Disabling every analyzer by name achieves the same "run none" result
+// through the existing deny-list mechanism instead.
+func analyzerSelection(selected []string, all []runner.AnalyzerInfo) (enabled, disabled []string) {
+	switch {
+	case len(selected) == 0:
+		names := make([]string, len(all))
+		for i, a := range all {
+			names[i] = a.Name
+		}
+		return nil, names
+	case len(selected) < len(all):
+		return selected, nil
+	default:
+		return nil, nil
+	}
 }
 
 // runForm runs the form, converting the panic that huh v1.0.0 raises when bubbletea cannot

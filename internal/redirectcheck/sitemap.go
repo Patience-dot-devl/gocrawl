@@ -24,8 +24,11 @@ func DiscoverSitemap(ctx context.Context, fetcher crawler.Fetcher, domain, overr
 		candidates["https://"+domain+"/sitemap_index.xml"] = false
 	}
 
-	rawURLs, parsed, _ := sitemap.Fetch(ctx, fetcher, candidates)
+	rawURLs, parsed, _, truncated := sitemap.Fetch(ctx, fetcher, candidates)
 	if parsed == 0 {
+		if len(truncated) > 0 {
+			return nil, fmt.Errorf("sitemap at %s exceeds the fetch size limit and was cut off before it could be parsed; raise crawl.max_body_bytes and retry", where)
+		}
 		return nil, fmt.Errorf("could not fetch/parse a sitemap at %s; pass --sitemap-url to point at the right location", where)
 	}
 

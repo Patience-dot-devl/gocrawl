@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,12 @@ const (
 	backoffStartRate = 1.0             // req/s to drop to when the crawl was previously unrestricted
 	backoffMinRate   = 0.1             // floor: one request every 10s
 	backoffDebounce  = 2 * time.Second // ignore repeat triggers within this window
+	// maxRetryAfter bounds how long a server-supplied Retry-After is honored for. A
+	// misconfigured or hostile server can send an enormous value (e.g. Retry-After: 86400)
+	// which would otherwise stall the entire crawl for as long as it asks, with no overall
+	// deadline to recover; five minutes is generous headroom for a genuine rate-limit window
+	// while still bounding the worst case.
+	maxRetryAfter = 5 * time.Minute
 )
 
 // AdaptiveLimiter is a requests-per-second limiter that halves its rate (down to a floor)
@@ -119,7 +126,9 @@ func (a *AdaptiveLimiter) CurrentRate() float64 {
 }
 
 // retryAfterSeconds parses a Retry-After header, supporting both the delay-seconds and
-// HTTP-date forms. It returns 0 when the header is absent, unparseable, or in the past.
+// HTTP-date forms. It returns 0 when the header is absent, unparseable, or in the past, and
+// clamps the result to maxRetryAfter so an extreme server-supplied value can't stall the crawl
+// indefinitely.
 func retryAfterSeconds(h http.Header) float64 {
 	if h == nil {
 		return 0
@@ -132,11 +141,11 @@ func retryAfterSeconds(h http.Header) float64 {
 		if secs < 0 {
 			return 0
 		}
-		return float64(secs)
+		return math.Min(float64(secs), maxRetryAfter.Seconds())
 	}
 	if t, err := http.ParseTime(v); err == nil {
 		if d := time.Until(t).Seconds(); d > 0 {
-			return d
+			return math.Min(d, maxRetryAfter.Seconds())
 		}
 	}
 	return 0

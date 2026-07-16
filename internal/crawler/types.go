@@ -94,6 +94,12 @@ type Page struct {
 	FetchedAt    time.Time         `json:"fetched_at"`
 	Err          string            `json:"error,omitempty"`
 	Render       *RenderResult     `json:"render,omitempty"`
+	// Truncated reports whether Body was cut short of the real response — either because it
+	// hit the fetcher's body-size cap or because the connection failed partway through the
+	// read. A truncated body may be missing elements (e.g. </head>, the closing tag of a
+	// sitemap) that a downstream analyzer would otherwise expect to find, so treat findings
+	// like "missing title" or "invalid sitemap" on a truncated page with that in mind.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // IsHTML reports whether the page body was parsed as an HTML document.
@@ -108,12 +114,21 @@ type RobotsData struct {
 	data     *robotstxt.RobotsData
 }
 
-// TestAgent reports whether the given path is allowed for userAgent.
+// TestAgent reports whether the given path is allowed for userAgent. Per RFC 9309, a 4xx
+// robots.txt response means no rules apply (allow all); an unreachable robots.txt (network
+// error or 5xx) means we can't know the site's intent, so crawling is disallowed until it's
+// reachable. A 200 response we simply couldn't parse degrades to allow-all.
 func (r *RobotsData) TestAgent(path, userAgent string) bool {
-	if r == nil || r.data == nil {
+	if r == nil {
 		return true
 	}
-	return r.data.TestAgent(path, userAgent)
+	if r.data != nil {
+		return r.data.TestAgent(path, userAgent)
+	}
+	if r.Status == 0 || r.Status >= 500 {
+		return false
+	}
+	return true
 }
 
 // Result is the complete output of a crawl, consumed by analyzers.
@@ -152,6 +167,11 @@ type Coverage struct {
 	// PageLimitReached / DepthLimitReached record which configured limit cut the crawl short.
 	PageLimitReached  bool `json:"page_limit_reached,omitempty"`
 	DepthLimitReached bool `json:"depth_limit_reached,omitempty"`
+	// Interrupted is true when the crawl's context was canceled before it finished on its own
+	// (e.g. an operator's Ctrl-C) rather than a configured limit being reached. The site may
+	// be far less covered than DiscoveredNotCrawled reflects, since much of it may never have
+	// been discovered at all.
+	Interrupted bool `json:"interrupted,omitempty"`
 	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
 	MaxPages int `json:"max_pages,omitempty"`
 	MaxDepth int `json:"max_depth,omitempty"`
@@ -165,6 +185,31 @@ func (r *Result) Page(rawURL string) (*Page, bool) {
 	}
 	p, ok := r.index[normalizeURL(rawURL, r.Opts.StripQuery)]
 	return p, ok
+}
+
+// ResolveHref resolves href relative to from's own URL (mirroring how the crawl engine
+// resolves an <a href> against a page's base — including an in-document <base href>, if any —
+// via extractLinks) and looks up the resulting page in the crawl result. It exists for
+// analyzers that read a raw href straight from the DOM (e.g. <link rel="amphtml"|"next"|"prev">)
+// rather than from the engine's own extracted Links, so a relative href is resolved the same
+// way an anchor link would be instead of failing the lookup outright. resolved is the
+// slash-preserving absolute form, suitable for LinkPointsToRedirect. ok is false for an
+// unusable href (empty, fragment-only, non-http(s) after resolution) or one with no match in
+// the crawl.
+func (r *Result) ResolveHref(from *Page, href string) (target *Page, resolved string, ok bool) {
+	if r.index == nil || from == nil {
+		return nil, "", false
+	}
+	base, err := url.Parse(from.FinalURL)
+	if err != nil {
+		return nil, "", false
+	}
+	key, resolvedURL, ok := resolveURL(base, href, r.Opts.StripQuery)
+	if !ok {
+		return nil, "", false
+	}
+	p, found := r.index[key]
+	return p, resolvedURL, found
 }
 
 // Reindex rebuilds the URL lookup index from r.Pages. The engine populates the index

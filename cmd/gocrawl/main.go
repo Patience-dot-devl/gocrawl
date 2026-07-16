@@ -2,8 +2,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -47,7 +49,16 @@ func newRootCmd() *cobra.Command {
 }
 
 func main() {
-	if err := newRootCmd().Execute(); err != nil {
+	// A first Ctrl-C cancels the context passed down to a running crawl, which stops it
+	// gracefully and still writes whatever was fetched so far as a partial report (see
+	// crawler.Coverage.Interrupted) instead of the OS just killing the process and losing
+	// everything. NotifyContext stops re-intercepting after the first signal, so a second
+	// Ctrl-C falls through to the default terminate-immediately behavior if the crawl is
+	// slow to unwind.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	if err := newRootCmd().ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

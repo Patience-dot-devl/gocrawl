@@ -98,6 +98,40 @@ func TestSEOEmptyHeading(t *testing.T) {
 	}
 }
 
+// TestSEOLogoInHeadingNotEmpty guards against a false positive: an <h1> whose only content is
+// a logo image is a common, valid pattern — the image's alt text is the heading's effective
+// text — and must not be flagged as empty.
+func TestSEOLogoInHeadingNotEmpty(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>Logo Heading Test</title></head>
+		<body><h1><img src="/logo.png" alt="Acme Corp"></h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	if codes(seo.New().Analyze(context.Background(), res))["seo-empty-heading"] {
+		t.Error("did not expect seo-empty-heading for a logo image with alt text")
+	}
+}
+
+// TestSEOAriaLabelHeadingNotEmpty guards against the same false positive via aria-label
+// instead of an image alt.
+func TestSEOAriaLabelHeadingNotEmpty(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>Aria Label Heading Test</title></head>
+		<body><h1 aria-label="Acme Corp"><svg></svg></h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	if codes(seo.New().Analyze(context.Background(), res))["seo-empty-heading"] {
+		t.Error("did not expect seo-empty-heading for a heading with aria-label")
+	}
+}
+
+// TestSEOImageWithoutAltStillEmpty ensures the fix doesn't over-correct: an image with no
+// (or empty) alt text provides no accessible name, so the heading is still genuinely empty.
+func TestSEOImageWithoutAltStillEmpty(t *testing.T) {
+	p := htmlPage(t, `<html lang="en"><head><title>No Alt Heading Test</title></head>
+		<body><h1><img src="/logo.png"></h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	if !codes(seo.New().Analyze(context.Background(), res))["seo-empty-heading"] {
+		t.Error("expected seo-empty-heading for an image with no alt text")
+	}
+}
+
 func TestSEOXRobotsAndMetaRefresh(t *testing.T) {
 	p := htmlPage(t, `<html><head><title>Header Robots And Refresh</title>
 		<meta http-equiv="refresh" content="3;url=/elsewhere"></head><body><h1>x</h1></body></html>`)
@@ -109,5 +143,55 @@ func TestSEOXRobotsAndMetaRefresh(t *testing.T) {
 		if !got[want] {
 			t.Errorf("expected issue %q, not found", want)
 		}
+	}
+}
+
+func TestSEOTitleLengthCountsRunesNotBytes(t *testing.T) {
+	// 25 Japanese characters: 75 bytes (over the old byte-based 60 limit) but only 25
+	// runes (comfortably within the 10-60 rune range), so this must not be flagged.
+	title := strings.Repeat("日本語のタイトルです", 2) + "あいうえお" // 25 runes, 75 bytes
+	p := htmlPage(t, `<html><head><title>`+title+`</title></head><body><h1>x</h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	issues := seo.New().Analyze(context.Background(), res)
+	got := codes(issues)
+	if got["seo-long-title"] {
+		t.Error("multi-byte title under 60 runes incorrectly flagged as seo-long-title")
+	}
+	if got["seo-short-title"] {
+		t.Error("multi-byte title over 10 runes incorrectly flagged as seo-short-title")
+	}
+}
+
+func TestSEOLongASCIITitleStillFlagged(t *testing.T) {
+	title := strings.Repeat("a", 61) // 61 runes == 61 bytes, over the 60-rune limit
+	p := htmlPage(t, `<html><head><title>`+title+`</title></head><body><h1>x</h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	issues := seo.New().Analyze(context.Background(), res)
+	got := codes(issues)
+	if !got["seo-long-title"] {
+		t.Error("expected a plain 61-character ASCII title to still be flagged as seo-long-title")
+	}
+	for _, is := range issues {
+		if is.Code == "seo-long-title" {
+			if length, _ := is.Data["length"].(int); length != 61 {
+				t.Errorf("seo-long-title length = %v, want 61", is.Data["length"])
+			}
+		}
+	}
+}
+
+func TestSEODescriptionLengthCountsRunesNotBytes(t *testing.T) {
+	// 80 Japanese characters: 240 bytes (over the old byte-based 160 limit) but only 80
+	// runes (within the 50-160 rune range), so this must not be flagged.
+	desc := strings.Repeat("あ", 80)
+	p := htmlPage(t, `<html><head><title>Some Fine Title Here</title>
+		<meta name="description" content="`+desc+`"></head><body><h1>x</h1></body></html>`)
+	res := &crawler.Result{Pages: []*crawler.Page{p}}
+	got := codes(seo.New().Analyze(context.Background(), res))
+	if got["seo-long-meta-description"] {
+		t.Error("multi-byte description under 160 runes incorrectly flagged as seo-long-meta-description")
+	}
+	if got["seo-short-meta-description"] {
+		t.Error("multi-byte description over 50 runes incorrectly flagged as seo-short-meta-description")
 	}
 }

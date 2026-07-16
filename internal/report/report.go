@@ -123,11 +123,29 @@ func (CSVReporter) Write(w io.Writer, r *Report) error {
 			b, _ := json.Marshal(is.Data)
 			data = string(b)
 		}
-		if err := cw.Write([]string{is.Analyzer, string(is.Severity), is.Code, is.URL, is.Message, data}); err != nil {
+		row := []string{is.Analyzer, string(is.Severity), is.Code, is.URL, is.Message, data}
+		for i, v := range row {
+			row[i] = sanitizeCSVField(v)
+		}
+		if err := cw.Write(row); err != nil {
 			return err
 		}
 	}
 	return cw.Error()
+}
+
+// csvFormulaLeadChars are the leading characters Excel and Google Sheets interpret as the
+// start of a formula. A crawled value that starts with one of these (e.g. a page title of
+// "=HYPERLINK(...)") would execute as a formula when the CSV is opened (CWE-1236), so any cell
+// starting with one is prefixed with a single quote to force spreadsheet apps to treat it as
+// plain text instead.
+const csvFormulaLeadChars = "=+-@"
+
+func sanitizeCSVField(s string) string {
+	if s != "" && strings.ContainsRune(csvFormulaLeadChars, rune(s[0])) {
+		return "'" + s
+	}
+	return s
 }
 
 // HTMLReporter writes a self-contained HTML report (inline CSS, no external assets) suitable

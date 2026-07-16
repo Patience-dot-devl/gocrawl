@@ -28,12 +28,23 @@ func New(opts Options, fetcher Fetcher) *Engine {
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = 1
 	}
-	return &Engine{
+	e := &Engine{
 		opts:    opts,
 		fetcher: fetcher,
-		robots:  newRobotsManager(NewHTTPFetcher(opts), opts.UserAgent),
+		// NewUAPool(opts).Default() is the UA actually sent when UserAgents rotation is
+		// configured — opts.UserAgent alone would test robots.txt against an identity the
+		// crawler never sends once a pool supersedes it.
+		robots:  newRobotsManager(NewHTTPFetcher(opts), NewUAPool(opts).Default()),
 		limiter: NewAdaptiveLimiter(opts.RatePerSecond, opts.AdaptiveDelay),
 	}
+	// Gate every redirect hop the raw fetcher follows against the same scope/exclude/robots
+	// check applied before a URL is ever enqueued, so a redirect can't escape crawl scope
+	// mid-fetch. Only applies to the manual-hop HTTPFetcher; headless rendering follows
+	// redirects inside the browser and isn't covered by this check.
+	if hf, ok := fetcher.(*HTTPFetcher); ok {
+		hf.allowRedirect = e.crawlable
+	}
+	return e
 }
 
 // logf writes a crawl progress line to stderr when verbose logging is enabled.
@@ -149,11 +160,29 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			page.Referrer = t.referrer
 			page.Links = e.extractLinks(page)
 
+			var finalNorm string
+			if page.FinalURL != "" {
+				finalNorm = normalizeURL(page.FinalURL, e.opts.StripQuery)
+			}
+
 			mu.Lock()
+			if finalNorm != "" && result.index[finalNorm] != nil {
+				// A concurrent fetch already recorded this exact final URL — e.g. two
+				// links discovered on the same page, one a redirect and one pointing
+				// directly at the redirect's destination, enqueued before either fetch
+				// completed. Drop this duplicate rather than double-reporting every
+				// per-page analyzer issue for the same content.
+				mu.Unlock()
+				return
+			}
 			result.Pages = append(result.Pages, page)
 			result.index[normalizeURL(page.RequestedURL, e.opts.StripQuery)] = page
-			if page.FinalURL != "" {
-				result.index[normalizeURL(page.FinalURL, e.opts.StripQuery)] = page
+			if finalNorm != "" {
+				result.index[finalNorm] = page
+				// Mark the redirect's destination visited too, so a separate link pointing
+				// directly at it doesn't trigger a second fetch (and duplicate per-page
+				// issues) for content already covered by this page.
+				visited[finalNorm] = true
 			}
 			mu.Unlock()
 
@@ -198,18 +227,23 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			uncrawled++
 		}
 	}
+	interrupted := ctx.Err() != nil
 	result.Coverage = Coverage{
-		Complete:             uncrawled == 0,
+		Complete:             uncrawled == 0 && !interrupted,
 		DiscoveredNotCrawled: uncrawled,
 		PageLimitReached:     pageLimitReached && uncrawled > 0,
 		DepthLimitReached:    depthLimitReached && uncrawled > 0,
+		Interrupted:          interrupted,
 		MaxPages:             e.opts.MaxPages,
 		MaxDepth:             e.opts.MaxDepth,
 	}
 
 	result.Finished = time.Now()
 	e.collectRobots(ctx, result)
-	return result, ctx.Err()
+	// A canceled context (e.g. an operator's Ctrl-C) stops the crawl early rather than
+	// failing it: whatever was fetched before cancellation is a legitimate partial result,
+	// reported honestly via Coverage.Interrupted rather than discarded by returning an error.
+	return result, nil
 }
 
 // crawlable reports whether u is eligible to be fetched: in scope and not robots-disallowed.
@@ -259,6 +293,17 @@ func (e *Engine) extractLinks(page *Page) []Link {
 	base, err := url.Parse(page.FinalURL)
 	if err != nil {
 		return nil
+	}
+	// <base href> overrides the document URL as the resolution base for relative links.
+	// Only the first base element with an href counts, matching HTML semantics; not scoped
+	// to <head> for parser leniency (a stray <base> outside <head> is still honored). A
+	// relative base href is itself resolved against the document URL.
+	if href, ok := page.Doc.Find("base[href]").First().Attr("href"); ok {
+		if href = strings.TrimSpace(href); href != "" {
+			if b, berr := url.Parse(href); berr == nil {
+				base = base.ResolveReference(b)
+			}
+		}
 	}
 	seen := make(map[string]bool)
 	var links []Link

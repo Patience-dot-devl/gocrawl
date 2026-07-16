@@ -1,15 +1,16 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 	"github.com/Patience-dot-devl/gocrawl/internal/store"
@@ -72,8 +73,13 @@ func runCrawl(cmd *cobra.Command, args []string) error {
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
 	}
+	var user, pass string
+	seed, user, pass = crawler.SanitizeSeed(seed)
+	if user != "" && cfg.Crawl.BasicAuth == "" {
+		cfg.Crawl.BasicAuth = user + ":" + pass
+	}
 
-	rep, err := runner.Run(context.Background(), cfg, seed)
+	rep, err := runner.Run(cmd.Context(), cfg, seed)
 	if err != nil {
 		return err
 	}
@@ -184,22 +190,10 @@ func writeReport(cfg config.Config, rep *report.Report) error {
 	if cfg.Output.Path == "" {
 		return reporter.Write(os.Stdout, rep)
 	}
-	if dir := filepath.Dir(cfg.Output.Path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("creating output directory %q: %w", dir, err)
-		}
-	}
-	file, err := os.Create(cfg.Output.Path)
-	if err != nil {
+	if err := atomicfile.Write(cfg.Output.Path, 0o644, func(w io.Writer) error {
+		return reporter.Write(w, rep)
+	}); err != nil {
 		return err
-	}
-	writeErr := reporter.Write(file, rep)
-	closeErr := file.Close()
-	if writeErr != nil {
-		return writeErr
-	}
-	if closeErr != nil {
-		return closeErr
 	}
 	fmt.Fprintf(os.Stderr, "Report written to %s\n", cfg.Output.Path)
 	return nil

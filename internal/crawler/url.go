@@ -34,6 +34,11 @@ func canonicalURL(raw string, stripQuery, trimSlash bool) string {
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
+	// Credentials should never survive normalization: they're routed through
+	// Options.BasicAuthUser/Pass at seed intake (see SanitizeSeed), and any that arrive by
+	// another path (e.g. a redirect Location header) must not round-trip into the URL index
+	// or reports.
+	u.User = nil
 	if stripQuery {
 		u.RawQuery = ""
 		u.ForceQuery = false
@@ -105,7 +110,21 @@ func registrableDomain(host string) string {
 	return d
 }
 
+// stripPort removes a trailing ":port" from host. An IPv6 literal is bracketed per URL syntax
+// ("[::1]" or "[::1]:8080"), so it's handled by its closing bracket rather than the last colon,
+// which would otherwise land inside the address itself and truncate it into garbage. A bare
+// (unbracketed) IPv6 literal has no unambiguous port separator, so it's left untouched rather
+// than guessed at.
 func stripPort(host string) string {
+	if strings.HasPrefix(host, "[") {
+		if i := strings.LastIndex(host, "]"); i >= 0 {
+			return host[:i+1]
+		}
+		return host
+	}
+	if strings.Count(host, ":") > 1 {
+		return host
+	}
 	if i := strings.LastIndex(host, ":"); i >= 0 {
 		return host[:i]
 	}

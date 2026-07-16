@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/redirectcheck"
 )
@@ -84,20 +86,14 @@ func runCheckRedirects(cmd *cobra.Command, _ []string) error {
 			stats.ThrottleEvents, stats.FinalRate)
 	}
 
-	out := os.Stdout
-	if outputPath != "" {
-		outFile, err := os.Create(outputPath)
-		if err != nil {
-			return fmt.Errorf("creating output: %w", err)
-		}
-		defer func() { _ = outFile.Close() }()
-		out = outFile
+	if outputPath == "" {
+		return redirectcheck.WriteCSV(os.Stdout, rules, results)
 	}
-	if err := redirectcheck.WriteCSV(out, rules, results); err != nil {
+	if err := atomicfile.Write(outputPath, 0o644, func(w io.Writer) error {
+		return redirectcheck.WriteCSV(w, rules, results)
+	}); err != nil {
 		return fmt.Errorf("writing output CSV: %w", err)
 	}
-	if outputPath != "" {
-		fmt.Fprintf(os.Stderr, "Report written to %s\n", outputPath)
-	}
+	fmt.Fprintf(os.Stderr, "Report written to %s\n", outputPath)
 	return nil
 }
