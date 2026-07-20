@@ -44,7 +44,9 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
-	fmt.Fprintf(cmd.OutOrStdout(), "gocrawl web UI listening on http://%s\n", displayAddr(addr))
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "gocrawl web UI listening on http://%s\n", displayAddr(addr)); err != nil {
+		return err
+	}
 
 	select {
 	case err := <-errCh:
