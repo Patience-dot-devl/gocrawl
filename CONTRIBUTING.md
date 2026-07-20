@@ -40,6 +40,20 @@ That's it — no changes to the crawl engine are needed. This is exactly how the
 landing-page relevance) were added: each a new package under `internal/analyze/` registered in
 `BuildRegistry`, no engine changes.
 
+## Releasing
+
+Pushing a tag matching `v*.*.*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which runs [GoReleaser](https://goreleaser.com) (config: [`.goreleaser.yaml`](.goreleaser.yaml)) to
+build the web UI, cross-compile binaries for linux/darwin/windows (amd64/arm64) with it embedded,
+and publish them to a GitHub Release. The release body is pulled straight from the tagged
+version's `## [x.y.z]` section in [`CHANGELOG.md`](CHANGELOG.md) — update the changelog before
+tagging, not after. To cut a release:
+
+```sh
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
 ## Guidelines
 
 - Run `go vet ./...` and `gofmt` before opening a PR.

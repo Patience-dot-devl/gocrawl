@@ -13,6 +13,16 @@ report.csv
 *.report.json
 *.report.csv
 
+# Web frontend build output. `make web-build` (or `npm run build` in web/) writes straight
+# into internal/webserver/webui/dist/, embedded by internal/webserver/assets.go. Only the
+# placeholder dist/index.html is committed so a bare `go build` needs no Node; a real local
+# build overwrites it (git will show it modified) — don't commit that unless intentionally
+# shipping the built UI.
+/web/node_modules/
+/web/dist/
+/internal/webserver/webui/dist/*
+!/internal/webserver/webui/dist/index.html
+
 # Editor / OS
 .DS_Store
 .idea/

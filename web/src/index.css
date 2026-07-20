@@ -1,0 +1,286 @@
+:root {
+  --text: #3f3d45;
+  --text-h: #08060d;
+  --bg: #fafafa;
+  --card-bg: #fff;
+  --border: #e5e4e7;
+  --accent: #6d28d9;
+  --error: #b91c1c;
+  --warning: #b45309;
+  --info: #2563eb;
+
+  font: 15px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #d1d0d6;
+    --text-h: #f3f4f6;
+    --bg: #16171d;
+    --card-bg: #1f2028;
+    --border: #2e303a;
+    --accent: #c084fc;
+    --error: #f87171;
+    --warning: #fbbf24;
+    --info: #60a5fa;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2 {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.app {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.app-header h1 {
+  font-size: 22px;
+  margin: 0;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 16px;
+}
+
+.app-header nav a {
+  color: var(--text);
+  text-decoration: none;
+  padding-bottom: 2px;
+}
+
+.app-header nav a.active {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+}
+
+.crawl-form label {
+  display: block;
+  margin: 12px 0 4px;
+  font-size: 13px;
+}
+
+.crawl-form input[type='text'],
+.crawl-form input[type='number'],
+.crawl-form select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+}
+
+.crawl-form .grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0 12px;
+}
+
+.crawl-form .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.crawl-form .checkbox input {
+  width: auto;
+}
+
+.analyzers {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.analyzer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 12px;
+}
+
+button {
+  margin-top: 16px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error {
+  color: var(--error);
+  margin-top: 8px;
+}
+
+.report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.status {
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.status-running {
+  color: var(--info);
+}
+
+.status-error {
+  color: var(--error);
+}
+
+.status-canceled {
+  color: var(--warning);
+}
+
+.status-done {
+  color: #16a34a;
+}
+
+.export-buttons {
+  display: flex;
+  gap: 10px;
+  align-self: center;
+}
+
+.export-buttons a {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.notes {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+
+.summary-cards {
+  display: flex;
+  gap: 20px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 70px;
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.stat-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.severity-error {
+  color: var(--error);
+}
+
+.severity-warning {
+  color: var(--warning);
+}
+
+.severity-info {
+  color: var(--info);
+}
+
+.filters {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+
+.filters label {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.issues th,
+table.issues td,
+table.history th,
+table.history td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.url-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+tr.clickable {
+  cursor: pointer;
+}
+
+tr.clickable:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}

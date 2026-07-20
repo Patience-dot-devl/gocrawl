@@ -1,0 +1,47 @@
+version: 2
+
+project_name: gocrawl
+
+before:
+  hooks:
+    # Embeds the built web UI into the binaries below (internal/webserver/assets.go); requires
+    # Node, which the release workflow provisions before running goreleaser.
+    - make web-build
+
+builds:
+  - id: gocrawl
+    main: ./cmd/gocrawl
+    binary: gocrawl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+# CHANGELOG.md is hand-maintained (Keep a Changelog style); the release workflow extracts the
+# matching version's section and passes it via `--release-notes`, so goreleaser's own
+# commit-based changelog generation stays off to avoid a second, conflicting notes section.
+changelog:
+  disable: true

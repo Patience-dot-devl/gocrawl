@@ -13,6 +13,13 @@ How to install, build, and run `gocrawl` on **Windows**, **macOS**, and **Linux*
 | **Git** | Only to build from source | [git-scm.com/downloads](https://git-scm.com/downloads) |
 | **Chrome / Chromium / Edge** | Only for `--render headless` | Must be on `PATH`. See [Headless rendering](#headless-rendering-optional). |
 
+## Download a prebuilt binary (all platforms)
+
+Every tagged release publishes binaries for linux/darwin/windows (amd64/arm64) on the
+[GitHub Releases page](https://github.com/Patience-dot-devl/gocrawl/releases), built by
+[GoReleaser](../.goreleaser.yaml). These are the only builds with the [web UI](web.md) baked
+in — download the archive for your platform, extract it, and put `gocrawl` on your `PATH`.
+
 ## Install with `go install` (all platforms)
 
 The simplest route if you have Go. This compiles and drops the binary in your Go bin
@@ -24,6 +31,11 @@ go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@latest
 
 The binary lands in `$(go env GOBIN)`, or `$(go env GOPATH)/bin` if `GOBIN` is unset.
 For the `gocrawl` command to work from anywhere, that directory must be on your `PATH`.
+
+`go install` compiles straight from source, which does **not** build the web frontend —
+`gocrawl serve` will work, but `/` serves a placeholder page instead of the real UI. Either
+use a prebuilt binary above, or build from source with `make web-build && make build` (see
+[Build from source](#build-from-source) and the [Web UI guide](web.md)).
 
 ### Putting the Go bin directory on your PATH
 
@@ -102,6 +114,10 @@ go install ./cmd/gocrawl
 
 > The plain `go build` / `go install` commands work identically on every platform if you
 > prefer not to use `make`.
+
+`make build` alone embeds a placeholder page for `gocrawl serve`'s web UI, needing no Node. To
+build the real UI in (requires Node), run `make web-build` first — see the
+[Web UI guide](web.md).
 
 ## Verify the install
 
