@@ -6,6 +6,24 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-20
+
+### Added
+
+- **Web UI & REST API (`gocrawl serve`).** Runs gocrawl as a small web application: an
+  embedded single-page app (start a crawl, watch it run, browse the report, review history)
+  backed by a REST API (`internal/webserver`) that reuses the same `runner.Run` seam as the
+  CLI and MCP server — start/poll/cancel a crawl, export a finished report as JSON/CSV/HTML,
+  and list crawl history. See [docs/web.md](docs/web.md).
+- **Prebuilt binary releases.** Tagged releases now publish cross-compiled binaries for
+  linux/darwin/windows (amd64/arm64) via GoReleaser, with the web UI built in. See
+  [docs/install.md](docs/install.md#download-a-prebuilt-binary-all-platforms).
+
+### Changed
+
+- The crawl-request-to-config mapping used by the MCP `crawl` tool moved into
+  `internal/crawlrequest`, now shared with the new web API.
+
 ## [0.3.0] - 2026-06-30
 
 ### Added
