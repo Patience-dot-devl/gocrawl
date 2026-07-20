@@ -41,7 +41,7 @@ checksum:
   name_template: checksums.txt
 
 # CHANGELOG.md is hand-maintained (Keep a Changelog style); the release workflow extracts the
-# matching version's section and passes it via `--release-notes`, so goreleaser's own
-# commit-based changelog generation stays off to avoid a second, conflicting notes section.
-changelog:
-  disable: true
+# matching version's section and passes it to `goreleaser release --release-notes=<file>`,
+# which this pipe loads verbatim as the release body, short-circuiting before any commit-based
+# changelog generation runs. Do NOT set `changelog.disable: true` — that skips this pipe
+# entirely, so the --release-notes file never gets loaded and the release body ends up empty.
