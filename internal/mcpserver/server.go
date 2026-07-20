@@ -5,41 +5,17 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
-	"strings"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Patience-dot-devl/gocrawl/internal/config"
-	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawlrequest"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
 
-// CrawlInput is the MCP "crawl" tool input. Optional fields override the defaults.
-type CrawlInput struct {
-	URL           string   `json:"url" jsonschema:"Seed URL to crawl (e.g. https://example.com)"`
-	Depth         *int     `json:"depth,omitempty" jsonschema:"Maximum link hops from the seed (default 0 = unlimited; the crawl is bounded by max_pages)"`
-	MaxPages      *int     `json:"max_pages,omitempty" jsonschema:"Hard cap on the number of pages crawled (default 500)"`
-	Concurrency   *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
-	MaxDuration   string   `json:"max_duration,omitempty" jsonschema:"Wall-clock budget for the whole crawl as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
-	Render        string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
-	Analyzers     []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
-	Specialized   *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density); off by default"`
-	RespectRobots *bool    `json:"respect_robots,omitempty" jsonschema:"Obey robots.txt while crawling (default true)"`
-	Subdomains    *bool    `json:"subdomains,omitempty" jsonschema:"Follow links to subdomains of the seed host"`
-	Include       []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
-	Exclude       []string `json:"exclude,omitempty" jsonschema:"Skip URLs matching any of these regexes"`
-
-	UserAgent         string   `json:"user_agent,omitempty" jsonschema:"User-Agent header sent on every request"`
-	UserAgents        []string `json:"user_agents,omitempty" jsonschema:"Pool of User-Agent strings to rotate across (supersedes user_agent)"`
-	UserAgentRotation string   `json:"user_agent_rotation,omitempty" jsonschema:"Rotation across user_agents: off, round-robin, or random"`
-	Proxy             string   `json:"proxy,omitempty" jsonschema:"Route requests through this proxy URL (http(s):// or socks5://; supports user:pass@host)"`
-	Proxies           []string `json:"proxies,omitempty" jsonschema:"Pool of proxy URLs to rotate across"`
-	ProxyRotation     string   `json:"proxy_rotation,omitempty" jsonschema:"Rotation across proxies: off, round-robin, random, or sticky-host"`
-	BasicAuth         string   `json:"basic_auth,omitempty" jsonschema:"HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)"`
-}
+// CrawlInput is the MCP "crawl" tool input. Optional fields override the defaults. It is an
+// alias for crawlrequest.Params, the mapping shared with the web API.
+type CrawlInput = crawlrequest.Params
 
 // CrawlOutput is the MCP "crawl" tool output: the full crawl report.
 type CrawlOutput struct {
@@ -72,62 +48,10 @@ func New(version string) *mcp.Server {
 }
 
 func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*mcp.CallToolResult, CrawlOutput, error) {
-	seed := strings.TrimSpace(in.URL)
-	if seed == "" {
-		return nil, CrawlOutput{}, fmt.Errorf("url is required")
+	cfg, seed, err := in.ToConfig()
+	if err != nil {
+		return nil, CrawlOutput{}, err
 	}
-	if !strings.Contains(seed, "://") {
-		seed = "https://" + seed
-	}
-
-	cfg := config.Default()
-	if in.Depth != nil {
-		cfg.Crawl.MaxDepth = *in.Depth
-	}
-	if in.MaxPages != nil {
-		cfg.Crawl.MaxPages = *in.MaxPages
-	}
-	if in.Concurrency != nil {
-		cfg.Crawl.Concurrency = *in.Concurrency
-	}
-	if strings.TrimSpace(in.MaxDuration) != "" {
-		d, derr := time.ParseDuration(strings.TrimSpace(in.MaxDuration))
-		if derr != nil {
-			return nil, CrawlOutput{}, fmt.Errorf("max_duration %q: %w", in.MaxDuration, derr)
-		}
-		cfg.Crawl.MaxDuration = d
-	}
-	if in.Render != "" {
-		cfg.Render = in.Render
-	}
-	if in.RespectRobots != nil {
-		cfg.Crawl.RespectRobots = *in.RespectRobots
-	}
-	if in.Subdomains != nil {
-		cfg.Crawl.AllowSubdomains = *in.Subdomains
-	}
-	cfg.Analyzers.Enabled = in.Analyzers
-	if in.Specialized != nil {
-		cfg.Analyzers.Specialized = *in.Specialized
-	}
-	cfg.Crawl.Include = in.Include
-	cfg.Crawl.Exclude = in.Exclude
-	if in.UserAgent != "" {
-		cfg.Crawl.UserAgent = in.UserAgent
-	}
-	cfg.Crawl.UserAgents = in.UserAgents
-	cfg.Crawl.UserAgentRotation = in.UserAgentRotation
-	cfg.Crawl.Proxy = in.Proxy
-	cfg.Crawl.Proxies = in.Proxies
-	cfg.Crawl.ProxyRotation = in.ProxyRotation
-	cfg.Crawl.BasicAuth = in.BasicAuth
-
-	var user, pass string
-	seed, user, pass = crawler.SanitizeSeed(seed)
-	if user != "" && cfg.Crawl.BasicAuth == "" {
-		cfg.Crawl.BasicAuth = user + ":" + pass
-	}
-
 	rep, err := runner.Run(ctx, cfg, seed)
 	if err != nil {
 		return nil, CrawlOutput{}, err

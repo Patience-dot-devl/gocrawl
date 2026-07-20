@@ -93,6 +93,7 @@ Full reference docs live in [`docs/`](docs/README.md):
 - [Analyzers](docs/analyzers.md) — what each analyzer checks, with every issue code.
 - [Output / report](docs/output.md) — the JSON, CSV, and HTML report formats.
 - [MCP server](docs/mcp.md) — running as an MCP server and the tool schemas.
+- [Web UI](docs/web.md) — running `gocrawl serve`, the browser UI, and the REST API.
 - [Redirect-rule verification](docs/redirect-check.md) — checking a redirect-rule CSV export against a live site.
 - [Architecture](docs/architecture.md) — how the engine and analyzer pipeline fit together.
 - [Roadmap](docs/roadmap.md) — what's shipped, stubbed, and planned.
@@ -132,6 +133,17 @@ Or in a Conductor / Claude Code `mcp` config block:
 The agent can then call `crawl` with `{"url": "https://example.com", "depth": 2}` and reason
 over the returned issues. See the full [MCP server guide](docs/mcp.md) for tool schemas and
 examples.
+
+## Use as a web app
+
+```sh
+gocrawl serve
+```
+
+Starts an HTTP server on `:8080` (override with `--addr`) exposing a REST API to start,
+poll, cancel, and export crawls, and serves the built-in browser UI at the same address — a
+form to start a crawl, a live-polling report view, and crawl history. See the full
+[Web UI guide](docs/web.md) for the API reference and how to build the frontend from source.
 
 ## Configuration
 

@@ -29,7 +29,7 @@ seed URL + config
  report.Build(result, issues) ──► Report    (internal/report)
       │
       ▼
- JSON / CSV / HTML  (file, stdout, or MCP response)
+ JSON / CSV / HTML  (file, stdout, MCP response, or web API response)
 ```
 
 [`runner.Run`](../internal/runner/runner.go) is the single orchestration point used by both
@@ -41,7 +41,7 @@ analyzers over the result, and hands everything to the report builder.
 
 | Package | Responsibility |
 | --- | --- |
-| [`cmd/gocrawl`](../cmd/gocrawl) | CLI (Cobra): `crawl`, `analyzers list`, `init`, `mcp`. |
+| [`cmd/gocrawl`](../cmd/gocrawl) | CLI (Cobra): `crawl`, `analyzers list`, `init`, `mcp`, `serve`. |
 | [`internal/config`](../internal/config) | Layered config (defaults → YAML → env → flags) and compilation into `crawler.Options`. |
 | [`internal/crawler`](../internal/crawler) | Concurrent crawl engine, HTTP fetcher, robots.txt, URL normalization, scope rules, link extraction. Defines `Page`, `Link`, `Redirect`, `Result`, `Options`. |
 | [`internal/render`](../internal/render) | Render-mode fetcher selection; headless rendering via chromedp (Core Web Vitals). |
@@ -50,6 +50,8 @@ analyzers over the result, and hands everything to the report builder.
 | [`internal/runner`](../internal/runner) | Wires engine + registry + report into `Run`; also `BuildRegistry` and `ListAnalyzers`. |
 | [`internal/report`](../internal/report) | Builds the `Report` and serializes it (JSON, CSV, HTML). |
 | [`internal/mcpserver`](../internal/mcpserver) | Exposes `crawl` and `list_analyzers` over MCP. |
+| [`internal/crawlrequest`](../internal/crawlrequest) | Maps a user-facing crawl request onto `config.Config`; the mapping shared by the MCP `crawl` tool and the web API. |
+| [`internal/webserver`](../internal/webserver) | REST API (start/poll/cancel/export crawls) plus the embedded web UI; see [Web UI guide](web.md). |
 
 ## The crawl engine
 
