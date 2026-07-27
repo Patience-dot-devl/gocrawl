@@ -56,6 +56,8 @@ fields fall back to the built-in defaults:
 | `concurrency` | int | `4` | Parallel fetch workers. |
 | `render` | string | `raw` | `raw` or `headless` (headless is stubbed). |
 | `analyzers` | string[] | *(all)* | Subset of analyzer names to run; empty runs all. |
+| `specialized` | bool | `false` | Enable the opt-in specialized checks: AEO answer-lead, GEO quotable-density, WordPress security probes. |
+| `security_audit` | bool | `false` | Enable the opt-in [security audit](analyzers.md#security-audit-opt-in): TLS/certificate, cookie, and response-header checks. |
 | `respect_robots` | bool | `true` | Obey `robots.txt`. |
 | `subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
 | `include` | string[] | *(none)* | Only crawl URLs matching at least one regex. |

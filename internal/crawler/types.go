@@ -78,22 +78,26 @@ type RenderResult struct {
 
 // Page is the unit passed from the engine to analyzers.
 type Page struct {
-	RequestedURL string            `json:"requested_url"`
-	FinalURL     string            `json:"final_url"`
-	StatusCode   int               `json:"status_code"`
-	Header       http.Header       `json:"-"`
-	ContentType  string            `json:"content_type"`
-	Body         []byte            `json:"-"`
-	RawBody      []byte            `json:"-"` // pre-JS HTML captured during headless render; nil in raw mode
-	Doc          *goquery.Document `json:"-"` // nil if not HTML or parse failed
-	Redirects    []Redirect        `json:"redirects,omitempty"`
-	Links        []Link            `json:"-"`
-	Depth        int               `json:"depth"`
-	Referrer     string            `json:"referrer,omitempty"`
-	Duration     time.Duration     `json:"duration_ms"`
-	FetchedAt    time.Time         `json:"fetched_at"`
-	Err          string            `json:"error,omitempty"`
-	Render       *RenderResult     `json:"render,omitempty"`
+	RequestedURL string      `json:"requested_url"`
+	FinalURL     string      `json:"final_url"`
+	StatusCode   int         `json:"status_code"`
+	Header       http.Header `json:"-"`
+	// TLS records the handshake behind the final response: protocol version, cipher suite, and
+	// the certificate chain the server presented. Nil for plain HTTP, and in headless render
+	// mode, where the response never passes through Go's TLS stack.
+	TLS         *TLSInfo          `json:"-"`
+	ContentType string            `json:"content_type"`
+	Body        []byte            `json:"-"`
+	RawBody     []byte            `json:"-"` // pre-JS HTML captured during headless render; nil in raw mode
+	Doc         *goquery.Document `json:"-"` // nil if not HTML or parse failed
+	Redirects   []Redirect        `json:"redirects,omitempty"`
+	Links       []Link            `json:"-"`
+	Depth       int               `json:"depth"`
+	Referrer    string            `json:"referrer,omitempty"`
+	Duration    time.Duration     `json:"duration_ms"`
+	FetchedAt   time.Time         `json:"fetched_at"`
+	Err         string            `json:"error,omitempty"`
+	Render      *RenderResult     `json:"render,omitempty"`
 	// Truncated reports whether Body was cut short of the real response — either because it
 	// hit the fetcher's body-size cap or because the connection failed partway through the
 	// read. A truncated body may be missing elements (e.g. </head>, the closing tag of a

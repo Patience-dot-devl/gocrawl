@@ -1,5 +1,23 @@
-// Package security implements security checks: response headers (HSTS, CSP,
-// X-Content-Type-Options) and insecure form actions.
+// Package security implements security checks. It runs in two passes.
+//
+// The default pass is per-page and passive: the three baseline response headers (HSTS, CSP,
+// X-Content-Type-Options) and forms whose action downgrades to http://.
+//
+// The opt-in pass is the security audit — transport-layer and cookie hygiene: the TLS
+// protocol version and cipher suite, the certificate chain the server presented (expiry,
+// signature and key strength, completeness), Set-Cookie attributes, and the deeper
+// response-header policy checks (HSTS quality, framing protection, referrer policy, software
+// version disclosure). It is enabled with WithAudit, wired to the `security_audit` config
+// flag, so the default analyzer stays minimal.
+//
+// Everything the audit inspects is server configuration, identical across every page a host
+// serves, so audit findings are aggregated and emitted once per host — reported against the
+// first page crawled on that host — rather than repeating on all of them. The baseline
+// per-page checks keep their existing per-page behaviour.
+//
+// The audit reads only what the crawl already fetched: it opens no extra connections and
+// sends no probes. That bounds what it can see — a certificate so broken that Go's TLS stack
+// refuses the handshake produces a fetch error, not an audit finding.
 package security
 
 import (
@@ -12,19 +30,41 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Analyzer performs security header and insecure-form checks.
-type Analyzer struct{}
+// Analyzer performs security header and insecure-form checks, plus the opt-in TLS,
+// certificate, and cookie audit.
+type Analyzer struct {
+	audit bool
+}
+
+// Option configures the analyzer.
+type Option func(*Analyzer)
+
+// WithAudit enables the opt-in security audit: TLS/certificate inspection, Set-Cookie
+// attribute checks, and deeper response-header hygiene. Off by default, since these findings
+// speak to server and platform configuration rather than to the on-page SEO work that drives
+// a default crawl.
+func WithAudit(on bool) Option { return func(a *Analyzer) { a.audit = on } }
 
 // New returns a new security analyzer.
-func New() *Analyzer { return &Analyzer{} }
+func New(opts ...Option) *Analyzer {
+	a := &Analyzer{}
+	for _, o := range opts {
+		o(a)
+	}
+	return a
+}
 
 func (Analyzer) Name() string { return "security" }
 func (Analyzer) Description() string {
-	return "Security headers (HSTS, CSP, X-Content-Type-Options) and insecure forms"
+	return "Security headers (HSTS, CSP, X-Content-Type-Options), insecure forms, and — with --security-audit — TLS, certificate, and cookie checks"
 }
 
 func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
-	return analyze.EachPage(result, a.analyzePage)
+	issues := analyze.EachPage(result, a.analyzePage)
+	if a.audit {
+		issues = append(issues, a.auditSite(result)...)
+	}
+	return issues
 }
 
 func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {

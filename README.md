@@ -111,7 +111,7 @@ It exposes two tools:
 
 - **`crawl`** — run a crawl + analysis and return a structured JSON report. Arguments:
   `url` (required), `depth`, `max_pages`, `concurrency`, `render`, `analyzers`,
-  `specialized`, `respect_robots`, `subdomains`, `include`, `exclude`.
+  `specialized`, `security_audit`, `respect_robots`, `subdomains`, `include`, `exclude`.
 - **`list_analyzers`** — list the available analyzers.
 
 Register it with an MCP client. For example, Claude Code:
@@ -171,6 +171,7 @@ Key crawl options:
 | Site map | `--sitemap` | Write a `sitemap.xml`; the HTML report also has a Site map tab that draws the crawl as a visual node-link diagram with issues per page |
 | Analyzers | `--analyzers` | Comma-separated allow-list |
 | Specialized checks | `--specialized` | Enable opt-in checks: AI-search heuristics + WordPress security probes (off by default) |
+| Security audit | `--security-audit` | Enable the opt-in TLS/certificate, cookie, and response-header audit (off by default) |
 
 ## Analyzers (v1)
 
@@ -196,6 +197,28 @@ The `aeo` direct-answer-lead and `geo` quotable-density checks, plus the `wordpr
 security-endpoint probes, are **opt-in** specialized checks, off by default; enable them with
 `--specialized`. See
 [docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and threshold.
+
+### Security audit (opt-in)
+
+`--security-audit` extends the `security` analyzer with a transport- and cookie-level pass:
+
+- **TLS** — negotiated protocol version and cipher suite (obsolete versions, insecure suites).
+- **Certificates** — expiry (30-day warning, 14-day error), validity window, self-signed
+  certificates, chains missing their intermediates, SHA-1/MD5 signatures, undersized keys.
+- **Cookies** — `Secure`, `HttpOnly` on session cookies, `SameSite`, the `__Host-`/`__Secure-`
+  name prefixes, and lifetimes past the 400-day browser cap.
+- **Response headers** — HSTS quality (`max-age`, `includeSubDomains`), framing protection,
+  `Referrer-Policy`, and software-version disclosure.
+
+It is **passive**: it reads the crawl's own responses and opens no extra connections, sends no
+probes, and changes nothing about how the site is crawled. Because these findings describe
+server configuration rather than individual pages, they are reported once per host. TLS and
+certificate checks need `--render raw` (the default) — headless rendering does not expose the
+handshake.
+
+```sh
+gocrawl crawl https://example.com --security-audit
+```
 
 ## How it works
 

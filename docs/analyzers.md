@@ -244,9 +244,14 @@ crawled page with a non-empty final URL (any status). At most one issue per code
 
 ---
 
-## `security` — security headers and insecure forms
+## `security` — security headers, insecure forms, and the opt-in TLS/cookie audit
 
-Source: [`internal/analyze/security/security.go`](../internal/analyze/security/security.go).
+Source: [`internal/analyze/security/`](../internal/analyze/security/). The analyzer runs in
+two passes: a baseline pass that is always on, and an audit pass enabled by
+`--security-audit`.
+
+### Baseline (always on)
+
 Runs on every HTML `200` page. Header checks are skipped when no response headers were
 captured; the form check still runs.
 
@@ -258,7 +263,79 @@ captured; the form check still runs.
 | `security-insecure-form` | warning | An HTTPS page has a `<form>` posting to an `http://` action | `action` |
 
 > Mixed subresource content is reported separately by the [`redirects`](#redirects--http-status-redirects-slow-responses-mixed-content)
-> analyzer (`http-mixed-content`); `security` focuses on response headers and form targets.
+> analyzer (`http-mixed-content`); the baseline `security` pass focuses on response headers
+> and form targets.
+
+### Security audit (opt-in)
+
+> ⚙︎ These checks are **off by default**. Turn them on with `--security-audit` (or
+> `analyzers.security_audit: true` in YAML, `security_audit` in MCP / the web API).
+
+The audit inspects transport and cookie configuration rather than page content. It is
+**passive** — it reads the responses the crawl already made and opens no extra connections,
+unlike the `wordpress` analyzer's `--specialized` probes.
+
+Everything it looks at is host-wide server configuration, so **findings are emitted once per
+host**, reported against the first page crawled on that host, rather than repeating on every
+page. Cookie findings are reported once per distinct cookie name.
+
+**TLS and certificates.** Read from the handshake behind each response.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `security-no-https` | error | Pages end on `http://` after redirects | `count`, `example` |
+| `security-tls-obsolete-version` | error | Negotiated TLS 1.0 or 1.1 | `version` |
+| `security-tls-legacy-version` | info | Negotiated TLS 1.2 rather than 1.3 | `version` |
+| `security-tls-weak-cipher` | error | Negotiated a suite Go classifies as insecure (RC4, 3DES, vulnerable CBC) | `cipher_suite`, `version` |
+| `security-tls-cert-expired` | error | The leaf certificate is past `notAfter` | `subject`, `issuer`, `expires_at` |
+| `security-tls-cert-expiring-soon` | warning / **error** | Expires within **30 days**; escalates to error inside **14 days** | + `days_remaining` |
+| `security-tls-cert-not-yet-valid` | error | `notBefore` is in the future | `subject`, `issuer`, `expires_at` |
+| `security-tls-cert-self-signed` | error | The leaf is self-signed | `subject`, `issuer`, `expires_at` |
+| `security-tls-incomplete-chain` | warning | Only the leaf was sent, without its intermediate(s) | `subject`, `issuer` |
+| `security-tls-weak-signature` | error | A chain certificate is signed with MD2/MD5/SHA-1 | `subject`, `signature_algorithm` |
+| `security-tls-weak-key` | error | RSA under 2048 bits or a curve under 256 bits | `subject`, `key_type`, `key_bits` |
+| `security-tls-ok` | info | Positive signal: the handshake and chain passed every check | `version`, `cipher_suite`, `alpn`, `issuer`, `expires_at`, `days_remaining` |
+
+**Cookies.** Parsed from `Set-Cookie` response headers.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `security-cookie-no-secure` | error | A cookie set over HTTPS lacks `Secure` | `cookie` |
+| `security-cookie-samesite-none-insecure` | error | `SameSite=None` without `Secure` (browsers reject it) | `cookie` |
+| `security-cookie-no-samesite` | warning | No `SameSite` attribute at all | `cookie` |
+| `security-cookie-no-httponly` | warning | A session-style cookie lacks `HttpOnly` | `cookie` |
+| `security-cookie-prefix-violation` | warning | `__Host-`/`__Secure-` prefix used without meeting its requirements | `cookie`, `requirement` |
+| `security-cookie-long-lived` | info | Requested lifetime exceeds the 400-day browser cap | `cookie`, `requested_days` |
+
+**Response-header policy.** Checked once per host, against the first HTML `200` page.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `security-hsts-short-max-age` | warning | HSTS `max-age` under **180 days** | `max_age` |
+| `security-hsts-no-subdomains` | info | HSTS without `includeSubDomains` | `value` |
+| `security-missing-referrer-policy` | info | No `Referrer-Policy` header and no `<meta name="referrer">` | — |
+| `security-missing-frame-protection` | warning | Neither `X-Frame-Options` nor a CSP `frame-ancestors` directive | — |
+| `security-version-disclosure` | info | `Server` / `X-Powered-By` / `X-AspNet-Version` / `X-Generator` publishes a version number | `header`, `value` |
+
+**Thresholds:** certificate renewal warns at 30 days and errors at 14; HSTS `max-age` floor is
+15552000 seconds (180 days); the cookie lifetime cap is 400 days; RSA keys must be ≥ 2048 bits
+and elliptic-curve keys ≥ 256 bits.
+
+#### Limits worth knowing
+
+- **Only what the crawl already fetched.** Go verifies certificates before returning a
+  response, so a chain that is expired, self-signed, or issued for the wrong hostname normally
+  surfaces as `http-fetch-error` from the `redirects` analyzer and never reaches the audit.
+  Those checks still fire when the crawl runs through a TLS-terminating proxy that supplies
+  its own trust anchor — exactly the setup where a bad origin certificate would go unnoticed.
+- **Raw mode only, for TLS.** Headless rendering serves responses from the browser rather than
+  Go's TLS stack, so no handshake is captured. The cookie and header checks still run, and the
+  report carries a note explaining what was skipped.
+- **Selective, not exhaustive.** `security-cookie-no-httponly` fires only on cookies whose
+  name suggests session or credential state (`sess`, `sid`, `auth`, `token`, `login`,
+  `remember`, `jwt`, …); analytics and preference cookies are read by JavaScript by design.
+  Likewise, a self-signed **root** is exempt from the signature check — a trust anchor is
+  trusted by identity, not by its own signature.
 
 ---
 

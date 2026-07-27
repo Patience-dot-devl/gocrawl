@@ -76,6 +76,7 @@ export interface StartCrawlParams {
   render?: string
   analyzers?: string[]
   specialized?: boolean
+  security_audit?: boolean
   respect_robots?: boolean
   subdomains?: boolean
   include?: string[]

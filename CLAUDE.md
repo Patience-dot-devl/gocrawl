@@ -94,12 +94,21 @@ Optimization). `seaurl` is a shared UTM-parsing helper, **not** an analyzer.
 Note: the analyzer's registered `Name()` can differ from its package name (e.g. package
 `httpx` registers as `redirects`, package `robotscheck` registers as `robots`).
 
-### The `specialized` flag
+### Opt-in analyzer modes
 
-`BuildRegistry(fetcher, specialized)` takes a `specialized bool`. When true it enables
-deeper, more aggressive checks on certain analyzers (e.g. `wordpress` security probes,
-`aeo` answer-lead checks, `geo` quotable-density checks) via functional options. It is off by
-default and surfaced as `--specialized` on the CLI / `specialized` in MCP.
+`BuildRegistry(fetcher, opts)` takes a `runner.RegistryOptions`. Each field turns on checks
+that are off by default, applied to the relevant analyzers via functional options; the zero
+value leaves all of them off. When adding another opt-in mode, add a field here rather than
+another positional bool.
+
+- **`Specialized`** — deeper, more aggressive checks: `wordpress` security probes, `aeo`
+  answer-lead, `geo` quotable-density. Surfaced as `--specialized` / `specialized` in MCP.
+- **`SecurityAudit`** — the `security` analyzer's audit pass: TLS and certificate inspection,
+  `Set-Cookie` attribute hygiene, and response-header policy. Unlike the WordPress probes it
+  is passive (no extra fetches); it reads `crawler.Page.TLS`, captured by `HTTPFetcher` from
+  the handshake and nil in headless render mode. Its findings are host-wide server
+  configuration, so the audit aggregates them per host instead of emitting per page.
+  Surfaced as `--security-audit` / `security_audit` in MCP.
 
 ## Adding an analyzer
 

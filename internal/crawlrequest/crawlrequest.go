@@ -23,6 +23,7 @@ type Params struct {
 	Render        string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
 	Analyzers     []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
 	Specialized   *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density); off by default"`
+	SecurityAudit *bool    `json:"security_audit,omitempty" jsonschema:"Enable the opt-in security audit: TLS protocol and certificate checks, Set-Cookie attribute hygiene, and response-header policy; off by default"`
 	RespectRobots *bool    `json:"respect_robots,omitempty" jsonschema:"Obey robots.txt while crawling (default true)"`
 	Subdomains    *bool    `json:"subdomains,omitempty" jsonschema:"Follow links to subdomains of the seed host"`
 	Include       []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
@@ -77,6 +78,9 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	cfg.Analyzers.Enabled = p.Analyzers
 	if p.Specialized != nil {
 		cfg.Analyzers.Specialized = *p.Specialized
+	}
+	if p.SecurityAudit != nil {
+		cfg.Analyzers.SecurityAudit = *p.SecurityAudit
 	}
 	cfg.Crawl.Include = p.Include
 	cfg.Crawl.Exclude = p.Exclude

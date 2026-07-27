@@ -53,6 +53,7 @@ default** (the value used when you set nothing).
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
 | `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized checks: AI-search heuristics and WordPress security probes (see below). |
+| `analyzers.security_audit` | `--security-audit` | bool | `false` | Enable the opt-in security audit: TLS/certificate, cookie, and response-header checks (see below). |
 
 ### A note on flag defaults
 
@@ -215,6 +216,27 @@ analyzers always run their other checks; this toggle only adds these. See the
 ```sh
 gocrawl crawl https://example.com --specialized
 ```
+
+### Security audit
+
+`analyzers.security_audit` (or the `--security-audit` flag) is likewise independent of the
+allow/deny lists. It adds a second pass to the `security` analyzer covering transport and
+cookie configuration: TLS protocol version and cipher suite, certificate expiry and chain
+health, `Set-Cookie` attributes, and response-header policy (HSTS quality, framing protection,
+`Referrer-Policy`, version disclosure). The analyzer's baseline checks run either way.
+
+Unlike the WordPress probes above, the audit is **passive** — it reads the responses the crawl
+already made and opens no extra connections. Its findings are host-wide server configuration,
+so they are reported once per host rather than per page. The TLS and certificate checks need
+`--render raw` (the default); headless rendering does not expose the handshake, and the report
+notes when they were skipped for that reason.
+
+```sh
+gocrawl crawl https://example.com --security-audit
+```
+
+See the [`security` analyzer reference](analyzers.md#security--security-headers-insecure-forms-and-the-opt-in-tlscookie-audit)
+for every issue code and threshold.
 
 ### Crawl store
 

@@ -171,6 +171,7 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 		page.StatusCode = resp.StatusCode
 		page.FinalURL = current
 		page.Header = resp.Header
+		page.TLS = newTLSInfo(resp.TLS)
 		page.ContentType = resp.Header.Get("Content-Type")
 		page.Truncated = truncated
 		page.Duration = time.Since(start)

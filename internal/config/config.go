@@ -86,6 +86,12 @@ type AnalyzersConfig struct {
 	// AI-search heuristics (AEO direct-answer-lead, GEO quotable-density) and the WordPress
 	// analyzer's active security-endpoint probes. They only fire when this is set.
 	Specialized bool `mapstructure:"specialized"`
+	// SecurityAudit turns on the `security` analyzer's opt-in audit pass: TLS protocol and
+	// certificate inspection, Set-Cookie attribute hygiene, and the deeper response-header
+	// policy checks. It is passive — it reads the crawl's own responses and opens no extra
+	// connections — but its findings are infrastructure rather than SEO, so it stays off
+	// unless asked for.
+	SecurityAudit bool `mapstructure:"security_audit"`
 }
 
 // Default returns the built-in default configuration.
@@ -170,6 +176,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("analyzers.enabled", d.Analyzers.Enabled)
 	v.SetDefault("analyzers.disabled", d.Analyzers.Disabled)
 	v.SetDefault("analyzers.specialized", d.Analyzers.Specialized)
+	v.SetDefault("analyzers.security_audit", d.Analyzers.SecurityAudit)
 	v.SetDefault("store.dir", d.Store.Dir)
 }
 
