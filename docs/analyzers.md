@@ -4,12 +4,12 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships twenty-one analyzers, run in this registration order
+gocrawl ships twenty-four analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
 the technical/on-page set `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
 `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
-`content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `datalayer`,
-`landing`, and the AI-search analyzers `aeo`, `geo`.
+`content`, `botwall`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`,
+`datalayer`, `landing`, `consent`, and the AI-search analyzers `aeo`, `geo`.
 
 List them at any time:
 
@@ -616,6 +616,80 @@ data — no external campaign feed is needed.
 > re-checks a few `seo` signals (title, H1, description) at a stricter, ad-quality bar with
 > distinct codes. Because external destinations are usually not crawled, coverage is best for
 > internally-reachable and self-tagged landing pages.
+
+---
+
+## `consent` — cookie consent & Google Consent Mode (SEA / compliance)
+
+Source: [`internal/analyze/consent/`](../internal/analyze/consent/). Answers two questions:
+**is consent asked for correctly**, and **is it respected**.
+
+The second question is answerable because of a property of the crawl itself: **gocrawl never
+clicks a consent banner.** Every page it fetches is a visit by someone who has consented to
+nothing, so whatever the site sets or sends during that visit is its pre-consent behaviour.
+
+Consent configuration lives in the shared template, so findings are aggregated and **emitted
+once per host**; cookies are reported once per distinct name.
+
+### Consent configuration
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `consent-cmp-detected` | info | A consent management platform was identified | `cmp` |
+| `consent-no-cmp` | warning | Analytics/advertising tags are present but no CMP was detected | — |
+| `consent-mode-v1-only` | warning | Consent Mode omits the v2 signals (`ad_user_data`, `ad_personalization`) | `missing`, `declared` |
+| `consent-mode-default-granted` | error | A `default` call grants tracking storage before the visitor chooses | `granted` |
+| `consent-mode-no-wait-for-update` | info | No `wait_for_update`, so tags may outrun an async CMP | — |
+| `consent-mode-after-tags` | warning | The Consent Mode default is declared *after* the `gtag.js`/`gtm.js` loader | — |
+
+Consent Mode is read from both forms sites use: `gtag('consent', 'default', {…})` and the
+`dataLayer.push(['consent', 'default', {…}])` it compiles to. Defaults scoped with the
+`region` key are exempt from `consent-mode-default-granted` — granting outside the EEA while
+denying inside it is a legitimate configuration.
+
+Roughly 20 CMPs are recognised (Cookiebot, OneTrust, Usercentrics, CookieYes, Cookie-Script,
+Complianz, Didomi, Iubenda, Termly, Osano, Sourcepoint, TrustArc, Quantcast, Axeptio,
+CookieFirst, Borlabs, Real Cookie Banner, Klaro, tarteaucitron, Cookie Notice), with a generic
+IAB TCF fallback for the long tail — any TCF-compliant CMP exposes `__tcfapi`.
+
+### Pre-consent behaviour
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `consent-preconsent-tracking-cookie` | error | A known analytics/advertising cookie was set with no consent given | `cookie`, `vendor`, `purpose`, `domain`, `scope`, `source` |
+| `consent-preconsent-tracker-request` | error | Measurement/advertising endpoints were contacted with no consent given | `endpoints`, `examples` |
+| `consent-cookie-inventory` | info | Rollup of every cookie observed before consent | `total`, `tracking_count`, `other_count`, `other`, `source` |
+
+> **Render mode changes what is visible, a lot.** Most tracking cookies are set by JavaScript,
+> which response headers cannot see:
+>
+> | | Raw (`--render raw`, default) | Headless (`--render headless`) |
+> | --- | --- | --- |
+> | Cookie source | `Set-Cookie` headers only | The browser's full cookie jar |
+> | JS-set cookies (`_ga`, `_fbp`, …) | ✗ invisible | ✓ captured |
+> | Third-party cookies | ✗ invisible | ✓ captured |
+> | Pre-consent beacons | ✗ tags never run | ✓ captured |
+>
+> Every cookie finding carries a `source` field naming the evidence it used, so a clean raw
+> result is not mistaken for a clean site. **Run the consent audit with `--render headless`**
+> if you want the pre-consent test to mean anything.
+
+#### Limits worth knowing
+
+- **Static CMP detection.** A CMP injected at runtime by a tag manager or an application
+  bundle may leave no trace in the served HTML, so `consent-no-cmp` can be a false positive in
+  raw mode — confirm before acting on it. (Detection does read resource hints, which catches
+  first-party-proxied CMPs like a self-hosted `sourcepoint.<site>.com`.)
+- **Vendor names are matched integration-shaped**, never as bare brand names — hostnames,
+  script filenames, JS globals, CSS class prefixes. Otherwise a "OneTrust alternative"
+  comparison page reads as a OneTrust install.
+- **Consent-platform cookies are exempt.** A CMP cannot remember a refusal without storing it,
+  so its own state cookie is strictly necessary and is never flagged.
+- **"Is Consent Mode wired at all" belongs to [`datalayer`](#datalayer--gtm--datalayer-audit-sea)**
+  (`datalayer-consent-mode-present` / `-missing`). This analyzer judges a configuration it can
+  see rather than duplicating that finding.
+- **Not legal advice.** Whether a specific cookie is lawful depends on context a crawler
+  cannot see. These are engineering signals for a human review.
 
 ---
 

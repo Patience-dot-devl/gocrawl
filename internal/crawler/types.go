@@ -74,6 +74,33 @@ type RenderResult struct {
 	// growth. The datalayer analyzer uses it to confirm analytics/marketing tags actually
 	// fired a network beacon. Not serialized.
 	Requests []string `json:"-"`
+	// Cookies is the browser's cookie jar after the page settled — every cookie actually
+	// stored, first- and third-party, however it was set (Set-Cookie header, document.cookie,
+	// or a third-party script). Response headers alone cannot see the last two, which is why
+	// this is captured separately.
+	//
+	// gocrawl never interacts with a consent banner, so this jar is the site's *pre-consent*
+	// state: the consent analyzer reads it to find tracking cookies dropped before a visitor
+	// has agreed to anything. The jar belongs to the browser, not the tab, so it accumulates
+	// across the pages of one crawl — treat it as a site-level observation rather than proof
+	// that a particular page set a particular cookie. Nil in raw mode.
+	Cookies []Cookie `json:"-"`
+}
+
+// Cookie is one entry of the browser's cookie jar, captured during a headless render. It
+// carries what a compliance check needs — identity, scope, and lifetime — and never the
+// value, which is frequently a personal identifier and has no place in a report.
+type Cookie struct {
+	Name   string
+	Domain string
+	Path   string
+	// Session is true for a cookie with no expiry, which the browser drops when it closes.
+	Session bool
+	// Expires is the cookie's expiry, zero for a session cookie.
+	Expires  time.Time
+	Secure   bool
+	HTTPOnly bool
+	SameSite string
 }
 
 // Page is the unit passed from the engine to analyzers.

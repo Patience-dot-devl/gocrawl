@@ -12,6 +12,7 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/aeo"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/amp"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/botwall"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/consent"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/content"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/datalayer"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/duplicates"
@@ -85,6 +86,10 @@ func BuildRegistry(fetcher crawler.Fetcher, opts RegistryOptions) *analyze.Regis
 	r.Register(tracking.New())
 	r.Register(datalayer.New())
 	r.Register(landing.New())
+	// Consent: CMP detection, Consent Mode v2 configuration, and what the site tracks before
+	// a visitor has agreed to anything. Passive — it reads the crawl's own responses, and the
+	// crawl never answers a consent banner, which is what makes it a pre-consent observation.
+	r.Register(consent.New())
 	// AI-search analyzers: Answer Engine and Generative Engine Optimization.
 	r.Register(aeo.New(aeo.WithAnswerLead(specialized)))
 	r.Register(geo.New(fetcher, geo.WithQuotableDensity(specialized)))

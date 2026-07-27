@@ -635,6 +635,53 @@ var explanations = map[string]Explanation{
 		Fix:    "Confirm the disallow rule is intentional, and that production bots respect it.",
 	},
 
+	// --- consent: CMP, Google Consent Mode, and pre-consent tracking ---
+	"consent-cmp-detected": {
+		What:   "A consent management platform (CMP) was detected on the site.",
+		Impact: "Positive signal. A CMP is the mechanism that collects and records the visitor's tracking choice, which GDPR/ePrivacy require before non-essential cookies may be set.",
+		Fix:    "No action needed. Verify the CMP actually blocks tags before consent — the other consent findings test exactly that.",
+	},
+	"consent-no-cmp": {
+		What:   "The site loads analytics or advertising tags but no consent management platform was detected.",
+		Impact: "Non-essential tracking without a consent mechanism is a direct GDPR/ePrivacy exposure in the EU, and Google requires a certified CMP for Ads and AdSense traffic in the EEA.",
+		Fix:    "Deploy a CMP and configure it to block analytics/advertising tags until the visitor consents. A CMP injected by a tag manager may not be visible in static HTML — confirm manually before acting on this one.",
+	},
+	"consent-mode-v1-only": {
+		What:   "Google Consent Mode is configured, but the v2 signals (ad_user_data, ad_personalization) are not declared.",
+		Impact: "Google has required Consent Mode v2 for EEA traffic since March 2024. Without these signals Google Ads stops collecting for affected users, so remarketing audiences and conversion measurement degrade.",
+		Fix:    "Add ad_user_data and ad_personalization to the gtag('consent', 'default', {…}) call alongside ad_storage and analytics_storage, and update all four when the visitor responds.",
+	},
+	"consent-mode-default-granted": {
+		What:   "A Consent Mode default call grants tracking storage before the visitor has made a choice.",
+		Impact: "This defeats the mechanism: tags behave as though consent was given, so cookies are set and data collected from visitors who never agreed.",
+		Fix:    "Default the consent-gated signals to 'denied' and grant them only in the update call the CMP fires after acceptance. If defaults intentionally differ by region, scope them with the `region` key.",
+	},
+	"consent-mode-no-wait-for-update": {
+		What:   "The Consent Mode default sets no wait_for_update value.",
+		Impact: "A CMP that loads asynchronously may deliver the visitor's real choice after tags have already read the defaults, so a returning visitor's stored consent is missed and measurement is lost.",
+		Fix:    "Add wait_for_update (commonly 500–2000 ms) to the default call so tags hold until the CMP has had a chance to update the state.",
+	},
+	"consent-mode-after-tags": {
+		What:   "The Consent Mode default is declared later in the document than the gtag.js / gtm.js loader.",
+		Impact: "Ordering is what makes Consent Mode work. Defaults declared after the loader cannot restrain tags that have already run, so the first page view tracks regardless of the configuration.",
+		Fix:    "Move the gtag('consent', 'default', {…}) call above the tag manager or gtag.js snippet, as the first script in <head>.",
+	},
+	"consent-preconsent-tracking-cookie": {
+		What:   "A known analytics or advertising cookie was set during a crawl that never accepted a consent banner.",
+		Impact: "Setting non-essential cookies before consent is the most commonly enforced GDPR/ePrivacy violation, and it is trivially provable by anyone who loads the page with a clean profile.",
+		Fix:    "Configure the CMP to block the tag that sets this cookie until consent is granted — not merely to hide the banner. Verify in a fresh browser profile by inspecting the cookie jar before clicking anything.",
+	},
+	"consent-preconsent-tracker-request": {
+		What:   "The page contacted third-party measurement or advertising endpoints during a render that never accepted a consent banner.",
+		Impact: "Stronger evidence than a cookie: the request itself hands the visitor's IP address and page context to the vendor before consent, which no 'strictly necessary' argument covers.",
+		Fix:    "Ensure the CMP blocks tags from loading, not just from setting cookies. Google Consent Mode alone still sends cookieless pings — use tag blocking where those pings are unacceptable.",
+	},
+	"consent-cookie-inventory": {
+		What:   "A rollup of every cookie observed before any consent was given, split into tracking and other.",
+		Impact: "Informational. It is the evidence base for a cookie policy and the starting point of a consent audit; the 'other' list is what still needs classifying by hand.",
+		Fix:    "No action needed. Reconcile the list against your published cookie policy. The data's `source` field says whether it came from the full browser jar (headless) or Set-Cookie headers alone (raw).",
+	},
+
 	// --- security: headers & forms ---
 	"security-missing-hsts": {
 		What:   "An HTTPS response has no Strict-Transport-Security header.",

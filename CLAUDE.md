@@ -87,9 +87,16 @@ part of the report contract and have explanations in `internal/report/explanatio
 Registered analyzers (in order): `seo`, `redirects` (pkg `httpx`), `links`, `robots` (pkg
 `robotscheck`), `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`,
 `hreflang`, `amp`, `duplicates`, `content`, `botwall` (CAPTCHA / bot-challenge detection),
-`wordpress` (CMS-specific), the SEA analyzers `utm` / `tracking` / `datalayer` / `landing`,
-and the AI-search analyzers `aeo` (Answer Engine Optimization) / `geo` (Generative Engine
-Optimization). `seaurl` is a shared UTM-parsing helper, **not** an analyzer.
+`wordpress` (CMS-specific), the SEA analyzers `utm` / `tracking` / `datalayer` / `landing` /
+`consent`, and the AI-search analyzers `aeo` (Answer Engine Optimization) / `geo` (Generative
+Engine Optimization). `seaurl` is a shared UTM-parsing helper, **not** an analyzer.
+
+`consent` leans on a property of the crawl rather than on markup alone: gocrawl never clicks a
+consent banner, so every page it fetches is a pre-consent visit, and any tracking cookie or
+beacon it observes was served without consent. Under `--render headless` it reads the
+browser's real cookie jar (`Page.Render.Cookies`, captured via CDP) and the outbound requests
+the render saw; in raw mode it degrades to `Set-Cookie` headers and says so in each finding's
+`source` field.
 
 Note: the analyzer's registered `Name()` can differ from its package name (e.g. package
 `httpx` registers as `redirects`, package `robotscheck` registers as `robots`).
