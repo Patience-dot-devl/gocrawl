@@ -151,6 +151,47 @@ func TestFetchOmitsBasicAuthWhenAuthHostAllowedRejects(t *testing.T) {
 	}
 }
 
+// TestFetchSendsBasicAuthToIPv6SeedHost guards against a real regression: authHostAllowed must
+// be fed a bracket-preserving host (req.URL.Host, like every other sameSite caller uses — e.g.
+// e.seedHost, inScope's u.Host), not req.URL.Hostname(), which strips IPv6 brackets. Passing
+// Hostname() here would make sameSite compare "[::1]" against "::1", never match, and silently
+// drop Basic Auth on every request to an IPv6-literal seed.
+func TestFetchSendsBasicAuthToIPv6SeedHost(t *testing.T) {
+	ln, err := net.Listen("tcp", "[::1]:0")
+	if err != nil {
+		t.Skipf("IPv6 loopback not available: %v", err)
+	}
+	var gotAuth string
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		fmt.Fprint(w, "ok")
+	}))
+	ts.Listener = ln
+	ts.Start()
+	defer ts.Close()
+
+	seedURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse %q: %v", ts.URL, err)
+	}
+
+	f := &HTTPFetcher{
+		client:          &http.Client{},
+		ua:              NewUAPool(Options{}),
+		maxBody:         1 << 20,
+		maxRedirects:    5,
+		basicAuthUser:   "alice",
+		basicAuthPass:   "s3cret",
+		authHostAllowed: func(host string) bool { return sameSite(seedURL.Host, host, false) },
+	}
+	if _, err := f.Fetch(context.Background(), ts.URL); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if want := wantBasicAuthHeader("alice", "s3cret"); gotAuth != want {
+		t.Errorf("Authorization = %q, want %q (dropped for an IPv6-literal seed)", gotAuth, want)
+	}
+}
+
 type stubRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }

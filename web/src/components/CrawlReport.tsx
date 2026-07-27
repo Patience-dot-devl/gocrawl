@@ -108,13 +108,23 @@ export default function CrawlReport({ id }: { id: string }) {
             </div>
           )}
 
-          {report.notes && report.notes.length > 0 && (
-            <ul className="notes">
-              {report.notes.map((n, i) => (
-                <li key={i}>{n}</li>
-              ))}
-            </ul>
-          )}
+          {(() => {
+            // runner.Run appends the same coverageNote() text to report.notes whenever
+            // coverage is incomplete — always prefixed "partial coverage: " — which the
+            // banner above already covers more richly. Filter it out here so the web view
+            // doesn't show it twice; report.html.tmpl never renders .notes at all, so this
+            // duplication is specific to the live view.
+            const otherNotes = (report.notes ?? []).filter((n) => !n.startsWith('partial coverage:'))
+            return (
+              otherNotes.length > 0 && (
+                <ul className="notes">
+                  {otherNotes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              )
+            )
+          })()}
 
           <div className="summary-cards">
             <div className="stat">

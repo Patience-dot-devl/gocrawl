@@ -138,7 +138,10 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 		schemeOK := req.URL.Scheme == origScheme || (origScheme == "http" && req.URL.Scheme == "https")
 		authHostOK := req.URL.Hostname() == origHost
 		if f.authHostAllowed != nil {
-			authHostOK = f.authHostAllowed(req.URL.Hostname())
+			// sameSite (which authHostAllowed wraps) is fed bracket-preserving u.Host by
+			// every other caller (e.seedHost, inScope); req.URL.Host matches that, whereas
+			// Hostname() strips IPv6 brackets and would never match an IPv6-literal seed.
+			authHostOK = f.authHostAllowed(req.URL.Host)
 		}
 		if f.basicAuthUser != "" && authHostOK && schemeOK {
 			req.SetBasicAuth(f.basicAuthUser, f.basicAuthPass)
