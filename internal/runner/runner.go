@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -149,8 +150,17 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 		return nil, err
 	}
 
-	// Sitemap analyzer fetches with a raw fetcher regardless of render mode.
-	reg := BuildRegistry(crawler.NewHTTPFetcher(opts), RegistryOptions{
+	// Sitemap analyzer fetches with a raw fetcher regardless of render mode. It's built fresh
+	// here rather than reusing engine's fetcher, so — unlike that fetcher and the robots
+	// fetcher inside crawler.New — it isn't restricted to the seed's own host by default.
+	// The sitemap analyzer fetches whatever URL robots.txt's Sitemap: directive names, which
+	// is routinely a different host (a CDN, a separate subdomain) with no FollowExternal
+	// needed to reach it, so Basic Auth must be restricted here explicitly.
+	analyzerFetcher := crawler.NewHTTPFetcher(opts)
+	if seedURL, perr := url.Parse(seed); perr == nil {
+		analyzerFetcher.RestrictBasicAuthToHost(seedURL.Host, opts.AllowSubdomains)
+	}
+	reg := BuildRegistry(analyzerFetcher, RegistryOptions{
 		Specialized:   cfg.Analyzers.Specialized,
 		SecurityAudit: cfg.Analyzers.SecurityAudit,
 	})

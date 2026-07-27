@@ -54,12 +54,15 @@ fields fall back to the built-in defaults:
 | `depth` | int | `0` | Maximum link hops from the seed (`0` = unlimited; the crawl is bounded by `max_pages`). |
 | `max_pages` | int | `500` | Hard cap on pages crawled — the primary bound on crawl size. |
 | `concurrency` | int | `4` | Parallel fetch workers. |
+| `rate` | float | `0` | Max requests per second (`0` = unlimited). |
+| `max_duration` | string | *(unlimited)* | Wall-clock budget for the whole crawl as a Go duration string, e.g. `90m`; on expiry the crawl stops early and still returns a partial report. |
 | `render` | string | `raw` | `raw` or `headless` (headless is stubbed). |
 | `analyzers` | string[] | *(all)* | Subset of analyzer names to run; empty runs all. |
 | `specialized` | bool | `false` | Enable the opt-in specialized checks: AEO answer-lead, GEO quotable-density, WordPress security probes. |
 | `security_audit` | bool | `false` | Enable the opt-in [security audit](analyzers.md#security-audit-opt-in): TLS/certificate, cookie, and response-header checks. |
 | `respect_robots` | bool | `true` | Obey `robots.txt`. |
 | `subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
+| `follow_external` | bool | `false` | Follow links that leave the seed host entirely. |
 | `include` | string[] | *(none)* | Only crawl URLs matching at least one regex. |
 | `exclude` | string[] | *(none)* | Skip URLs matching any regex. |
 | `user_agent` | string | *(built-in)* | `User-Agent` header sent on every request. |

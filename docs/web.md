@@ -41,11 +41,18 @@ to `gocrawl serve` running on `:8080` for frontend development with hot reload.
 
 Three views, all against the API below:
 
-- **New crawl** — a form for the seed URL and the common crawl options (depth, page cap,
-  concurrency, render mode, analyzer selection, specialized checks), which starts a job and
-  jumps to its report.
-- **Report** — polls the running job, then shows the summary counts, an issues table
-  (filterable by severity/analyzer), any coverage/notes advisories, and export links.
+- **New crawl** — a form for the seed URL and every crawl option the interactive menu
+  exposes: depth, page cap, concurrency, rate limit, max duration, render mode,
+  robots.txt/subdomain/external-link scope, analyzer selection, specialized checks, security
+  audit, and an "Advanced" section for include/exclude regexes, User-Agent (or a rotating
+  pool), proxy (or a rotating pool), and HTTP Basic Auth. (A few CLI-only flags with no menu
+  equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form either.) Starts
+  a job and jumps to its report.
+- **Report** — polls the running job, then shows a partial-coverage banner when the crawl
+  didn't reach the whole site, summary counts by severity/analyzer/page-status, an issues
+  table (filterable by severity, analyzer, and free-text search) with each issue's
+  what/impact/fix explanation and raw `data` expandable inline, any notes advisories, and
+  export links.
 - **History** — every crawl saved to the store (`save: true` on start), reopen-able as a
   report.
 
@@ -60,6 +67,7 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | Method & path | Description |
 | --- | --- |
 | `GET /api/analyzers` | List available analyzers (same as `list_analyzers` over MCP). |
+| `GET /api/explanations` | Every issue code's what/impact/fix explanation, keyed by code — the same text baked into the HTML report, used by the live report view. |
 | `POST /api/crawls` | Start a crawl. Body is the same field set as the [MCP `crawl` tool](mcp.md#crawl) (`url` required) plus `save: bool` to persist the report to the store when it finishes. Returns `202` with the job immediately; the crawl runs in the background. |
 | `GET /api/crawls` | List every job (in-memory, this process) merged with the store's saved history, newest first. |
 | `GET /api/crawls/{id}` | One job's status and, once finished, its full `Report` (see [Output reference](output.md)). Falls back to the store for an id that isn't a live job. |

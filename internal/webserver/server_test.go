@@ -77,6 +77,27 @@ func TestListAnalyzers(t *testing.T) {
 	}
 }
 
+func TestListExplanations(t *testing.T) {
+	srv := newTestServer(t)
+	rec, out := doJSON(t, srv, http.MethodGet, "/api/explanations", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	explanations, _ := out["explanations"].(map[string]any)
+	if len(explanations) == 0 {
+		t.Fatal("expected at least one explanation")
+	}
+	entry, ok := explanations["aeo-answer-schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected an aeo-answer-schema entry, got %v", explanations["aeo-answer-schema"])
+	}
+	for _, field := range []string{"what", "impact", "fix"} {
+		if s, _ := entry[field].(string); s == "" {
+			t.Errorf("explanation.%s is empty", field)
+		}
+	}
+}
+
 func TestStartCrawlPollAndExport(t *testing.T) {
 	srv := newTestServer(t)
 	target := startCrawlTarget(t)

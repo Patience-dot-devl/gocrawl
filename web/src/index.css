@@ -94,7 +94,9 @@ h2 {
 
 .crawl-form input[type='text'],
 .crawl-form input[type='number'],
-.crawl-form select {
+.crawl-form input[type='password'],
+.crawl-form select,
+.crawl-form textarea {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -102,6 +104,10 @@ h2 {
   background: var(--bg);
   color: var(--text-h);
   font: inherit;
+}
+
+.crawl-form textarea {
+  resize: vertical;
 }
 
 .crawl-form .grid {
@@ -126,6 +132,19 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 12px;
+}
+
+.advanced {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .analyzer-grid {
@@ -202,6 +221,106 @@ button:disabled {
   padding: 10px 16px;
   margin: 16px 0;
   font-size: 13px;
+}
+
+.cov-banner {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid var(--warning);
+  border-left: 4px solid var(--warning);
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+
+.cov-banner code {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.subcards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.subcard {
+  flex: 1 1 14rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.subcard h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.subcard table td:last-child {
+  text-align: right;
+  font-weight: 600;
+}
+
+.subcard .empty {
+  color: var(--text);
+  font-style: italic;
+  font-size: 13px;
+  margin: 0;
+}
+
+table.issues details {
+  margin-top: 4px;
+}
+
+table.issues details summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+table.issues details.explain dl {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+table.issues details.explain dt {
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+table.issues details.explain dt:first-child {
+  margin-top: 0;
+}
+
+table.issues details.explain dd {
+  margin: 2px 0 0;
+}
+
+table.issues details pre {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  overflow-x: auto;
 }
 
 .summary-cards {

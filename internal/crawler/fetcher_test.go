@@ -120,6 +120,37 @@ func TestFetchDoesNotLeakBasicAuthAcrossHostRedirect(t *testing.T) {
 	}
 }
 
+// TestFetchOmitsBasicAuthWhenAuthHostAllowedRejects guards against a real credential leak: a
+// crawl run with FollowExternal set stops enforcing the seed-host check in inScope, so without
+// its own independent guard the fetcher would send the seed's Basic Auth to every external host
+// it's asked to fetch — not just on a redirect, but on the very first request. authHostAllowed
+// is that independent guard; Engine.New wires it regardless of FollowExternal (see
+// TestEngineWiresAuthHostAllowedOnHTTPFetcher).
+func TestFetchOmitsBasicAuthWhenAuthHostAllowedRejects(t *testing.T) {
+	var gotAuth string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		fmt.Fprint(w, "ok")
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:          &http.Client{},
+		ua:              NewUAPool(Options{}),
+		maxBody:         1 << 20,
+		maxRedirects:    5,
+		basicAuthUser:   "alice",
+		basicAuthPass:   "s3cret",
+		authHostAllowed: func(host string) bool { return false }, // simulates an external host under FollowExternal
+	}
+	if _, err := f.Fetch(context.Background(), ts.URL); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if gotAuth != "" {
+		t.Errorf("Authorization = %q, want empty (credentials leaked to a host authHostAllowed rejected)", gotAuth)
+	}
+}
+
 type stubRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
