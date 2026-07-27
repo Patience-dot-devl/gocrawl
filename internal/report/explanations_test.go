@@ -99,22 +99,21 @@ func scanAnalyzerCodes(root string) (map[string]bool, error) {
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch v := n.(type) {
 			case *ast.CompositeLit:
+				// A []analyze.Issue{{Code: "..."}} literal: gofmt's simplify rule strips the
+				// inner element's type, so the elements are untyped composite literals that
+				// the analyze.Issue check below would miss. Harvest them from the slice.
+				if isAnalyzeIssueSliceType(v.Type) {
+					for _, elt := range v.Elts {
+						if lit, ok := elt.(*ast.CompositeLit); ok && lit.Type == nil {
+							collectIssueCode(lit, codes)
+						}
+					}
+					return true
+				}
 				if !isAnalyzeIssueType(v.Type) {
 					return true
 				}
-				for _, elt := range v.Elts {
-					kv, ok := elt.(*ast.KeyValueExpr)
-					if !ok {
-						continue
-					}
-					key, ok := kv.Key.(*ast.Ident)
-					if !ok || key.Name != "Code" {
-						continue
-					}
-					if code, ok := stringLiteral(kv.Value); ok {
-						codes[code] = true
-					}
-				}
+				collectIssueCode(v, codes)
 			case *ast.CallExpr:
 				// add()-style closures vary in argument order across analyzers (some take
 				// (severity, code, ...), others (url, severity, code, ...)), so look for a
@@ -134,6 +133,30 @@ func scanAnalyzerCodes(root string) (map[string]bool, error) {
 		return nil
 	})
 	return codes, err
+}
+
+// collectIssueCode records the string-literal Code field of an analyze.Issue composite
+// literal, if it has one.
+func collectIssueCode(lit *ast.CompositeLit, codes map[string]bool) {
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Code" {
+			continue
+		}
+		if code, ok := stringLiteral(kv.Value); ok {
+			codes[code] = true
+		}
+	}
+}
+
+// isAnalyzeIssueSliceType reports whether typ is []analyze.Issue.
+func isAnalyzeIssueSliceType(typ ast.Expr) bool {
+	arr, ok := typ.(*ast.ArrayType)
+	return ok && arr.Len == nil && isAnalyzeIssueType(arr.Elt)
 }
 
 // isAnalyzeIssueType reports whether typ is the selector expression analyze.Issue.

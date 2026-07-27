@@ -48,7 +48,8 @@ func runInteractive(cmd *cobra.Command) error {
 		format     = cfg.Output.Format
 		outputPath = cfg.Output.Path
 
-		specialized = cfg.Analyzers.Specialized
+		specialized   = cfg.Analyzers.Specialized
+		securityAudit = cfg.Analyzers.SecurityAudit
 	)
 	if render == "" {
 		render = "raw"
@@ -144,6 +145,10 @@ func runInteractive(cmd *cobra.Command) error {
 				Title("Enable specialized checks?").
 				Description("Opt-in: AEO answer-lead, GEO quotable-density, and WordPress security probes.").
 				Value(&specialized),
+			huh.NewConfirm().
+				Title("Enable the security audit?").
+				Description("Opt-in: TLS/certificate inspection, cookie attributes, and response-header hygiene.").
+				Value(&securityAudit),
 		),
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -183,6 +188,7 @@ func runInteractive(cmd *cobra.Command) error {
 	cfg.Output.Format = format
 	cfg.Output.Path = strings.TrimSpace(outputPath)
 	cfg.Analyzers.Specialized = specialized
+	cfg.Analyzers.SecurityAudit = securityAudit
 
 	cfg.Analyzers.Enabled, cfg.Analyzers.Disabled = analyzerSelection(selected, all)
 

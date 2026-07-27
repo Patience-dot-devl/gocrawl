@@ -13,7 +13,7 @@ import (
 // reg builds the default registry. The fetcher is only used by analyzers at run time, not
 // during selection, so a plain HTTP fetcher is fine here.
 func reg() *analyze.Registry {
-	return BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()), false)
+	return BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()), RegistryOptions{})
 }
 
 func nameSet(as []analyze.Analyzer) map[string]bool { return names(as) }

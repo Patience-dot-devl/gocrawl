@@ -12,6 +12,7 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/aeo"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/amp"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/botwall"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/consent"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/content"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/datalayer"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/duplicates"
@@ -43,11 +44,22 @@ import (
 // crawl.strip_query drops the query string. Run skips them (with a note) in that mode.
 var queryDependentAnalyzers = []string{"utm", "landing", "wordpress"}
 
+// RegistryOptions turns on the analyzer modes that are off by default. Each corresponds to a
+// config flag under `analyzers`; they are grouped here so adding one doesn't grow
+// BuildRegistry's parameter list into a row of anonymous booleans.
+type RegistryOptions struct {
+	// Specialized enables the lower-confidence AI-search heuristics (AEO direct-answer-lead,
+	// GEO quotable-density) and the WordPress analyzer's active endpoint probes.
+	Specialized bool
+	// SecurityAudit enables the security analyzer's TLS, certificate, and cookie audit.
+	SecurityAudit bool
+}
+
 // BuildRegistry constructs the default analyzer registry. The fetcher is used by analyzers
-// that retrieve additional resources (e.g. the sitemap analyzer). When specialized is true,
-// the opt-in, lower-confidence AI-search heuristics (AEO direct-answer-lead, GEO
-// quotable-density) are turned on; otherwise they stay silent.
-func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry {
+// that retrieve additional resources (e.g. the sitemap analyzer). opts turns on the opt-in
+// analyzer modes; the zero value leaves every one of them off.
+func BuildRegistry(fetcher crawler.Fetcher, opts RegistryOptions) *analyze.Registry {
+	specialized := opts.Specialized
 	r := analyze.NewRegistry()
 	r.Register(seo.New())
 	r.Register(httpx.New())
@@ -59,7 +71,7 @@ func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry 
 	// Content & technical SEO breadth checks (Screaming Frog parity, tier 1).
 	r.Register(images.New())
 	r.Register(urls.New())
-	r.Register(security.New())
+	r.Register(security.New(security.WithAudit(opts.SecurityAudit)))
 	r.Register(pagination.New())
 	r.Register(hreflang.New())
 	r.Register(amp.New())
@@ -74,6 +86,10 @@ func BuildRegistry(fetcher crawler.Fetcher, specialized bool) *analyze.Registry 
 	r.Register(tracking.New())
 	r.Register(datalayer.New())
 	r.Register(landing.New())
+	// Consent: CMP detection, Consent Mode v2 configuration, and what the site tracks before
+	// a visitor has agreed to anything. Passive — it reads the crawl's own responses, and the
+	// crawl never answers a consent banner, which is what makes it a pre-consent observation.
+	r.Register(consent.New())
 	// AI-search analyzers: Answer Engine and Generative Engine Optimization.
 	r.Register(aeo.New(aeo.WithAnswerLead(specialized)))
 	r.Register(geo.New(fetcher, geo.WithQuotableDensity(specialized)))
@@ -88,7 +104,7 @@ type AnalyzerInfo struct {
 
 // ListAnalyzers returns metadata for every registered analyzer.
 func ListAnalyzers() []AnalyzerInfo {
-	reg := BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()), false)
+	reg := BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()), RegistryOptions{})
 	var out []AnalyzerInfo
 	for _, a := range reg.All() {
 		out = append(out, AnalyzerInfo{Name: a.Name(), Description: a.Description()})
@@ -134,7 +150,10 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	}
 
 	// Sitemap analyzer fetches with a raw fetcher regardless of render mode.
-	reg := BuildRegistry(crawler.NewHTTPFetcher(opts), cfg.Analyzers.Specialized)
+	reg := BuildRegistry(crawler.NewHTTPFetcher(opts), RegistryOptions{
+		Specialized:   cfg.Analyzers.Specialized,
+		SecurityAudit: cfg.Analyzers.SecurityAudit,
+	})
 	analyzers, skipped := planAnalyzers(reg, cfg.Analyzers, cfg.Crawl.StripQuery)
 	issues := analyze.Run(ctx, analyzers, result)
 
@@ -147,6 +166,11 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	result.ReleaseBodies()
 	if len(skipped) > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("strip_query is on, so query-dependent analyzers were skipped: %s", strings.Join(skipped, ", ")))
+	}
+	if cfg.Analyzers.SecurityAudit && cfg.Render == "headless" {
+		rep.Notes = append(rep.Notes, "security audit: TLS and certificate checks read the handshake "+
+			"behind each response, which headless rendering does not expose — those checks were skipped. "+
+			"Cookie and header checks still ran. Re-run with --render raw for the transport-layer findings.")
 	}
 	if result.ThrottleEvents > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("server returned HTTP 429/503: adaptive delay slowed the crawl %d time(s), down to %.3g req/s (disable with --adaptive-delay=false)", result.ThrottleEvents, result.FinalRate))

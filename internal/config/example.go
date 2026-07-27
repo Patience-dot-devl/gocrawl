@@ -58,6 +58,10 @@ analyzers:
   # the WordPress security-endpoint probes.
   # aeo-no-answer-lead and geo-low-quotable-density.
   specialized: false
+  # Turn on the opt-in security audit (off by default): TLS protocol and certificate checks,
+  # Set-Cookie attribute hygiene, and response-header policy. Passive — it reads the crawl's
+  # own responses and opens no extra connections.
+  security_audit: false
 
 store:
   # Where 'gocrawl crawl --save' writes crawls and where 'gocrawl history' / 'gocrawl

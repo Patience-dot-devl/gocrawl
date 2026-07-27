@@ -10,6 +10,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   const [concurrency, setConcurrency] = useState('')
   const [render, setRender] = useState('raw')
   const [specialized, setSpecialized] = useState(false)
+  const [securityAudit, setSecurityAudit] = useState(false)
   const [save, setSave] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
@@ -39,6 +40,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       url: url.trim(),
       render,
       specialized,
+      security_audit: securityAudit,
       save,
     }
     if (depth) params.depth = Number(depth)
@@ -94,6 +96,10 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       <label className="checkbox">
         <input type="checkbox" checked={specialized} onChange={(e) => setSpecialized(e.target.checked)} />
         Enable specialized checks (AEO/GEO heuristics, WordPress security probes)
+      </label>
+      <label className="checkbox">
+        <input type="checkbox" checked={securityAudit} onChange={(e) => setSecurityAudit(e.target.checked)} />
+        Enable security audit (TLS/certificate, cookies, response headers)
       </label>
       <label className="checkbox">
         <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />

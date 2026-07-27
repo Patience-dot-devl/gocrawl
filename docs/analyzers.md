@@ -4,12 +4,12 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships twenty-one analyzers, run in this registration order
+gocrawl ships twenty-four analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
 the technical/on-page set `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
 `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
-`content`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`, `datalayer`,
-`landing`, and the AI-search analyzers `aeo`, `geo`.
+`content`, `botwall`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`,
+`datalayer`, `landing`, `consent`, and the AI-search analyzers `aeo`, `geo`.
 
 List them at any time:
 
@@ -244,9 +244,14 @@ crawled page with a non-empty final URL (any status). At most one issue per code
 
 ---
 
-## `security` — security headers and insecure forms
+## `security` — security headers, insecure forms, and the opt-in TLS/cookie audit
 
-Source: [`internal/analyze/security/security.go`](../internal/analyze/security/security.go).
+Source: [`internal/analyze/security/`](../internal/analyze/security/). The analyzer runs in
+two passes: a baseline pass that is always on, and an audit pass enabled by
+`--security-audit`.
+
+### Baseline (always on)
+
 Runs on every HTML `200` page. Header checks are skipped when no response headers were
 captured; the form check still runs.
 
@@ -258,7 +263,79 @@ captured; the form check still runs.
 | `security-insecure-form` | warning | An HTTPS page has a `<form>` posting to an `http://` action | `action` |
 
 > Mixed subresource content is reported separately by the [`redirects`](#redirects--http-status-redirects-slow-responses-mixed-content)
-> analyzer (`http-mixed-content`); `security` focuses on response headers and form targets.
+> analyzer (`http-mixed-content`); the baseline `security` pass focuses on response headers
+> and form targets.
+
+### Security audit (opt-in)
+
+> ⚙︎ These checks are **off by default**. Turn them on with `--security-audit` (or
+> `analyzers.security_audit: true` in YAML, `security_audit` in MCP / the web API).
+
+The audit inspects transport and cookie configuration rather than page content. It is
+**passive** — it reads the responses the crawl already made and opens no extra connections,
+unlike the `wordpress` analyzer's `--specialized` probes.
+
+Everything it looks at is host-wide server configuration, so **findings are emitted once per
+host**, reported against the first page crawled on that host, rather than repeating on every
+page. Cookie findings are reported once per distinct cookie name.
+
+**TLS and certificates.** Read from the handshake behind each response.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `security-no-https` | error | Pages end on `http://` after redirects | `count`, `example` |
+| `security-tls-obsolete-version` | error | Negotiated TLS 1.0 or 1.1 | `version` |
+| `security-tls-legacy-version` | info | Negotiated TLS 1.2 rather than 1.3 | `version` |
+| `security-tls-weak-cipher` | error | Negotiated a suite Go classifies as insecure (RC4, 3DES, vulnerable CBC) | `cipher_suite`, `version` |
+| `security-tls-cert-expired` | error | The leaf certificate is past `notAfter` | `subject`, `issuer`, `expires_at` |
+| `security-tls-cert-expiring-soon` | warning / **error** | Expires within **30 days**; escalates to error inside **14 days** | + `days_remaining` |
+| `security-tls-cert-not-yet-valid` | error | `notBefore` is in the future | `subject`, `issuer`, `expires_at` |
+| `security-tls-cert-self-signed` | error | The leaf is self-signed | `subject`, `issuer`, `expires_at` |
+| `security-tls-incomplete-chain` | warning | Only the leaf was sent, without its intermediate(s) | `subject`, `issuer` |
+| `security-tls-weak-signature` | error | A chain certificate is signed with MD2/MD5/SHA-1 | `subject`, `signature_algorithm` |
+| `security-tls-weak-key` | error | RSA under 2048 bits or a curve under 256 bits | `subject`, `key_type`, `key_bits` |
+| `security-tls-ok` | info | Positive signal: the handshake and chain passed every check | `version`, `cipher_suite`, `alpn`, `issuer`, `expires_at`, `days_remaining` |
+
+**Cookies.** Parsed from `Set-Cookie` response headers.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `security-cookie-no-secure` | error | A cookie set over HTTPS lacks `Secure` | `cookie` |
+| `security-cookie-samesite-none-insecure` | error | `SameSite=None` without `Secure` (browsers reject it) | `cookie` |
+| `security-cookie-no-samesite` | warning | No `SameSite` attribute at all | `cookie` |
+| `security-cookie-no-httponly` | warning | A session-style cookie lacks `HttpOnly` | `cookie` |
+| `security-cookie-prefix-violation` | warning | `__Host-`/`__Secure-` prefix used without meeting its requirements | `cookie`, `requirement` |
+| `security-cookie-long-lived` | info | Requested lifetime exceeds the 400-day browser cap | `cookie`, `requested_days` |
+
+**Response-header policy.** Checked once per host, against the first HTML `200` page.
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `security-hsts-short-max-age` | warning | HSTS `max-age` under **180 days** | `max_age` |
+| `security-hsts-no-subdomains` | info | HSTS without `includeSubDomains` | `value` |
+| `security-missing-referrer-policy` | info | No `Referrer-Policy` header and no `<meta name="referrer">` | — |
+| `security-missing-frame-protection` | warning | Neither `X-Frame-Options` nor a CSP `frame-ancestors` directive | — |
+| `security-version-disclosure` | info | `Server` / `X-Powered-By` / `X-AspNet-Version` / `X-Generator` publishes a version number | `header`, `value` |
+
+**Thresholds:** certificate renewal warns at 30 days and errors at 14; HSTS `max-age` floor is
+15552000 seconds (180 days); the cookie lifetime cap is 400 days; RSA keys must be ≥ 2048 bits
+and elliptic-curve keys ≥ 256 bits.
+
+#### Limits worth knowing
+
+- **Only what the crawl already fetched.** Go verifies certificates before returning a
+  response, so a chain that is expired, self-signed, or issued for the wrong hostname normally
+  surfaces as `http-fetch-error` from the `redirects` analyzer and never reaches the audit.
+  Those checks still fire when the crawl runs through a TLS-terminating proxy that supplies
+  its own trust anchor — exactly the setup where a bad origin certificate would go unnoticed.
+- **Raw mode only, for TLS.** Headless rendering serves responses from the browser rather than
+  Go's TLS stack, so no handshake is captured. The cookie and header checks still run, and the
+  report carries a note explaining what was skipped.
+- **Selective, not exhaustive.** `security-cookie-no-httponly` fires only on cookies whose
+  name suggests session or credential state (`sess`, `sid`, `auth`, `token`, `login`,
+  `remember`, `jwt`, …); analytics and preference cookies are read by JavaScript by design.
+  Likewise, a self-signed **root** is exempt from the signature check — a trust anchor is
+  trusted by identity, not by its own signature.
 
 ---
 
@@ -539,6 +616,80 @@ data — no external campaign feed is needed.
 > re-checks a few `seo` signals (title, H1, description) at a stricter, ad-quality bar with
 > distinct codes. Because external destinations are usually not crawled, coverage is best for
 > internally-reachable and self-tagged landing pages.
+
+---
+
+## `consent` — cookie consent & Google Consent Mode (SEA / compliance)
+
+Source: [`internal/analyze/consent/`](../internal/analyze/consent/). Answers two questions:
+**is consent asked for correctly**, and **is it respected**.
+
+The second question is answerable because of a property of the crawl itself: **gocrawl never
+clicks a consent banner.** Every page it fetches is a visit by someone who has consented to
+nothing, so whatever the site sets or sends during that visit is its pre-consent behaviour.
+
+Consent configuration lives in the shared template, so findings are aggregated and **emitted
+once per host**; cookies are reported once per distinct name.
+
+### Consent configuration
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `consent-cmp-detected` | info | A consent management platform was identified | `cmp` |
+| `consent-no-cmp` | warning | Analytics/advertising tags are present but no CMP was detected | — |
+| `consent-mode-v1-only` | warning | Consent Mode omits the v2 signals (`ad_user_data`, `ad_personalization`) | `missing`, `declared` |
+| `consent-mode-default-granted` | error | A `default` call grants tracking storage before the visitor chooses | `granted` |
+| `consent-mode-no-wait-for-update` | info | No `wait_for_update`, so tags may outrun an async CMP | — |
+| `consent-mode-after-tags` | warning | The Consent Mode default is declared *after* the `gtag.js`/`gtm.js` loader | — |
+
+Consent Mode is read from both forms sites use: `gtag('consent', 'default', {…})` and the
+`dataLayer.push(['consent', 'default', {…}])` it compiles to. Defaults scoped with the
+`region` key are exempt from `consent-mode-default-granted` — granting outside the EEA while
+denying inside it is a legitimate configuration.
+
+Roughly 20 CMPs are recognised (Cookiebot, OneTrust, Usercentrics, CookieYes, Cookie-Script,
+Complianz, Didomi, Iubenda, Termly, Osano, Sourcepoint, TrustArc, Quantcast, Axeptio,
+CookieFirst, Borlabs, Real Cookie Banner, Klaro, tarteaucitron, Cookie Notice), with a generic
+IAB TCF fallback for the long tail — any TCF-compliant CMP exposes `__tcfapi`.
+
+### Pre-consent behaviour
+
+| Code | Severity | Triggered when | `data` |
+| --- | --- | --- | --- |
+| `consent-preconsent-tracking-cookie` | error | A known analytics/advertising cookie was set with no consent given | `cookie`, `vendor`, `purpose`, `domain`, `scope`, `source` |
+| `consent-preconsent-tracker-request` | error | Measurement/advertising endpoints were contacted with no consent given | `endpoints`, `examples` |
+| `consent-cookie-inventory` | info | Rollup of every cookie observed before consent | `total`, `tracking_count`, `other_count`, `other`, `source` |
+
+> **Render mode changes what is visible, a lot.** Most tracking cookies are set by JavaScript,
+> which response headers cannot see:
+>
+> | | Raw (`--render raw`, default) | Headless (`--render headless`) |
+> | --- | --- | --- |
+> | Cookie source | `Set-Cookie` headers only | The browser's full cookie jar |
+> | JS-set cookies (`_ga`, `_fbp`, …) | ✗ invisible | ✓ captured |
+> | Third-party cookies | ✗ invisible | ✓ captured |
+> | Pre-consent beacons | ✗ tags never run | ✓ captured |
+>
+> Every cookie finding carries a `source` field naming the evidence it used, so a clean raw
+> result is not mistaken for a clean site. **Run the consent audit with `--render headless`**
+> if you want the pre-consent test to mean anything.
+
+#### Limits worth knowing
+
+- **Static CMP detection.** A CMP injected at runtime by a tag manager or an application
+  bundle may leave no trace in the served HTML, so `consent-no-cmp` can be a false positive in
+  raw mode — confirm before acting on it. (Detection does read resource hints, which catches
+  first-party-proxied CMPs like a self-hosted `sourcepoint.<site>.com`.)
+- **Vendor names are matched integration-shaped**, never as bare brand names — hostnames,
+  script filenames, JS globals, CSS class prefixes. Otherwise a "OneTrust alternative"
+  comparison page reads as a OneTrust install.
+- **Consent-platform cookies are exempt.** A CMP cannot remember a refusal without storing it,
+  so its own state cookie is strictly necessary and is never flagged.
+- **"Is Consent Mode wired at all" belongs to [`datalayer`](#datalayer--gtm--datalayer-audit-sea)**
+  (`datalayer-consent-mode-present` / `-missing`). This analyzer judges a configuration it can
+  see rather than duplicating that finding.
+- **Not legal advice.** Whether a specific cookie is lawful depends on context a crawler
+  cannot see. These are engineering signals for a human review.
 
 ---
 

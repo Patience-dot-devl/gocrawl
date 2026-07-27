@@ -24,6 +24,7 @@ import (
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	cdppage "github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/storage"
 	"github.com/chromedp/chromedp"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
@@ -238,6 +239,7 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		htmlBody string
 		metrics  cwvJS
 		dlJSON   string
+		cookies  []crawler.Cookie
 	)
 	actions := []chromedp.Action{network.Enable()}
 	// When the UA pool rotates, pick this page's agent and override it for the navigation. A
@@ -259,6 +261,18 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		chromedp.Sleep(2*time.Second),
 		chromedp.Evaluate(cwvReadScript, &metrics),
 		chromedp.Evaluate(dataLayerReadScript, &dlJSON),
+		// Read the cookie jar through CDP rather than document.cookie: this sees HttpOnly and
+		// third-party cookies too, which is most of what a tracker actually drops. The crawl
+		// never answers a consent banner, so what's here is the site's pre-consent state.
+		chromedp.ActionFunc(func(c context.Context) error {
+			jar, err := storage.GetCookies().Do(c)
+			if err != nil {
+				// A cookie-jar read failing shouldn't cost us the page's Core Web Vitals.
+				return nil
+			}
+			cookies = convertCookies(jar)
+			return nil
+		}),
 		chromedp.OuterHTML("html", &htmlBody, chromedp.ByQuery),
 	)
 	if err := chromedp.Run(runCtx, actions...); err != nil {
@@ -293,6 +307,7 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		DataLayerPresent: dlPresent,
 		DataLayer:        dlEntries,
 		Requests:         reqs,
+		Cookies:          cookies,
 	}
 
 	// Safety net: a rendered DOM far thinner than the raw HTML means the page was snapshotted
@@ -420,6 +435,32 @@ func parseDataLayer(s string) (bool, []json.RawMessage) {
 		return false, nil
 	}
 	return snap.Present, snap.Entries
+}
+
+// convertCookies maps CDP's cookie representation onto the engine's, dropping the value:
+// cookie values are routinely personal identifiers and nothing downstream needs them.
+func convertCookies(jar []*network.Cookie) []crawler.Cookie {
+	out := make([]crawler.Cookie, 0, len(jar))
+	for _, c := range jar {
+		if c == nil {
+			continue
+		}
+		cookie := crawler.Cookie{
+			Name:     c.Name,
+			Domain:   c.Domain,
+			Path:     c.Path,
+			Session:  c.Session,
+			Secure:   c.Secure,
+			HTTPOnly: c.HTTPOnly,
+			SameSite: c.SameSite.String(),
+		}
+		// CDP reports expiry as a Unix timestamp in seconds, and -1 for a session cookie.
+		if !c.Session && c.Expires > 0 {
+			cookie.Expires = time.Unix(int64(c.Expires), 0).UTC()
+		}
+		out = append(out, cookie)
+	}
+	return out
 }
 
 func headersToHTTP(hs network.Headers) http.Header {

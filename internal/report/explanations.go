@@ -635,6 +635,53 @@ var explanations = map[string]Explanation{
 		Fix:    "Confirm the disallow rule is intentional, and that production bots respect it.",
 	},
 
+	// --- consent: CMP, Google Consent Mode, and pre-consent tracking ---
+	"consent-cmp-detected": {
+		What:   "A consent management platform (CMP) was detected on the site.",
+		Impact: "Positive signal. A CMP is the mechanism that collects and records the visitor's tracking choice, which GDPR/ePrivacy require before non-essential cookies may be set.",
+		Fix:    "No action needed. Verify the CMP actually blocks tags before consent — the other consent findings test exactly that.",
+	},
+	"consent-no-cmp": {
+		What:   "The site loads analytics or advertising tags but no consent management platform was detected.",
+		Impact: "Non-essential tracking without a consent mechanism is a direct GDPR/ePrivacy exposure in the EU, and Google requires a certified CMP for Ads and AdSense traffic in the EEA.",
+		Fix:    "Deploy a CMP and configure it to block analytics/advertising tags until the visitor consents. A CMP injected by a tag manager may not be visible in static HTML — confirm manually before acting on this one.",
+	},
+	"consent-mode-v1-only": {
+		What:   "Google Consent Mode is configured, but the v2 signals (ad_user_data, ad_personalization) are not declared.",
+		Impact: "Google has required Consent Mode v2 for EEA traffic since March 2024. Without these signals Google Ads stops collecting for affected users, so remarketing audiences and conversion measurement degrade.",
+		Fix:    "Add ad_user_data and ad_personalization to the gtag('consent', 'default', {…}) call alongside ad_storage and analytics_storage, and update all four when the visitor responds.",
+	},
+	"consent-mode-default-granted": {
+		What:   "A Consent Mode default call grants tracking storage before the visitor has made a choice.",
+		Impact: "This defeats the mechanism: tags behave as though consent was given, so cookies are set and data collected from visitors who never agreed.",
+		Fix:    "Default the consent-gated signals to 'denied' and grant them only in the update call the CMP fires after acceptance. If defaults intentionally differ by region, scope them with the `region` key.",
+	},
+	"consent-mode-no-wait-for-update": {
+		What:   "The Consent Mode default sets no wait_for_update value.",
+		Impact: "A CMP that loads asynchronously may deliver the visitor's real choice after tags have already read the defaults, so a returning visitor's stored consent is missed and measurement is lost.",
+		Fix:    "Add wait_for_update (commonly 500–2000 ms) to the default call so tags hold until the CMP has had a chance to update the state.",
+	},
+	"consent-mode-after-tags": {
+		What:   "The Consent Mode default is declared later in the document than the gtag.js / gtm.js loader.",
+		Impact: "Ordering is what makes Consent Mode work. Defaults declared after the loader cannot restrain tags that have already run, so the first page view tracks regardless of the configuration.",
+		Fix:    "Move the gtag('consent', 'default', {…}) call above the tag manager or gtag.js snippet, as the first script in <head>.",
+	},
+	"consent-preconsent-tracking-cookie": {
+		What:   "A known analytics or advertising cookie was set during a crawl that never accepted a consent banner.",
+		Impact: "Setting non-essential cookies before consent is the most commonly enforced GDPR/ePrivacy violation, and it is trivially provable by anyone who loads the page with a clean profile.",
+		Fix:    "Configure the CMP to block the tag that sets this cookie until consent is granted — not merely to hide the banner. Verify in a fresh browser profile by inspecting the cookie jar before clicking anything.",
+	},
+	"consent-preconsent-tracker-request": {
+		What:   "The page contacted third-party measurement or advertising endpoints during a render that never accepted a consent banner.",
+		Impact: "Stronger evidence than a cookie: the request itself hands the visitor's IP address and page context to the vendor before consent, which no 'strictly necessary' argument covers.",
+		Fix:    "Ensure the CMP blocks tags from loading, not just from setting cookies. Google Consent Mode alone still sends cookieless pings — use tag blocking where those pings are unacceptable.",
+	},
+	"consent-cookie-inventory": {
+		What:   "A rollup of every cookie observed before any consent was given, split into tracking and other.",
+		Impact: "Informational. It is the evidence base for a cookie policy and the starting point of a consent audit; the 'other' list is what still needs classifying by hand.",
+		Fix:    "No action needed. Reconcile the list against your published cookie policy. The data's `source` field says whether it came from the full browser jar (headless) or Set-Cookie headers alone (raw).",
+	},
+
 	// --- security: headers & forms ---
 	"security-missing-hsts": {
 		What:   "An HTTPS response has no Strict-Transport-Security header.",
@@ -655,6 +702,123 @@ var explanations = map[string]Explanation{
 		What:   "A form submits over insecure http://.",
 		Impact: "Submitted data can be intercepted; browsers warn users, harming trust and conversions.",
 		Fix:    "Point the form action at an https:// endpoint.",
+	},
+
+	// --- security audit: TLS, certificates, cookies (opt-in, --security-audit) ---
+	"security-no-https": {
+		What:   "Pages are served over plain HTTP and do not redirect to HTTPS.",
+		Impact: "Traffic is readable and modifiable in transit, browsers label the site 'Not secure', and Google has treated HTTPS as a ranking signal for a decade.",
+		Fix:    "Obtain a certificate and redirect all HTTP traffic to the HTTPS equivalent with a 301, then add Strict-Transport-Security.",
+	},
+	"security-tls-obsolete-version": {
+		What:   "The connection negotiated TLS 1.0 or 1.1, protocol versions retired in 2020.",
+		Impact: "These versions have known weaknesses, and current browsers refuse them outright — so affected visitors cannot load the site at all.",
+		Fix:    "Disable TLS 1.0/1.1 in the server or CDN and require TLS 1.2 as a minimum, ideally offering TLS 1.3.",
+	},
+	"security-tls-legacy-version": {
+		What:   "The connection negotiated TLS 1.2 rather than TLS 1.3.",
+		Impact: "TLS 1.2 is still secure, but it needs an extra network round trip to handshake, which costs measurable time on every new connection.",
+		Fix:    "Enable TLS 1.3 in the server or CDN; clients that don't support it keep negotiating 1.2 automatically.",
+	},
+	"security-tls-weak-cipher": {
+		What:   "The connection negotiated a cipher suite classified as insecure (RC4, 3DES, or a vulnerable CBC mode).",
+		Impact: "These suites have practical attacks against them, and they fail PCI DSS and most other compliance baselines.",
+		Fix:    "Restrict the server's cipher list to modern AEAD suites (AES-GCM, ChaCha20-Poly1305) and remove the legacy ones.",
+	},
+	"security-tls-cert-expired": {
+		What:   "The certificate the server presented is past its expiry date.",
+		Impact: "Browsers show a full-page interstitial warning and crawlers stop indexing — the site is effectively offline for most visitors.",
+		Fix:    "Renew the certificate immediately, then fix the renewal automation that let it lapse.",
+	},
+	"security-tls-cert-expiring-soon": {
+		What:   "The certificate expires within 30 days (escalated to an error inside 14 days).",
+		Impact: "If renewal fails, the site disappears behind a browser security warning with no grace period.",
+		Fix:    "Confirm automated renewal is running and succeeding; ACME clients normally renew at 30 days, so anything closer means it has already failed once.",
+	},
+	"security-tls-cert-not-yet-valid": {
+		What:   "The certificate's validity period starts in the future.",
+		Impact: "Browsers reject it exactly as they would an expired certificate, blocking every visitor.",
+		Fix:    "Check the server's system clock, and confirm the deployed certificate is the current one rather than a pre-issued replacement.",
+	},
+	"security-tls-cert-self-signed": {
+		What:   "The server presented a self-signed certificate rather than one issued by a trusted CA.",
+		Impact: "No browser trusts it, so every visitor sees a security warning, and it offers no protection against impersonation.",
+		Fix:    "Replace it with a certificate from a publicly trusted CA — Let's Encrypt issues them free and automates renewal.",
+	},
+	"security-tls-incomplete-chain": {
+		What:   "The server sent only its own certificate, omitting the intermediate CA certificate(s) that link it to a trusted root.",
+		Impact: "Browsers usually recover by fetching the missing intermediate, at the cost of a round trip; clients that can't (many mobile apps, older Android, curl) fail the connection entirely.",
+		Fix:    "Configure the server to serve the full chain — most CAs ship a 'fullchain' bundle for exactly this.",
+	},
+	"security-tls-weak-signature": {
+		What:   "A certificate in the chain is signed with a broken hash algorithm (MD2, MD5, or SHA-1).",
+		Impact: "Collision attacks against these algorithms are practical, so the certificate's authenticity can be forged; browsers reject them for publicly trusted certificates.",
+		Fix:    "Reissue the certificate with a SHA-256 or stronger signature, and replace any intermediate still using the old algorithm.",
+	},
+	"security-tls-weak-key": {
+		What:   "A certificate in the chain uses a public key below the CA/Browser Forum minimum (2048-bit RSA, 256-bit elliptic curve).",
+		Impact: "Undersized keys are within reach of a well-resourced attacker, and no CA will renew a certificate that uses one.",
+		Fix:    "Generate a new key of at least 2048-bit RSA (or a P-256 elliptic-curve key) and reissue the certificate against it.",
+	},
+	"security-tls-ok": {
+		What:   "The TLS configuration and certificate chain passed every audit check.",
+		Impact: "Positive signal. Transport security is in good order; the finding's data records the negotiated protocol, cipher, and remaining certificate lifetime.",
+		Fix:    "No action needed. Keep automated certificate renewal in place.",
+	},
+	"security-cookie-no-secure": {
+		What:   "A cookie is set over HTTPS without the Secure attribute.",
+		Impact: "The browser will also send it over plain HTTP, so a single downgraded request — an http:// link, an ad, a stray redirect — leaks it in cleartext.",
+		Fix:    "Add the Secure attribute to every cookie the site sets over HTTPS.",
+	},
+	"security-cookie-samesite-none-insecure": {
+		What:   "A cookie declares SameSite=None but is not marked Secure.",
+		Impact: "Browsers reject this combination outright, so the cookie is never stored — a common cause of broken cross-site embeds, payment returns, and consent state.",
+		Fix:    "Add the Secure attribute alongside SameSite=None, or switch to SameSite=Lax if cross-site delivery isn't needed.",
+	},
+	"security-cookie-no-samesite": {
+		What:   "A cookie has no SameSite attribute.",
+		Impact: "The browser picks a default, and those defaults differ between browsers and keep changing — a CSRF exposure on session cookies and a source of attribution loss on marketing cookies.",
+		Fix:    "Set SameSite explicitly: Lax for ordinary session cookies, None (with Secure) for cookies that must survive cross-site navigation.",
+	},
+	"security-cookie-no-httponly": {
+		What:   "A session-style cookie (its name suggests a session, token, or credential) is readable by JavaScript.",
+		Impact: "Any cross-site scripting flaw anywhere on the domain can read the cookie and hijack the session.",
+		Fix:    "Add HttpOnly to cookies carrying session or authentication state; omit it only when JavaScript genuinely needs the value.",
+	},
+	"security-cookie-prefix-violation": {
+		What:   "A cookie uses the reserved __Host- or __Secure- name prefix without meeting that prefix's requirements.",
+		Impact: "Browsers refuse to store such a cookie, so whatever depends on it silently stops working.",
+		Fix:    "Meet the prefix's rules (__Secure- requires Secure; __Host- also requires Path=/ and no Domain attribute), or drop the prefix.",
+	},
+	"security-cookie-long-lived": {
+		What:   "A cookie requests a lifetime longer than the 400 days browsers now allow.",
+		Impact: "Chrome and Safari silently truncate it to 400 days, so the retention period the site records — and any consent notice quoting it — is inaccurate.",
+		Fix:    "Set a lifetime of 400 days or less, and align the figure with what the cookie/consent policy tells visitors.",
+	},
+	"security-hsts-short-max-age": {
+		What:   "Strict-Transport-Security is present but its max-age is under 180 days.",
+		Impact: "The HTTPS-only guarantee lapses that soon after a visit, reopening the downgrade window; the HSTS preload list also rejects anything this short.",
+		Fix:    "Raise max-age to at least 15552000 (180 days), or 31536000 (one year) if you intend to preload.",
+	},
+	"security-hsts-no-subdomains": {
+		What:   "Strict-Transport-Security does not include the includeSubDomains directive.",
+		Impact: "Subdomains stay reachable over plain HTTP, and a cookie stolen there can often be replayed against the main site.",
+		Fix:    "Add includeSubDomains once every subdomain is confirmed to serve HTTPS — the directive applies to all of them at once.",
+	},
+	"security-missing-referrer-policy": {
+		What:   "The response sets no Referrer-Policy header and the page declares no meta referrer.",
+		Impact: "Full URLs — including any tokens or campaign parameters in the query string — are sent to third parties in the Referer header.",
+		Fix:    "Send 'Referrer-Policy: strict-origin-when-cross-origin', which keeps same-site referrers intact while trimming cross-site ones to the origin.",
+	},
+	"security-missing-frame-protection": {
+		What:   "The response has neither an X-Frame-Options header nor a CSP frame-ancestors directive.",
+		Impact: "Any site can embed these pages in an iframe, enabling clickjacking against forms and authenticated actions.",
+		Fix:    "Send \"Content-Security-Policy: frame-ancestors 'self'\" (the modern form), optionally with X-Frame-Options: SAMEORIGIN for older browsers.",
+	},
+	"security-version-disclosure": {
+		What:   "A response header publishes the exact version of the server software or framework.",
+		Impact: "It hands an attacker a precise CVE shortlist for the stack without them having to probe for it.",
+		Fix:    "Suppress the version in the header (nginx 'server_tokens off', Apache 'ServerTokens Prod', or remove X-Powered-By) — the software name alone is harmless.",
 	},
 
 	// --- seo: on-page technical SEO ---
