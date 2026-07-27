@@ -6,6 +6,26 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-27
+
+### Added
+
+- **Opt-in security audit (`--security-audit`).** Extends the `security` analyzer with a
+  second, off-by-default pass covering the transport and cookie layers: TLS protocol/cipher
+  strength, certificate expiry and chain validity, cookie hygiene (`Secure`, `HttpOnly`,
+  `SameSite`, `__Host-`/`__Secure-` prefixes), and header policy (HSTS quality, framing
+  protection, `Referrer-Policy`, version disclosure). Findings aggregate per host rather than
+  per page, since everything it inspects is host-wide server configuration. Surfaced as
+  `--security-audit` / `analyzers.security_audit` in YAML / `security_audit` in MCP and the
+  web API.
+- **Consent analyzer, on by default.** Reports both halves of a GDPR/ePrivacy review: whether
+  consent is asked for correctly (CMP detection across ~20 vendors plus a generic IAB TCF
+  fallback, Consent Mode v2 signal completeness, granted-by-default, declaration ordering) and
+  whether it's respected (classifies cookies observed on gocrawl's pre-consent crawl by
+  vendor/purpose, flagging measurement endpoints contacted before consent). Under `--render
+  headless` it reads the real browser cookie jar via CDP; in raw mode it degrades to
+  `Set-Cookie` headers and labels each finding's evidence with a `source` field.
+
 ## [0.4.0] - 2026-07-20
 
 ### Added
