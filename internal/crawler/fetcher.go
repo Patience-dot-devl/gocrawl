@@ -31,6 +31,29 @@ type HTTPFetcher struct {
 	// Engine.New for the raw fetcher it drives; left nil (unrestricted) for one-off fetchers
 	// such as the robots.txt fetcher, which has no crawl scope to check against.
 	allowRedirect func(ctx context.Context, u *url.URL) bool
+
+	// authHostAllowed, when set, restricts Basic Auth to hosts it approves of. This is
+	// deliberately independent of allowRedirect/crawl scope: inScope stops enforcing the
+	// seed-host check the moment FollowExternal is set, but credentials configured for the
+	// seed must never follow a link off it regardless — otherwise a crawl with
+	// --external --basic-auth sends the seed's Authorization header to every third-party
+	// host it discovers a link to. Set by Engine.New, and by RestrictBasicAuthToHost for
+	// fetchers built outside an Engine (e.g. runner.Run's analyzer-registry fetcher, which
+	// the sitemap analyzer drives to fetch whatever URL robots.txt's Sitemap: directive
+	// names — any host, with no FollowExternal needed to reach it). Nil (unrestricted,
+	// matching the pre-existing per-call same-host guard below) for one-off fetchers with no
+	// seed to restrict to, such as checkredirects.
+	authHostAllowed func(host string) bool
+}
+
+// RestrictBasicAuthToHost limits this fetcher's Basic Auth to requests whose host is
+// seedHost, or one of its subdomains when allowSubdomains is set — the same scope rule the
+// crawl itself uses (see Engine.authHostAllowed). Exported so packages outside crawler that
+// build their own HTTPFetcher for crawl-scoped work (currently runner.Run, for the
+// sitemap/geo/wordpress analyzers) can apply the same restriction Engine.New wires onto its
+// own fetchers.
+func (f *HTTPFetcher) RestrictBasicAuthToHost(seedHost string, allowSubdomains bool) {
+	f.authHostAllowed = func(host string) bool { return sameSite(seedHost, host, allowSubdomains) }
 }
 
 // NewHTTPFetcher builds a fetcher from the given options. When opts.Proxies is non-empty the
@@ -107,13 +130,22 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			req.Header.Set("User-Agent", ua)
 		}
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		// Only sent to the host we were asked to fetch, and never downgraded to plain HTTP
-		// once escalated to HTTPS, so credentials for the crawled site can't leak to a
-		// redirect target on another domain or over the wire in cleartext. An http seed that
-		// redirects to https on the same host (an extremely common pattern) is allowed to
+		// Only sent to a host authHostAllowed approves — the seed host, plus its subdomains
+		// when AllowSubdomains is set (see Engine.authHostAllowed); for a fetcher with no seed
+		// to scope against, only the host we were asked to fetch. Never downgraded to plain
+		// HTTP once escalated to HTTPS either, so credentials for the crawled site can't leak
+		// to a redirect target outside that scope or over the wire in cleartext. An http seed
+		// that redirects to https on the same host (an extremely common pattern) is allowed to
 		// carry auth forward, since that's a scheme upgrade, not a downgrade.
 		schemeOK := req.URL.Scheme == origScheme || (origScheme == "http" && req.URL.Scheme == "https")
-		if f.basicAuthUser != "" && req.URL.Hostname() == origHost && schemeOK {
+		authHostOK := req.URL.Hostname() == origHost
+		if f.authHostAllowed != nil {
+			// sameSite (which authHostAllowed wraps) is fed bracket-preserving u.Host by
+			// every other caller (e.seedHost, inScope); req.URL.Host matches that, whereas
+			// Hostname() strips IPv6 brackets and would never match an IPv6-literal seed.
+			authHostOK = f.authHostAllowed(req.URL.Host)
+		}
+		if f.basicAuthUser != "" && authHostOK && schemeOK {
 			req.SetBasicAuth(f.basicAuthUser, f.basicAuthPass)
 		}
 

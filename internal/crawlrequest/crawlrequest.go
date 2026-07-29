@@ -15,19 +15,21 @@ import (
 
 // Params is a user-facing crawl request. Optional fields override config.Default().
 type Params struct {
-	URL           string   `json:"url" jsonschema:"Seed URL to crawl (e.g. https://example.com)"`
-	Depth         *int     `json:"depth,omitempty" jsonschema:"Maximum link hops from the seed (default 0 = unlimited; the crawl is bounded by max_pages)"`
-	MaxPages      *int     `json:"max_pages,omitempty" jsonschema:"Hard cap on the number of pages crawled (default 500)"`
-	Concurrency   *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
-	MaxDuration   string   `json:"max_duration,omitempty" jsonschema:"Wall-clock budget for the whole crawl as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
-	Render        string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
-	Analyzers     []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
-	Specialized   *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density); off by default"`
-	SecurityAudit *bool    `json:"security_audit,omitempty" jsonschema:"Enable the opt-in security audit: TLS protocol and certificate checks, Set-Cookie attribute hygiene, and response-header policy; off by default"`
-	RespectRobots *bool    `json:"respect_robots,omitempty" jsonschema:"Obey robots.txt while crawling (default true)"`
-	Subdomains    *bool    `json:"subdomains,omitempty" jsonschema:"Follow links to subdomains of the seed host"`
-	Include       []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
-	Exclude       []string `json:"exclude,omitempty" jsonschema:"Skip URLs matching any of these regexes"`
+	URL            string   `json:"url" jsonschema:"Seed URL to crawl (e.g. https://example.com)"`
+	Depth          *int     `json:"depth,omitempty" jsonschema:"Maximum link hops from the seed (default 0 = unlimited; the crawl is bounded by max_pages)"`
+	MaxPages       *int     `json:"max_pages,omitempty" jsonschema:"Hard cap on the number of pages crawled (default 500)"`
+	Concurrency    *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
+	RatePerSecond  *float64 `json:"rate,omitempty" jsonschema:"Max requests per second (default 0 = unlimited)"`
+	MaxDuration    string   `json:"max_duration,omitempty" jsonschema:"Wall-clock budget for the whole crawl as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
+	Render         string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
+	Analyzers      []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
+	Specialized    *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density); off by default"`
+	SecurityAudit  *bool    `json:"security_audit,omitempty" jsonschema:"Enable the opt-in security audit: TLS protocol and certificate checks, Set-Cookie attribute hygiene, and response-header policy; off by default"`
+	RespectRobots  *bool    `json:"respect_robots,omitempty" jsonschema:"Obey robots.txt while crawling (default true)"`
+	Subdomains     *bool    `json:"subdomains,omitempty" jsonschema:"Follow links to subdomains of the seed host"`
+	FollowExternal *bool    `json:"follow_external,omitempty" jsonschema:"Follow links that leave the seed host entirely (default false)"`
+	Include        []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
+	Exclude        []string `json:"exclude,omitempty" jsonschema:"Skip URLs matching any of these regexes"`
 
 	UserAgent         string   `json:"user_agent,omitempty" jsonschema:"User-Agent header sent on every request"`
 	UserAgents        []string `json:"user_agents,omitempty" jsonschema:"Pool of User-Agent strings to rotate across (supersedes user_agent)"`
@@ -59,6 +61,9 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	if p.Concurrency != nil {
 		cfg.Crawl.Concurrency = *p.Concurrency
 	}
+	if p.RatePerSecond != nil {
+		cfg.Crawl.RatePerSecond = *p.RatePerSecond
+	}
 	if strings.TrimSpace(p.MaxDuration) != "" {
 		d, derr := time.ParseDuration(strings.TrimSpace(p.MaxDuration))
 		if derr != nil {
@@ -74,6 +79,9 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	}
 	if p.Subdomains != nil {
 		cfg.Crawl.AllowSubdomains = *p.Subdomains
+	}
+	if p.FollowExternal != nil {
+		cfg.Crawl.FollowExternal = *p.FollowExternal
 	}
 	cfg.Analyzers.Enabled = p.Analyzers
 	if p.Specialized != nil {

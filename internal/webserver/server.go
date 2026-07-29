@@ -42,6 +42,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/analyzers", s.handleListAnalyzers)
+	s.mux.HandleFunc("GET /api/explanations", s.handleListExplanations)
 	s.mux.HandleFunc("POST /api/crawls", s.handleStartCrawl)
 	s.mux.HandleFunc("GET /api/crawls", s.handleListCrawls)
 	s.mux.HandleFunc("GET /api/crawls/{id}", s.handleGetCrawl)
@@ -52,6 +53,13 @@ func (s *Server) routes() {
 
 func (s *Server) handleListAnalyzers(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"analyzers": runner.ListAnalyzers()})
+}
+
+// handleListExplanations returns the same code -> what/impact/fix text the HTML report bakes
+// in per issue, so the live report view can render identical explanations without duplicating
+// internal/report/explanations.go in the frontend.
+func (s *Server) handleListExplanations(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"explanations": report.Explanations()})
 }
 
 // startCrawlRequest is the POST /api/crawls body: the shared crawl params plus web-only

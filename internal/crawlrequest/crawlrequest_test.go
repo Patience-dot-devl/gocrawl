@@ -23,23 +23,27 @@ func TestToConfig_OverridesApply(t *testing.T) {
 	depth := 3
 	maxPages := 42
 	concurrency := 8
+	rate := 2.5
 	specialized := true
 	respectRobots := false
 	subdomains := true
+	followExternal := true
 
 	cfg, seed, err := Params{
-		URL:           "https://example.com",
-		Depth:         &depth,
-		MaxPages:      &maxPages,
-		Concurrency:   &concurrency,
-		Render:        "headless",
-		Analyzers:     []string{"seo", "links"},
-		Specialized:   &specialized,
-		RespectRobots: &respectRobots,
-		Subdomains:    &subdomains,
-		Include:       []string{"^/blog"},
-		Exclude:       []string{"^/admin"},
-		UserAgent:     "test-agent",
+		URL:            "https://example.com",
+		Depth:          &depth,
+		MaxPages:       &maxPages,
+		Concurrency:    &concurrency,
+		RatePerSecond:  &rate,
+		Render:         "headless",
+		Analyzers:      []string{"seo", "links"},
+		Specialized:    &specialized,
+		RespectRobots:  &respectRobots,
+		Subdomains:     &subdomains,
+		FollowExternal: &followExternal,
+		Include:        []string{"^/blog"},
+		Exclude:        []string{"^/admin"},
+		UserAgent:      "test-agent",
 	}.ToConfig()
 	if err != nil {
 		t.Fatalf("ToConfig: %v", err)
@@ -56,6 +60,9 @@ func TestToConfig_OverridesApply(t *testing.T) {
 	if cfg.Crawl.Concurrency != concurrency {
 		t.Errorf("Concurrency = %d, want %d", cfg.Crawl.Concurrency, concurrency)
 	}
+	if cfg.Crawl.RatePerSecond != rate {
+		t.Errorf("RatePerSecond = %v, want %v", cfg.Crawl.RatePerSecond, rate)
+	}
 	if cfg.Render != "headless" {
 		t.Errorf("Render = %q, want headless", cfg.Render)
 	}
@@ -67,6 +74,9 @@ func TestToConfig_OverridesApply(t *testing.T) {
 	}
 	if !cfg.Crawl.AllowSubdomains {
 		t.Error("AllowSubdomains = false, want true")
+	}
+	if !cfg.Crawl.FollowExternal {
+		t.Error("FollowExternal = false, want true")
 	}
 	if len(cfg.Crawl.Include) != 1 || cfg.Crawl.Include[0] != "^/blog" {
 		t.Errorf("Include = %v", cfg.Crawl.Include)

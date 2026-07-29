@@ -1,4 +1,4 @@
-import type { AnalyzerInfo, CrawlListItem, JobView, StartCrawlParams } from './types'
+import type { AnalyzerInfo, CrawlListItem, Explanation, JobView, StartCrawlParams } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
@@ -12,6 +12,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function listAnalyzers(): Promise<{ analyzers: AnalyzerInfo[] }> {
   return request('/api/analyzers')
+}
+
+export function listExplanations(): Promise<{ explanations: Record<string, Explanation> }> {
+  return request('/api/explanations')
 }
 
 export function startCrawl(params: StartCrawlParams): Promise<JobView> {

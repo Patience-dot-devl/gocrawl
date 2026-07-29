@@ -66,8 +66,29 @@ the config file or the built-in defaults in the table above (depth `0` = unlimit
 
 `include` and `exclude` are [Go regular expressions](https://pkg.go.dev/regexp/syntax)
 matched against the full URL string. `exclude` is evaluated first; if `include` is non-empty,
-a URL must match at least one include pattern to be crawled. The example config excludes
-common asset types:
+a URL must match at least one include pattern to be crawled.
+
+> **The seed is filtered too, and URLs are normalized before matching.** Two things trip
+> people up here, and both fail the same silent way — the seed is rejected, so the crawl
+> finishes with **zero pages**, no error, and no note explaining why:
+>
+> 1. `include` is applied to every URL the crawl considers, *including the seed*. So
+>    `--include '/blog'` on a seed of `https://example.com/` rejects the seed itself.
+> 2. Matching happens against the **normalized** URL, which has any trailing slash stripped
+>    from a non-root path. So `--include '/blog/'` never matches a seed of
+>    `https://example.com/blog/` — that URL is normalized to `.../blog` first.
+>
+> Write include patterns without a trailing slash, and either seed inside the included
+> section or alternate the seed in explicitly:
+>
+> ```sh
+> gocrawl crawl https://example.com/blog/ --include '/blog'                     # ✅ crawls /blog + /blog/*
+> gocrawl crawl https://example.com --include '/blog|^https://example\.com/?$'  # ✅ root seed + /blog/*
+> gocrawl crawl https://example.com --include '/blog'                           # ❌ 0 pages: seed rejected
+> gocrawl crawl https://example.com/blog/ --include '/blog/'                    # ❌ 0 pages: trailing slash
+> ```
+
+The example config excludes common asset types:
 
 ```yaml
 crawl:
@@ -141,10 +162,26 @@ host:
 gocrawl crawl https://staging.example.com --basic-auth "svc-crawler:s3cret"
 ```
 
-**Scoping.** The `Authorization` header is only sent to the host you asked gocrawl to crawl,
-over the scheme you requested. If a page redirects to a *different* host, or downgrades from
-`https` to plain `http`, the header is not carried along — so credentials for the protected site
-can't leak to a redirect target on another domain or in cleartext.
+**Scoping.** The `Authorization` header is sent only to the **seed host** — plus its
+subdomains when `allow_subdomains` / `--subdomains` is set — and never over a scheme
+downgrade from `https` to plain `http` (an `http` → `https` upgrade is fine, since that's not
+a downgrade). Any request outside that scope is made without credentials, so they can't leak
+to another domain or travel in cleartext. Concretely:
+
+- Both checks are re-evaluated on **every redirect hop**, not just the first request, so a
+  redirect to a host outside the credential scope is followed without the header.
+- With `--subdomains`, a redirect from the seed host to a *sibling* subdomain of it (say
+  `example.com` → `www.example.com`) **does** carry the header, because that subdomain is
+  inside the credential scope.
+- Credential scope is deliberately *narrower* than crawl scope: `--external` widens what
+  gocrawl will crawl, but never what it will authenticate to. A crawl with `--external
+  --basic-auth` does not send the seed's credentials to the third-party hosts it follows.
+- The analyzers that fetch a few extra resources (`sitemap`, `geo`, `wordpress`) use the same
+  credential scope. So a `Sitemap:` directive in `robots.txt` pointing at another host — a CDN
+  or a separate subdomain without `--subdomains` — is fetched **anonymously**, and on a site
+  whose Basic Auth realm also covers that host the sitemap will come back `401` and be
+  reported as unreachable. Crawl the host that serves the sitemap directly, or add
+  `--subdomains` if it's a subdomain of the seed.
 
 **Not supported with `--render headless`.** Chromium's extra-headers mechanism has no per-host
 equivalent: it would attach the `Authorization` header to every request the page makes,
@@ -282,34 +319,93 @@ GOCRAWL_CRAWL_MAX_DEPTH=1 GOCRAWL_CRAWL_CONCURRENCY=8 gocrawl crawl https://exam
 
 ```yaml
 # gocrawl configuration file
+#
+# All values are optional and fall back to built-in defaults. Command-line flags and
+# GOCRAWL_* environment variables override anything set here.
+#
+# Run a crawl with:  gocrawl crawl https://example.com --config gocrawl.yaml
+
+# Seed URL to start from (the positional CLI argument overrides this).
 seed: "https://example.com"
-render: "raw"            # "raw" or "headless" (stub)
+
+# Rendering mode: "raw" (HTTP fetch, fast) or "headless" (chromedp — renders JS and captures
+# Core Web Vitals; needs a Chromium-class browser on PATH).
+render: "raw"
 
 crawl:
-  max_depth: 0           # link hops from the seed (0 = unlimited; bounded by max_pages)
-  max_pages: 500         # hard cap on the number of pages crawled (the primary bound)
-  concurrency: 4         # number of parallel fetch workers
-  rate_per_second: 0     # max requests/second across the crawl (0 = unlimited)
-  adaptive_delay: true   # slow down automatically on HTTP 429/503 responses
+  max_depth: 2          # link hops from the seed; 0 = unlimited (bounded by max_pages instead).
+                        # 2 is a conservative starter, not the built-in default (which is 0).
+  max_pages: 500        # hard cap on pages crawled — the primary bound on crawl size
+  concurrency: 4        # number of parallel fetch workers
+  rate_per_second: 0    # max requests/second across the crawl (0 = unlimited)
+  adaptive_delay: true  # slow down automatically on HTTP 429/503 responses
+  verbose: false        # log each fetch and every rate change to stderr while crawling
   user_agent: "gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)"
-  timeout: "15s"         # per-request timeout
+  # Optional User-Agent rotation. When user_agents is non-empty it supersedes user_agent, and
+  # one is picked per request by user_agent_rotation: off, round-robin, or random.
+  user_agents: []
+  user_agent_rotation: "round-robin"
+  # Optional proxy / IP rotation. Set a single proxy with "proxy", or a pool with "proxies"
+  # (a single "proxy", if set, is prepended to the pool). Schemes: http, https, socks5;
+  # credentials may be embedded as user:pass@host (raw mode only). proxy_rotation is off,
+  # round-robin, random, or sticky-host (all requests to one host reuse the same proxy).
+  # Headless mode uses only the first proxy. Leave empty to honor HTTP(S)_PROXY env vars.
+  proxy: ""
+  proxies: []
+  proxy_rotation: "round-robin"
+  # HTTP Basic Auth as "user:pass", for sites gated by server-level Basic Auth (common on
+  # staging/acceptance environments). The Authorization header is sent only to the seed host —
+  # plus its subdomains when allow_subdomains is set — and never over an https -> http
+  # downgrade; both checks are re-applied on every redirect hop. Not supported with
+  # render: "headless" (Chromium cannot scope the header per host), which errors out.
+  basic_auth: ""
+  timeout: "15s"        # per-request timeout
+  max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
+                        # crawl stops early and still writes a partial report
   max_body_bytes: 5242880  # 5 MiB cap on a single response body
-  respect_robots: true   # obey robots.txt while crawling
+  respect_robots: true  # obey robots.txt while crawling
   allow_subdomains: false  # follow links to subdomains of the seed host
   follow_external: false   # crawl links that leave the seed host
   follow_nofollow: false   # follow links marked rel="nofollow"
-  include: []            # only crawl URLs matching at least one of these regexes
-  exclude:               # never crawl URLs matching any of these regexes
+  strip_query: false       # ignore query strings (treat ?a=1 and ?a=2 as one URL).
+                           # NOTE: this drops query params, so the query-dependent analyzers
+                           # (utm, landing, wordpress) are automatically skipped while it is on.
+  # include/exclude are Go regexes matched against the full *normalized* URL — a trailing slash
+  # is stripped from a non-root path, so "/blog/" never matches a page at /blog. exclude is
+  # evaluated first. NOTE: include is applied to the seed as well, so a pattern the seed itself
+  # doesn't match yields a crawl of zero pages with no error: either seed inside the included
+  # section, or alternate the seed into the pattern.
+  include: []           # only crawl URLs matching at least one of these regexes
+  exclude:              # never crawl URLs matching any of these regexes
     - "\\.(?:png|jpe?g|gif|svg|webp|ico|css|js|pdf|zip)(?:\\?|$)"
 
 output:
-  format: "json"         # "json", "csv", or "html"
-  path: ""               # file to write to; empty = stdout
-  sitemap_path: ""       # also write a standard sitemap.xml here
+  format: "json"        # "json", "csv", or "html"
+  path: ""              # file to write to; empty = stdout
+  sitemap_path: ""      # also write a standard sitemap.xml of the crawled pages here
 
 analyzers:
-  enabled: []            # if non-empty, only these run
-  disabled: []           # otherwise all run except these
+  # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those
+  # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf,
+  # images, urls, security, pagination, hreflang, amp, duplicates, content, botwall,
+  # wordpress, the SEA analyzers utm, tracking, datalayer, landing, consent, and the
+  # AI-search analyzers aeo, geo.
+  enabled: []
+  disabled: []
+  # Turn on the opt-in specialized checks (off by default): the lower-confidence AI-search
+  # heuristics (aeo-no-answer-lead, geo-low-quotable-density) and the WordPress
+  # security-endpoint probes.
+  specialized: false
+  # Turn on the opt-in security audit (off by default): TLS protocol and certificate checks,
+  # Set-Cookie attribute hygiene, and response-header policy. Passive — it reads the crawl's
+  # own responses and opens no extra connections.
+  security_audit: false
+
+store:
+  # Where 'gocrawl crawl --save' writes crawls and where 'gocrawl history' / 'gocrawl
+  # compare' read them from. Empty = ~/.gocrawl/crawls. Saved crawls are addressable by
+  # their "<host>/<timestamp>" ID, or by "latest" / a bare host name.
+  dir: ""
 ```
 
 Run it with:

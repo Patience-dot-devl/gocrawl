@@ -1,6 +1,10 @@
 package runner
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -109,5 +113,55 @@ func TestCoverageNote(t *testing.T) {
 	}
 	if strings.Contains(d, "Ctrl-C") {
 		t.Errorf("duration-limit note shouldn't use the generic Ctrl-C wording: %s", d)
+	}
+}
+
+// TestRunDoesNotLeakBasicAuthToSitemapHost is an end-to-end guard for a real credential leak:
+// the sitemap analyzer fetches whatever URL robots.txt's Sitemap: directive names — routinely
+// a different host (a CDN, a separate subdomain) — via a fetcher Run builds fresh for the
+// analyzer registry (runner.go, "Sitemap analyzer fetches with a raw fetcher"). That fetcher
+// must not carry the seed's Basic Auth to that host. Unlike the FollowExternal leak this
+// guards against no config flag beyond basic_auth; a sitemap hosted off the seed's own host is
+// an entirely ordinary site, not an edge case.
+func TestRunDoesNotLeakBasicAuthToSitemapHost(t *testing.T) {
+	var sitemapAuth, seedAuth string
+
+	sitemapHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sitemapAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`)
+	}))
+	defer sitemapHost.Close()
+
+	// "localhost" rather than "127.0.0.1" so it's a genuinely different host string from the
+	// seed's (sameSite strips ports before comparing, so two httptest servers on 127.0.0.1 at
+	// different ports would otherwise be treated as the same site).
+	sitemapURL := strings.Replace(sitemapHost.URL, "127.0.0.1", "localhost", 1) + "/sitemap.xml"
+
+	seed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/robots.txt":
+			seedAuth = r.Header.Get("Authorization")
+			fmt.Fprintf(w, "User-agent: *\nAllow: /\nSitemap: %s\n", sitemapURL)
+		default:
+			fmt.Fprint(w, "<html><head><title>Home</title></head><body>hello</body></html>")
+		}
+	}))
+	defer seed.Close()
+
+	cfg := config.Default()
+	cfg.Crawl.BasicAuth = "alice:s3cret"
+	cfg.Crawl.MaxDepth = 0
+	cfg.Crawl.MaxPages = 5
+
+	if _, err := Run(context.Background(), cfg, seed.URL); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if seedAuth == "" {
+		t.Error("expected the seed host's robots.txt fetch to carry Basic Auth")
+	}
+	if sitemapAuth != "" {
+		t.Errorf("Authorization = %q, want empty (credentials leaked to the sitemap's host)", sitemapAuth)
 	}
 }

@@ -1,16 +1,18 @@
 package report
 
+import "maps"
+
 // Explanation describes a single issue code in plain language: what the finding
 // means, why it matters, and what to do about it. It is keyed by an Issue's Code
 // and surfaced in the HTML report so a reader can act on a finding without
 // consulting external documentation.
 type Explanation struct {
 	// What the issue entails — a plain-language description of the finding.
-	What string
+	What string `json:"what"`
 	// Impact — why it matters / the potential consequence if left unaddressed.
-	Impact string
+	Impact string `json:"impact"`
 	// Fix — the recommended remediation.
-	Fix string
+	Fix string `json:"fix"`
 }
 
 // explain returns the Explanation for an issue code, or nil when no explanation
@@ -22,6 +24,14 @@ func explain(code string) *Explanation {
 		return &e
 	}
 	return nil
+}
+
+// Explanations returns a copy of every registered issue-code explanation, keyed by Code. It
+// backs the web API's /api/explanations endpoint, which lets the live report view show the
+// same what/impact/fix text as the HTML report without duplicating this map in the frontend.
+// Returns a copy so a caller can't mutate the package's single source of truth.
+func Explanations() map[string]Explanation {
+	return maps.Clone(explanations)
 }
 
 // explanations is the single source of truth mapping every analyzer issue code

@@ -29,21 +29,28 @@ func New(opts Options, fetcher Fetcher) *Engine {
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = 1
 	}
+	// robots.txt is fetched per host regardless of RespectRobots (get is also called to
+	// populate Result.Robots for reporting), for any host the crawl reaches — including an
+	// external one under FollowExternal — so this fetcher needs the same authHostAllowed
+	// restriction as the main content fetcher below, not just the redirect gate.
+	robotsFetcher := NewHTTPFetcher(opts)
 	e := &Engine{
 		opts:    opts,
 		fetcher: fetcher,
 		// NewUAPool(opts).Default() is the UA actually sent when UserAgents rotation is
 		// configured — opts.UserAgent alone would test robots.txt against an identity the
 		// crawler never sends once a pool supersedes it.
-		robots:  newRobotsManager(NewHTTPFetcher(opts), NewUAPool(opts).Default()),
+		robots:  newRobotsManager(robotsFetcher, NewUAPool(opts).Default()),
 		limiter: NewAdaptiveLimiter(opts.RatePerSecond, opts.AdaptiveDelay),
 	}
+	robotsFetcher.authHostAllowed = e.authHostAllowed
 	// Gate every redirect hop the raw fetcher follows against the same scope/exclude/robots
 	// check applied before a URL is ever enqueued, so a redirect can't escape crawl scope
 	// mid-fetch. Only applies to the manual-hop HTTPFetcher; headless rendering follows
 	// redirects inside the browser and isn't covered by this check.
 	if hf, ok := fetcher.(*HTTPFetcher); ok {
 		hf.allowRedirect = e.crawlable
+		hf.authHostAllowed = e.authHostAllowed
 	}
 	return e
 }
@@ -297,6 +304,14 @@ func (e *Engine) crawlable(ctx context.Context, u *url.URL) bool {
 		return false
 	}
 	return true
+}
+
+// authHostAllowed reports whether host may receive Basic Auth credentials. Unlike inScope,
+// this never bypasses the seed-host check for FollowExternal: crawl scope and credential
+// scope are different questions, and a crawl following external links must never carry the
+// seed's Authorization header to them.
+func (e *Engine) authHostAllowed(host string) bool {
+	return sameSite(e.seedHost, host, e.opts.AllowSubdomains)
 }
 
 // inScope reports whether u should be crawled given host scope and include/exclude rules.

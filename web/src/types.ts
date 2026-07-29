@@ -38,6 +38,12 @@ export interface Report {
   coverage?: Coverage
 }
 
+export interface Explanation {
+  what: string
+  impact: string
+  fix: string
+}
+
 export type CrawlStatus = 'running' | 'done' | 'error' | 'canceled'
 
 export interface JobView {
@@ -73,13 +79,23 @@ export interface StartCrawlParams {
   depth?: number
   max_pages?: number
   concurrency?: number
+  rate?: number
+  max_duration?: string
   render?: string
   analyzers?: string[]
   specialized?: boolean
   security_audit?: boolean
   respect_robots?: boolean
   subdomains?: boolean
+  follow_external?: boolean
   include?: string[]
   exclude?: string[]
+  user_agent?: string
+  user_agents?: string[]
+  user_agent_rotation?: string
+  proxy?: string
+  proxies?: string[]
+  proxy_rotation?: string
+  basic_auth?: string
   save: boolean
 }

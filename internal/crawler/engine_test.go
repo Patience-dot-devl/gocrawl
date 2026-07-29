@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -141,6 +142,79 @@ func TestEngineWiresAllowRedirectOnHTTPFetcher(t *testing.T) {
 	}
 	if hf.allowRedirect(context.Background(), outOfScope) {
 		t.Error("expected an out-of-scope redirect target to be blocked")
+	}
+}
+
+// TestEngineWiresAuthHostAllowedOnHTTPFetcher guards against a real credential leak: a crawl
+// run with FollowExternal must never carry the seed's Basic Auth to an external host it
+// follows a link to. authHostAllowed is deliberately independent of inScope/allowRedirect,
+// which stop enforcing the seed-host check the moment FollowExternal is set.
+func TestEngineWiresAuthHostAllowedOnHTTPFetcher(t *testing.T) {
+	opts := DefaultOptions()
+	opts.FollowExternal = true
+	hf := NewHTTPFetcher(opts)
+	e := New(opts, hf)
+	if hf.authHostAllowed == nil {
+		t.Fatal("expected Engine.New to wire authHostAllowed onto the HTTPFetcher")
+	}
+	e.seedHost = "example.com"
+
+	if !hf.authHostAllowed("example.com") {
+		t.Error("expected the seed host to be allowed to receive Basic Auth")
+	}
+	if hf.authHostAllowed("evil.example") {
+		t.Error("expected an external host to be denied Basic Auth even though FollowExternal is set")
+	}
+}
+
+// TestCrawlDoesNotLeakBasicAuthToExternalHost is an end-to-end guard for a real credential
+// leak: a crawl run with FollowExternal and BasicAuth must never send the Authorization
+// header to an external host it follows a link to. This caught a second leak path that the
+// narrower wiring tests above missed: collectRobots fetches robots.txt for every crawled
+// host (including external ones, to populate Result.Robots for reporting even when
+// RespectRobots is off) through its own dedicated HTTPFetcher, which also needs
+// authHostAllowed wired onto it, not just the main content fetcher.
+func TestCrawlDoesNotLeakBasicAuthToExternalHost(t *testing.T) {
+	var seedAuth, externalAuth string
+	var sawExternal bool
+
+	external := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		externalAuth = r.Header.Get("Authorization")
+		sawExternal = true
+		fmt.Fprint(w, "<html><body>external</body></html>")
+	}))
+	defer external.Close()
+
+	// The link target uses "localhost" rather than "127.0.0.1" so it's a genuinely different
+	// host string from the seed's — sameSite strips ports before comparing, so two
+	// httptest servers on 127.0.0.1 at different ports would otherwise be (correctly)
+	// treated as the same site and defeat the point of this test.
+	externalURL := strings.Replace(external.URL, "127.0.0.1", "localhost", 1)
+	seed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seedAuth = r.Header.Get("Authorization")
+		fmt.Fprintf(w, `<html><body><a href="%s">external</a></body></html>`, externalURL)
+	}))
+	defer seed.Close()
+
+	opts := DefaultOptions()
+	opts.FollowExternal = true
+	opts.BasicAuthUser = "alice"
+	opts.BasicAuthPass = "s3cret"
+	opts.RespectRobots = false
+
+	e := New(opts, NewHTTPFetcher(opts))
+	if _, err := e.Crawl(context.Background(), seed.URL); err != nil {
+		t.Fatalf("Crawl: %v", err)
+	}
+
+	if !sawExternal {
+		t.Fatal("expected the external host to be fetched (FollowExternal not taking effect)")
+	}
+	if seedAuth == "" {
+		t.Error("expected the seed host to receive Basic Auth")
+	}
+	if externalAuth != "" {
+		t.Errorf("Authorization = %q, want empty (credentials leaked to an external host)", externalAuth)
 	}
 }
 
@@ -717,4 +791,47 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// TestIncludeAppliesToSeedAndNormalizedURL pins the two include-pattern behaviors documented
+// under "include / exclude patterns" in docs/configuration.md, both of which fail the same
+// silent way (zero pages crawled, no error): include is applied to the seed itself, and it
+// matches the *normalized* URL, which has a trailing slash stripped from a non-root path. The
+// web UI's Include field labels both caveats, so a change here should update that label too.
+func TestIncludeAppliesToSeedAndNormalizedURL(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><body><a href="/blog/">index</a><a href="/blog/post">post</a><a href="/about">about</a></body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	cases := []struct {
+		name      string
+		seedPath  string
+		include   string
+		wantPages int
+	}{
+		{"root seed rejected by its own include pattern", "", "/blog", 0},
+		{"trailing slash never matches a normalized path", "/blog/", "/blog/", 0},
+		{"seed inside the included section", "/blog/", "/blog", 2},
+		{"root seed alternated into the pattern", "", `/blog|^` + ts.URL + `/?$`, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := DefaultOptions()
+			opts.RespectRobots = false
+			opts.Include = []*regexp.Regexp{regexp.MustCompile(tc.include)}
+
+			e := New(opts, NewHTTPFetcher(opts))
+			result, err := e.Crawl(context.Background(), ts.URL+tc.seedPath)
+			if err != nil {
+				t.Fatalf("Crawl: %v", err)
+			}
+			if got := len(result.Pages); got != tc.wantPages {
+				t.Errorf("crawled %d pages, want %d (include=%q seed=%q)",
+					got, tc.wantPages, tc.include, ts.URL+tc.seedPath)
+			}
+		})
+	}
 }
