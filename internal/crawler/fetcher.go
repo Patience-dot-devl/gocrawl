@@ -130,10 +130,12 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			req.Header.Set("User-Agent", ua)
 		}
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		// Only sent to the host we were asked to fetch, and never downgraded to plain HTTP
-		// once escalated to HTTPS, so credentials for the crawled site can't leak to a
-		// redirect target on another domain or over the wire in cleartext. An http seed that
-		// redirects to https on the same host (an extremely common pattern) is allowed to
+		// Only sent to a host authHostAllowed approves — the seed host, plus its subdomains
+		// when AllowSubdomains is set (see Engine.authHostAllowed); for a fetcher with no seed
+		// to scope against, only the host we were asked to fetch. Never downgraded to plain
+		// HTTP once escalated to HTTPS either, so credentials for the crawled site can't leak
+		// to a redirect target outside that scope or over the wire in cleartext. An http seed
+		// that redirects to https on the same host (an extremely common pattern) is allowed to
 		// carry auth forward, since that's a scheme upgrade, not a downgrade.
 		schemeOK := req.URL.Scheme == origScheme || (origScheme == "http" && req.URL.Scheme == "https")
 		authHostOK := req.URL.Hostname() == origHost

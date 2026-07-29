@@ -141,10 +141,26 @@ host:
 gocrawl crawl https://staging.example.com --basic-auth "svc-crawler:s3cret"
 ```
 
-**Scoping.** The `Authorization` header is only sent to the host you asked gocrawl to crawl,
-over the scheme you requested. If a page redirects to a *different* host, or downgrades from
-`https` to plain `http`, the header is not carried along — so credentials for the protected site
-can't leak to a redirect target on another domain or in cleartext.
+**Scoping.** The `Authorization` header is sent only to the **seed host** — plus its
+subdomains when `allow_subdomains` / `--subdomains` is set — and never over a scheme
+downgrade from `https` to plain `http` (an `http` → `https` upgrade is fine, since that's not
+a downgrade). Any request outside that scope is made without credentials, so they can't leak
+to another domain or travel in cleartext. Concretely:
+
+- Both checks are re-evaluated on **every redirect hop**, not just the first request, so a
+  redirect to a host outside the credential scope is followed without the header.
+- With `--subdomains`, a redirect from the seed host to a *sibling* subdomain of it (say
+  `example.com` → `www.example.com`) **does** carry the header, because that subdomain is
+  inside the credential scope.
+- Credential scope is deliberately *narrower* than crawl scope: `--external` widens what
+  gocrawl will crawl, but never what it will authenticate to. A crawl with `--external
+  --basic-auth` does not send the seed's credentials to the third-party hosts it follows.
+- The analyzers that fetch a few extra resources (`sitemap`, `geo`, `wordpress`) use the same
+  credential scope. So a `Sitemap:` directive in `robots.txt` pointing at another host — a CDN
+  or a separate subdomain without `--subdomains` — is fetched **anonymously**, and on a site
+  whose Basic Auth realm also covers that host the sitemap will come back `401` and be
+  reported as unreachable. Crawl the host that serves the sitemap directly, or add
+  `--subdomains` if it's a subdomain of the seed.
 
 **Not supported with `--render headless`.** Chromium's extra-headers mechanism has no per-host
 equivalent: it would attach the `Authorization` header to every request the page makes,
