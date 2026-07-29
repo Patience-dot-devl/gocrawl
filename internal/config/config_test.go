@@ -107,6 +107,7 @@ func TestLoadPicksUpEnvVarsForEveryField(t *testing.T) {
 	t.Setenv("GOCRAWL_CRAWL_ALLOW_SUBDOMAINS", "true")
 	t.Setenv("GOCRAWL_CRAWL_INCLUDE", "/blog,/docs")
 	t.Setenv("GOCRAWL_ANALYZERS_SPECIALIZED", "true")
+	t.Setenv("GOCRAWL_ANALYZERS_IGNORE_EXTERNAL_TAGGING", "false")
 	t.Setenv("GOCRAWL_OUTPUT_PATH", "/tmp/report.json")
 	t.Setenv("GOCRAWL_CRAWL_MAX_DURATION", "90m")
 
@@ -129,8 +130,17 @@ func TestLoadPicksUpEnvVarsForEveryField(t *testing.T) {
 	if !cfg.Analyzers.Specialized {
 		t.Error("Analyzers.Specialized = false, want true")
 	}
+	if cfg.Analyzers.IgnoreExternalTagging {
+		t.Error("Analyzers.IgnoreExternalTagging = true, want false (env override)")
+	}
 	if cfg.Output.Path != "/tmp/report.json" {
 		t.Errorf("Output.Path = %q, want /tmp/report.json", cfg.Output.Path)
+	}
+}
+
+func TestDefaultIgnoresExternalUTMTagging(t *testing.T) {
+	if !Default().Analyzers.IgnoreExternalTagging {
+		t.Error("Default().Analyzers.IgnoreExternalTagging = false, want true")
 	}
 }
 

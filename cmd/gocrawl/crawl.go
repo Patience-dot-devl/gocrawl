@@ -51,6 +51,7 @@ func newCrawlCmd() *cobra.Command {
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
 	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes)")
 	f.Bool("security-audit", false, "enable the opt-in security audit (TLS/certificate, cookie attributes, response-header hygiene)")
+	f.Bool("ignore-external-tagging", true, "ignore the utm analyzer's tagging-quality warnings for links leaving the domain")
 	f.Bool("save", false, "also save the crawl to the store for later `gocrawl history` / `gocrawl compare`")
 	f.String("store-dir", "", "store directory for --save (default: ~/.gocrawl/crawls)")
 	return cmd
@@ -187,6 +188,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("security-audit") {
 		cfg.Analyzers.SecurityAudit, _ = f.GetBool("security-audit")
+	}
+	if f.Changed("ignore-external-tagging") {
+		cfg.Analyzers.IgnoreExternalTagging, _ = f.GetBool("ignore-external-tagging")
 	}
 	if f.Changed("store-dir") {
 		cfg.Store.Dir, _ = f.GetString("store-dir")
