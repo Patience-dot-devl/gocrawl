@@ -173,8 +173,9 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
         <summary>Advanced</summary>
         <div className="grid">
           <label>
-            Include (regex, one per line, matched against the full URL)
-            <textarea rows={2} placeholder="/blog/" value={include} onChange={(e) => setInclude(e.target.value)} />
+            Include (regex, one per line, matched against the full normalized URL — the seed must
+            match too, or the crawl returns zero pages; no trailing slash)
+            <textarea rows={2} placeholder="/blog" value={include} onChange={(e) => setInclude(e.target.value)} />
           </label>
           <label>
             Exclude (regex, one per line, matched against the full URL)

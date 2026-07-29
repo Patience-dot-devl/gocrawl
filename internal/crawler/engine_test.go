@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -790,4 +791,47 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// TestIncludeAppliesToSeedAndNormalizedURL pins the two include-pattern behaviors documented
+// under "include / exclude patterns" in docs/configuration.md, both of which fail the same
+// silent way (zero pages crawled, no error): include is applied to the seed itself, and it
+// matches the *normalized* URL, which has a trailing slash stripped from a non-root path. The
+// web UI's Include field labels both caveats, so a change here should update that label too.
+func TestIncludeAppliesToSeedAndNormalizedURL(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><body><a href="/blog/">index</a><a href="/blog/post">post</a><a href="/about">about</a></body></html>`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	cases := []struct {
+		name      string
+		seedPath  string
+		include   string
+		wantPages int
+	}{
+		{"root seed rejected by its own include pattern", "", "/blog", 0},
+		{"trailing slash never matches a normalized path", "/blog/", "/blog/", 0},
+		{"seed inside the included section", "/blog/", "/blog", 2},
+		{"root seed alternated into the pattern", "", `/blog|^` + ts.URL + `/?$`, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := DefaultOptions()
+			opts.RespectRobots = false
+			opts.Include = []*regexp.Regexp{regexp.MustCompile(tc.include)}
+
+			e := New(opts, NewHTTPFetcher(opts))
+			result, err := e.Crawl(context.Background(), ts.URL+tc.seedPath)
+			if err != nil {
+				t.Fatalf("Crawl: %v", err)
+			}
+			if got := len(result.Pages); got != tc.wantPages {
+				t.Errorf("crawled %d pages, want %d (include=%q seed=%q)",
+					got, tc.wantPages, tc.include, ts.URL+tc.seedPath)
+			}
+		})
+	}
 }

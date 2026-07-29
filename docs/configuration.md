@@ -66,8 +66,29 @@ the config file or the built-in defaults in the table above (depth `0` = unlimit
 
 `include` and `exclude` are [Go regular expressions](https://pkg.go.dev/regexp/syntax)
 matched against the full URL string. `exclude` is evaluated first; if `include` is non-empty,
-a URL must match at least one include pattern to be crawled. The example config excludes
-common asset types:
+a URL must match at least one include pattern to be crawled.
+
+> **The seed is filtered too, and URLs are normalized before matching.** Two things trip
+> people up here, and both fail the same silent way — the seed is rejected, so the crawl
+> finishes with **zero pages**, no error, and no note explaining why:
+>
+> 1. `include` is applied to every URL the crawl considers, *including the seed*. So
+>    `--include '/blog'` on a seed of `https://example.com/` rejects the seed itself.
+> 2. Matching happens against the **normalized** URL, which has any trailing slash stripped
+>    from a non-root path. So `--include '/blog/'` never matches a seed of
+>    `https://example.com/blog/` — that URL is normalized to `.../blog` first.
+>
+> Write include patterns without a trailing slash, and either seed inside the included
+> section or alternate the seed in explicitly:
+>
+> ```sh
+> gocrawl crawl https://example.com/blog/ --include '/blog'                     # ✅ crawls /blog + /blog/*
+> gocrawl crawl https://example.com --include '/blog|^https://example\.com/?$'  # ✅ root seed + /blog/*
+> gocrawl crawl https://example.com --include '/blog'                           # ❌ 0 pages: seed rejected
+> gocrawl crawl https://example.com/blog/ --include '/blog/'                    # ❌ 0 pages: trailing slash
+> ```
+
+The example config excludes common asset types:
 
 ```yaml
 crawl:
