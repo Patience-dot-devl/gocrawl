@@ -16,6 +16,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   const [followExternal, setFollowExternal] = useState(false)
   const [specialized, setSpecialized] = useState(false)
   const [securityAudit, setSecurityAudit] = useState(false)
+  const [ignoreExternalTagging, setIgnoreExternalTagging] = useState(true)
   const [save, setSave] = useState(true)
   const [include, setInclude] = useState('')
   const [exclude, setExclude] = useState('')
@@ -69,6 +70,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       follow_external: followExternal,
       specialized,
       security_audit: securityAudit,
+      ignore_external_tagging: ignoreExternalTagging,
       save,
     }
     if (depth) params.depth = Number(depth)
@@ -163,6 +165,14 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       <label className="checkbox">
         <input type="checkbox" checked={securityAudit} onChange={(e) => setSecurityAudit(e.target.checked)} />
         Enable security audit (TLS/certificate, cookies, response headers)
+      </label>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={ignoreExternalTagging}
+          onChange={(e) => setIgnoreExternalTagging(e.target.checked)}
+        />
+        Ignore UTM tagging issues on links leaving the domain
       </label>
       <label className="checkbox">
         <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
