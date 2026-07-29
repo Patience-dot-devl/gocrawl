@@ -6,6 +6,25 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-29
+
+### Added
+
+- **Full crawl-option parity in the web UI.** The web form/API now expose everything the
+  CLI/interactive menu support — `follow_external`, rate limiting, include/exclude regex,
+  User-Agent/proxy pools, and Basic Auth — and the live report view matches the exported HTML
+  report, with per-issue explanations, a coverage banner, and analyzer/status breakdowns
+  backed by a new `GET /api/explanations` endpoint.
+
+### Fixed
+
+- **Basic Auth host leak.** Credentials configured for the seed host were being sent to
+  third-party hosts via `FollowExternal`-followed links and via the sitemap analyzer fetching
+  whatever URL a `robots.txt` `Sitemap:` directive names. An `authHostAllowed` guard is now
+  threaded through every `HTTPFetcher` instance a crawl builds, independent of
+  `FollowExternal`'s scope bypass. Also fixes an IPv6 seed Basic Auth drop caused by using a
+  bracket-stripping hostname instead of the bracket-preserving host for the same check.
+
 ## [0.5.0] - 2026-07-27
 
 ### Added
