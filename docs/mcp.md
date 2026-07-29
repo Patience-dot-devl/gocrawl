@@ -60,6 +60,7 @@ fields fall back to the built-in defaults:
 | `analyzers` | string[] | *(all)* | Subset of analyzer names to run; empty runs all. |
 | `specialized` | bool | `false` | Enable the opt-in specialized checks: AEO answer-lead, GEO quotable-density, WordPress security probes. |
 | `security_audit` | bool | `false` | Enable the opt-in [security audit](analyzers.md#security-audit-opt-in): TLS/certificate, cookie, and response-header checks. |
+| `ignore_external_tagging` | bool | `true` | Suppress the `utm` analyzer's tagging-quality warnings for links leaving the domain. |
 | `respect_robots` | bool | `true` | Obey `robots.txt`. |
 | `subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
 | `follow_external` | bool | `false` | Follow links that leave the seed host entirely. |
