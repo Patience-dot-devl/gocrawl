@@ -521,6 +521,11 @@ the summary). The "required" trio is `utm_source`, `utm_medium`, `utm_campaign`.
 | `utm-internal-tagged` | info | A UTM-tagged link points to the same site (starts a new analytics session) | `target` |
 | `utm-summary` | info | Per-page rollup, emitted for every page that has links | `total_links`, `tagged_links`, `external_tagged`, `internal_tagged` |
 
+By default (`analyzers.ignore_external_tagging`, `--ignore-external-tagging`), the 4
+tagging-quality codes above (`utm-partial-tagging`, `utm-empty-value`, `utm-duplicate-param`,
+`utm-inconsistent-casing`) are not emitted for links where the target leaves the crawled
+domain; `utm-internal-tagged` and `utm-summary` are unaffected.
+
 > Auditing is link-based. Tagging is validated on the links a page points to, not on the
 > landing page itself — that's the `landing` analyzer's job.
 

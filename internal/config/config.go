@@ -92,6 +92,11 @@ type AnalyzersConfig struct {
 	// connections — but its findings are infrastructure rather than SEO, so it stays off
 	// unless asked for.
 	SecurityAudit bool `mapstructure:"security_audit"`
+	// IgnoreExternalTagging suppresses the utm analyzer's per-link tagging-quality warnings
+	// (partial/empty/duplicate/casing) for links leaving the crawled domain, since the site
+	// owner doesn't control tagging on links it doesn't own. On by default; the utm-summary
+	// rollup and utm-internal-tagged are unaffected.
+	IgnoreExternalTagging bool `mapstructure:"ignore_external_tagging"`
 }
 
 // Default returns the built-in default configuration.
@@ -110,6 +115,9 @@ func Default() Config {
 			MaxBodyBytes:  o.MaxBodyBytes,
 			RespectRobots: o.RespectRobots,
 			AdaptiveDelay: o.AdaptiveDelay,
+		},
+		Analyzers: AnalyzersConfig{
+			IgnoreExternalTagging: true,
 		},
 		Output: OutputConfig{Format: "json"},
 	}
@@ -177,6 +185,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("analyzers.disabled", d.Analyzers.Disabled)
 	v.SetDefault("analyzers.specialized", d.Analyzers.Specialized)
 	v.SetDefault("analyzers.security_audit", d.Analyzers.SecurityAudit)
+	v.SetDefault("analyzers.ignore_external_tagging", d.Analyzers.IgnoreExternalTagging)
 	v.SetDefault("store.dir", d.Store.Dir)
 }
 

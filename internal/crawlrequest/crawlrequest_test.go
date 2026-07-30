@@ -115,3 +115,24 @@ func TestToConfig_ExplicitBasicAuthWinsOverSeedUserinfo(t *testing.T) {
 		t.Errorf("BasicAuth = %q, want explicit:auth", cfg.Crawl.BasicAuth)
 	}
 }
+
+func TestToConfig_IgnoreExternalTaggingDefaultsTrue(t *testing.T) {
+	cfg, _, err := Params{URL: "https://example.com"}.ToConfig()
+	if err != nil {
+		t.Fatalf("ToConfig: %v", err)
+	}
+	if !cfg.Analyzers.IgnoreExternalTagging {
+		t.Error("IgnoreExternalTagging = false, want true (default)")
+	}
+}
+
+func TestToConfig_IgnoreExternalTaggingOverride(t *testing.T) {
+	ignore := false
+	cfg, _, err := Params{URL: "https://example.com", IgnoreExternalTagging: &ignore}.ToConfig()
+	if err != nil {
+		t.Fatalf("ToConfig: %v", err)
+	}
+	if cfg.Analyzers.IgnoreExternalTagging {
+		t.Error("IgnoreExternalTagging = true, want false (explicit override)")
+	}
+}

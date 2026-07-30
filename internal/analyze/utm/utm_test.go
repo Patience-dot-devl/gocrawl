@@ -48,7 +48,7 @@ func TestCompleteTaggingNoWarnings(t *testing.T) {
 
 func TestPartialTagging(t *testing.T) {
 	res := withLinks(crawler.Link{URL: "https://ads.example.net/?utm_source=g", External: true})
-	is, ok := find(analyze1(res), "utm-partial-tagging")
+	is, ok := find(utm.New(utm.WithIgnoreExternalTagging(false)).Analyze(context.Background(), res), "utm-partial-tagging")
 	if !ok {
 		t.Fatal("expected utm-partial-tagging")
 	}
@@ -60,21 +60,21 @@ func TestPartialTagging(t *testing.T) {
 
 func TestEmptyValue(t *testing.T) {
 	res := withLinks(crawler.Link{URL: "https://ads.example.net/?utm_source=g&utm_medium=cpc&utm_campaign=", External: true})
-	if _, ok := find(analyze1(res), "utm-empty-value"); !ok {
+	if _, ok := find(utm.New(utm.WithIgnoreExternalTagging(false)).Analyze(context.Background(), res), "utm-empty-value"); !ok {
 		t.Error("expected utm-empty-value")
 	}
 }
 
 func TestDuplicateParam(t *testing.T) {
 	res := withLinks(crawler.Link{URL: "https://ads.example.net/?utm_term=a&utm_term=b", External: true})
-	if _, ok := find(analyze1(res), "utm-duplicate-param"); !ok {
+	if _, ok := find(utm.New(utm.WithIgnoreExternalTagging(false)).Analyze(context.Background(), res), "utm-duplicate-param"); !ok {
 		t.Error("expected utm-duplicate-param")
 	}
 }
 
 func TestInconsistentCasing(t *testing.T) {
 	res := withLinks(crawler.Link{URL: "https://ads.example.net/?UTM_Source=g&utm_medium=cpc&utm_campaign=x", External: true})
-	if _, ok := find(analyze1(res), "utm-inconsistent-casing"); !ok {
+	if _, ok := find(utm.New(utm.WithIgnoreExternalTagging(false)).Analyze(context.Background(), res), "utm-inconsistent-casing"); !ok {
 		t.Error("expected utm-inconsistent-casing")
 	}
 }
@@ -103,5 +103,36 @@ func TestUntaggedOnly(t *testing.T) {
 	}
 	if sum.Data["tagged_links"] != 0 {
 		t.Errorf("tagged_links = %v, want 0", sum.Data["tagged_links"])
+	}
+}
+
+func TestExternalPartialTaggingIgnoredByDefault(t *testing.T) {
+	res := withLinks(crawler.Link{URL: "https://ads.example.net/?utm_source=g", External: true})
+	issues := analyze1(res)
+	if _, ok := find(issues, "utm-partial-tagging"); ok {
+		t.Error("expected utm-partial-tagging to be suppressed for an external link by default")
+	}
+	sum, ok := find(issues, "utm-summary")
+	if !ok {
+		t.Fatal("expected utm-summary")
+	}
+	if sum.Data["external_tagged"] != 1 {
+		t.Errorf("external_tagged = %v, want 1", sum.Data["external_tagged"])
+	}
+}
+
+func TestExternalTaggingWarningsRestoredWhenIncluded(t *testing.T) {
+	res := withLinks(crawler.Link{URL: "https://ads.example.net/?utm_source=g", External: true})
+	issues := utm.New(utm.WithIgnoreExternalTagging(false)).Analyze(context.Background(), res)
+	if _, ok := find(issues, "utm-partial-tagging"); !ok {
+		t.Error("expected utm-partial-tagging when external tagging checks are included")
+	}
+}
+
+func TestInternalPartialTaggingAlwaysChecked(t *testing.T) {
+	res := withLinks(crawler.Link{URL: "https://example.com/page?utm_source=g", External: false})
+	issues := analyze1(res)
+	if _, ok := find(issues, "utm-partial-tagging"); !ok {
+		t.Error("expected utm-partial-tagging for an internal link regardless of the toggle")
 	}
 }

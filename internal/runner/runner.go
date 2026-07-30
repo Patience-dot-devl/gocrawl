@@ -54,6 +54,9 @@ type RegistryOptions struct {
 	Specialized bool
 	// SecurityAudit enables the security analyzer's TLS, certificate, and cookie audit.
 	SecurityAudit bool
+	// IgnoreExternalTagging suppresses the utm analyzer's tagging-quality warnings for
+	// links leaving the crawled domain. On by default.
+	IgnoreExternalTagging bool
 }
 
 // BuildRegistry constructs the default analyzer registry. The fetcher is used by analyzers
@@ -83,7 +86,7 @@ func BuildRegistry(fetcher crawler.Fetcher, opts RegistryOptions) *analyze.Regis
 	// the same specialized flag as the opt-in AI-search heuristics.
 	r.Register(wordpress.New(fetcher, wordpress.WithSecurityProbes(specialized)))
 	// SEA (Search Engine Advertising) analyzers.
-	r.Register(utm.New())
+	r.Register(utm.New(utm.WithIgnoreExternalTagging(opts.IgnoreExternalTagging)))
 	r.Register(tracking.New())
 	r.Register(datalayer.New())
 	r.Register(landing.New())
@@ -105,7 +108,7 @@ type AnalyzerInfo struct {
 
 // ListAnalyzers returns metadata for every registered analyzer.
 func ListAnalyzers() []AnalyzerInfo {
-	reg := BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()), RegistryOptions{})
+	reg := BuildRegistry(crawler.NewHTTPFetcher(crawler.DefaultOptions()), RegistryOptions{IgnoreExternalTagging: true})
 	var out []AnalyzerInfo
 	for _, a := range reg.All() {
 		out = append(out, AnalyzerInfo{Name: a.Name(), Description: a.Description()})
@@ -161,8 +164,9 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 		analyzerFetcher.RestrictBasicAuthToHost(seedURL.Host, opts.AllowSubdomains)
 	}
 	reg := BuildRegistry(analyzerFetcher, RegistryOptions{
-		Specialized:   cfg.Analyzers.Specialized,
-		SecurityAudit: cfg.Analyzers.SecurityAudit,
+		Specialized:           cfg.Analyzers.Specialized,
+		SecurityAudit:         cfg.Analyzers.SecurityAudit,
+		IgnoreExternalTagging: cfg.Analyzers.IgnoreExternalTagging,
 	})
 	analyzers, skipped := planAnalyzers(reg, cfg.Analyzers, cfg.Crawl.StripQuery)
 	issues := analyze.Run(ctx, analyzers, result)

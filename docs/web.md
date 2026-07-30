@@ -44,8 +44,9 @@ Three views, all against the API below:
 - **New crawl** — a form for the seed URL and every crawl option the interactive menu
   exposes: depth, page cap, concurrency, rate limit, max duration, render mode,
   robots.txt/subdomain/external-link scope, analyzer selection, specialized checks, security
-  audit, and an "Advanced" section for include/exclude regexes, User-Agent (or a rotating
-  pool), proxy (or a rotating pool), and HTTP Basic Auth. (A few CLI-only flags with no menu
+  audit, and an option to ignore UTM tagging issues on external links, and an "Advanced"
+  section for include/exclude regexes, User-Agent (or a rotating pool), proxy (or a rotating
+  pool), and HTTP Basic Auth. (A few CLI-only flags with no menu
   equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form either.) Starts
   a job and jumps to its report.
 - **Report** — polls the running job, then shows a partial-coverage banner when the crawl

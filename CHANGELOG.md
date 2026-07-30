@@ -6,6 +6,15 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Ignore external-link UTM tagging by default.** The `utm` analyzer's tagging-quality
+  warnings (partial/empty/duplicate/casing) no longer fire for outbound links to other
+  domains, since the site owner doesn't control third-party tagging (e.g. a widget's own
+  "powered by" badge link). Toggle with `--ignore-external-tagging=false` / `analyzers.
+  ignore_external_tagging: false` / `ignore_external_tagging: false` (MCP/web API) to restore
+  them.
+
 ## [0.6.0] - 2026-07-29
 
 ### Added

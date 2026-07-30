@@ -12,11 +12,29 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
-// Analyzer inspects outbound links for UTM campaign tagging.
-type Analyzer struct{}
+// Option configures the analyzer.
+type Option func(*Analyzer)
 
-// New returns a UTM analyzer.
-func New() *Analyzer { return &Analyzer{} }
+// WithIgnoreExternalTagging controls whether the 4 per-link tagging-quality warnings
+// (utm-partial-tagging, utm-empty-value, utm-duplicate-param, utm-inconsistent-casing) are
+// suppressed for links leaving the crawled domain — the site owner doesn't control tagging on
+// links it doesn't own (e.g. a third-party widget's own UTM-tagged badge link). On by default.
+func WithIgnoreExternalTagging(on bool) Option { return func(a *Analyzer) { a.ignoreExternal = on } }
+
+// Analyzer inspects outbound links for UTM campaign tagging.
+type Analyzer struct {
+	ignoreExternal bool
+}
+
+// New returns a UTM analyzer. External-link tagging-quality warnings are suppressed by
+// default; pass WithIgnoreExternalTagging(false) to include them.
+func New(opts ...Option) *Analyzer {
+	a := &Analyzer{ignoreExternal: true}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
+}
 
 func (Analyzer) Name() string { return "utm" }
 func (Analyzer) Description() string {
@@ -50,6 +68,10 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 			add(analyze.Info, "utm-internal-tagged",
 				"UTM-tagged link points to the same site (starts a new analytics session)",
 				map[string]any{"target": link.URL})
+		}
+
+		if link.External && a.ignoreExternal {
+			continue
 		}
 
 		present := u.PresentKeys()

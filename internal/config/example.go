@@ -91,6 +91,9 @@ analyzers:
   # Set-Cookie attribute hygiene, and response-header policy. Passive — it reads the crawl's
   # own responses and opens no extra connections.
   security_audit: false
+  # Suppress the utm analyzer's tagging-quality warnings for links leaving the domain
+  # (on by default — the site doesn't control third-party tagging).
+  ignore_external_tagging: true
 
 store:
   # Where 'gocrawl crawl --save' writes crawls and where 'gocrawl history' / 'gocrawl

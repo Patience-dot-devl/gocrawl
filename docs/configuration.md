@@ -54,6 +54,7 @@ default** (the value used when you set nothing).
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
 | `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized checks: AI-search heuristics and WordPress security probes (see below). |
 | `analyzers.security_audit` | `--security-audit` | bool | `false` | Enable the opt-in security audit: TLS/certificate, cookie, and response-header checks (see below). |
+| `analyzers.ignore_external_tagging` | `--ignore-external-tagging` | bool | `true` | Suppress the `utm` analyzer's tagging-quality warnings for links leaving the domain (see below). |
 
 ### A note on flag defaults
 
@@ -275,6 +276,19 @@ gocrawl crawl https://example.com --security-audit
 See the [`security` analyzer reference](analyzers.md#security--security-headers-insecure-forms-and-the-opt-in-tlscookie-audit)
 for every issue code and threshold.
 
+### Ignoring external-link UTM tagging
+
+`analyzers.ignore_external_tagging` (or `--ignore-external-tagging`) is on by default. The
+`utm` analyzer's 4 per-link tagging-quality checks (`utm-partial-tagging`, `utm-empty-value`,
+`utm-duplicate-param`, `utm-inconsistent-casing`) are skipped for links where
+`crawler.Link.External` is true — a page's own outbound links to a third party (e.g. a widget's
+"powered by" badge) often carry tagging the site owner doesn't control and can't fix. The
+`utm-summary` rollup and `utm-internal-tagged` are unaffected either way.
+
+```sh
+gocrawl crawl https://example.com --ignore-external-tagging=false
+```
+
 ### Crawl store
 
 `store.dir` (or the `--store-dir` flag, or `GOCRAWL_STORE_DIR`) sets where `gocrawl crawl
@@ -400,6 +414,9 @@ analyzers:
   # Set-Cookie attribute hygiene, and response-header policy. Passive — it reads the crawl's
   # own responses and opens no extra connections.
   security_audit: false
+  # Suppress the utm analyzer's tagging-quality warnings for links leaving the domain
+  # (on by default — the site doesn't control third-party tagging).
+  ignore_external_tagging: true
 
 store:
   # Where 'gocrawl crawl --save' writes crawls and where 'gocrawl history' / 'gocrawl
