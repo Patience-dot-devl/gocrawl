@@ -57,6 +57,14 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
     })
   }
 
+  function selectAllAnalyzers() {
+    setSelected(new Set(analyzers.map((a) => a.name)))
+  }
+
+  function selectNoAnalyzers() {
+    setSelected(new Set())
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!url.trim()) return
@@ -116,68 +124,102 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
         />
       </label>
 
-      <div className="grid">
-        <label>
-          Depth
-          <input type="number" min="0" placeholder="unlimited" value={depth} onChange={(e) => setDepth(e.target.value)} />
-        </label>
-        <label>
-          Max pages
-          <input type="number" min="0" placeholder="500" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} />
-        </label>
-        <label>
-          Concurrency
-          <input type="number" min="1" placeholder="4" value={concurrency} onChange={(e) => setConcurrency(e.target.value)} />
-        </label>
-        <label>
-          Rate limit
-          <input type="number" min="0" step="any" placeholder="unlimited" value={rate} onChange={(e) => setRate(e.target.value)} />
-        </label>
-        <label>
-          Max duration
-          <input type="text" placeholder="unlimited, e.g. 90m" value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} />
-        </label>
-        <label>
-          Render
-          <select value={render} onChange={(e) => setRender(e.target.value)}>
-            <option value="raw">raw</option>
-            <option value="headless">headless</option>
-          </select>
+      <div className="form-section">
+        <p className="form-section-title">Crawl behavior</p>
+        <div className="grid">
+          <label>
+            Depth
+            <input type="number" min="0" placeholder="unlimited" value={depth} onChange={(e) => setDepth(e.target.value)} />
+          </label>
+          <label>
+            Max pages
+            <input type="number" min="0" placeholder="500" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} />
+          </label>
+          <label>
+            Concurrency
+            <input type="number" min="1" placeholder="4" value={concurrency} onChange={(e) => setConcurrency(e.target.value)} />
+          </label>
+          <label>
+            Rate limit
+            <input type="number" min="0" step="any" placeholder="unlimited" value={rate} onChange={(e) => setRate(e.target.value)} />
+          </label>
+          <label>
+            Max duration
+            <input type="text" placeholder="unlimited, e.g. 90m" value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} />
+          </label>
+          <label>
+            Render
+            <select value={render} onChange={(e) => setRender(e.target.value)}>
+              <option value="raw">raw</option>
+              <option value="headless">headless</option>
+            </select>
+          </label>
+        </div>
+        <label className="checkbox">
+          <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
+          Save to history when finished
         </label>
       </div>
 
-      <label className="checkbox">
-        <input type="checkbox" checked={respectRobots} onChange={(e) => setRespectRobots(e.target.checked)} />
-        Respect robots.txt
-      </label>
-      <label className="checkbox">
-        <input type="checkbox" checked={subdomains} onChange={(e) => setSubdomains(e.target.checked)} />
-        Follow links to subdomains
-      </label>
-      <label className="checkbox">
-        <input type="checkbox" checked={followExternal} onChange={(e) => setFollowExternal(e.target.checked)} />
-        Crawl links that leave the seed host
-      </label>
-      <label className="checkbox">
-        <input type="checkbox" checked={specialized} onChange={(e) => setSpecialized(e.target.checked)} />
-        Enable specialized checks (AEO/GEO heuristics, WordPress security probes)
-      </label>
-      <label className="checkbox">
-        <input type="checkbox" checked={securityAudit} onChange={(e) => setSecurityAudit(e.target.checked)} />
-        Enable security audit (TLS/certificate, cookies, response headers)
-      </label>
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={ignoreExternalTagging}
-          onChange={(e) => setIgnoreExternalTagging(e.target.checked)}
-        />
-        Ignore UTM tagging issues on links leaving the domain
-      </label>
-      <label className="checkbox">
-        <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-        Save to history when finished
-      </label>
+      <div className="form-section">
+        <p className="form-section-title">Scope</p>
+        <label className="checkbox">
+          <input type="checkbox" checked={respectRobots} onChange={(e) => setRespectRobots(e.target.checked)} />
+          Respect robots.txt
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={subdomains} onChange={(e) => setSubdomains(e.target.checked)} />
+          Follow links to subdomains
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={followExternal} onChange={(e) => setFollowExternal(e.target.checked)} />
+          Crawl links that leave the seed host
+        </label>
+      </div>
+
+      <div className="form-section">
+        <p className="form-section-title">Analysis</p>
+        <label className="checkbox">
+          <input type="checkbox" checked={specialized} onChange={(e) => setSpecialized(e.target.checked)} />
+          Enable specialized checks (AEO/GEO heuristics, WordPress security probes)
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={securityAudit} onChange={(e) => setSecurityAudit(e.target.checked)} />
+          Enable security audit (TLS/certificate, cookies, response headers)
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={ignoreExternalTagging}
+            onChange={(e) => setIgnoreExternalTagging(e.target.checked)}
+          />
+          Ignore UTM tagging issues on links leaving the domain
+        </label>
+
+        {analyzers.length > 0 && (
+          <fieldset className="analyzers">
+            <legend className="analyzers-head">
+              <span>Analyzers (none checked = run all)</span>
+              <span className="analyzers-actions">
+                <button type="button" onClick={selectAllAnalyzers}>
+                  Select all
+                </button>
+                <button type="button" onClick={selectNoAnalyzers}>
+                  Select none
+                </button>
+              </span>
+            </legend>
+            <div className="analyzer-grid">
+              {analyzers.map((a) => (
+                <label key={a.name} className="checkbox" title={a.description}>
+                  <input type="checkbox" checked={selected.has(a.name)} onChange={() => toggleAnalyzer(a.name)} />
+                  {a.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+      </div>
 
       <details className="advanced">
         <summary>Advanced</summary>
@@ -234,20 +276,6 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
           </label>
         </div>
       </details>
-
-      {analyzers.length > 0 && (
-        <fieldset className="analyzers">
-          <legend>Analyzers (none checked = run all)</legend>
-          <div className="analyzer-grid">
-            {analyzers.map((a) => (
-              <label key={a.name} className="checkbox" title={a.description}>
-                <input type="checkbox" checked={selected.has(a.name)} onChange={() => toggleAnalyzer(a.name)} />
-                {a.name}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      )}
 
       {error && <p className="error">{error}</p>}
       <button type="submit" disabled={submitting}>
