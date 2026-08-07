@@ -43,6 +43,7 @@ func runInteractive(cmd *cobra.Command) error {
 		keepAwake       = false
 
 		basicAuthUser, basicAuthPass, _ = strings.Cut(cfg.Crawl.BasicAuth, ":")
+		cookie                          = cfg.Crawl.Cookie
 
 		render     = cfg.Render
 		format     = cfg.Output.Format
@@ -134,6 +135,11 @@ func runInteractive(cmd *cobra.Command) error {
 				Title("Basic Auth password").
 				EchoMode(huh.EchoModePassword).
 				Value(&basicAuthPass),
+			huh.NewInput().
+				Title("Cookie").
+				Description("Raw Cookie header, for sites gated by an app-level session cookie (e.g. a Shopify storefront password page) rather than server-level Basic Auth. Leave blank otherwise.").
+				EchoMode(huh.EchoModePassword).
+				Value(&cookie),
 		),
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
@@ -184,6 +190,7 @@ func runInteractive(cmd *cobra.Command) error {
 	} else {
 		cfg.Crawl.BasicAuth = ""
 	}
+	cfg.Crawl.Cookie = strings.TrimSpace(cookie)
 	cfg.Render = render
 	cfg.Output.Format = format
 	cfg.Output.Path = strings.TrimSpace(outputPath)

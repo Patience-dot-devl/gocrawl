@@ -39,6 +39,7 @@ type Params struct {
 	Proxies           []string `json:"proxies,omitempty" jsonschema:"Pool of proxy URLs to rotate across"`
 	ProxyRotation     string   `json:"proxy_rotation,omitempty" jsonschema:"Rotation across proxies: off, round-robin, random, or sticky-host"`
 	BasicAuth         string   `json:"basic_auth,omitempty" jsonschema:"HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)"`
+	Cookie            string   `json:"cookie,omitempty" jsonschema:"Raw Cookie header sent on every request, for sites gated by an app-level session cookie rather than server-level Basic Auth (e.g. a Shopify storefront password page) where a valid session cookie is already available"`
 }
 
 // ToConfig validates and maps p onto a config.Config, returning the normalized seed URL
@@ -105,6 +106,7 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	cfg.Crawl.Proxies = p.Proxies
 	cfg.Crawl.ProxyRotation = p.ProxyRotation
 	cfg.Crawl.BasicAuth = p.BasicAuth
+	cfg.Crawl.Cookie = p.Cookie
 
 	var user, pass string
 	seed, user, pass = crawler.SanitizeSeed(seed)

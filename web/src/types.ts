@@ -139,5 +139,6 @@ export interface StartCrawlParams {
   proxies?: string[]
   proxy_rotation?: string
   basic_auth?: string
+  cookie?: string
   save: boolean
 }

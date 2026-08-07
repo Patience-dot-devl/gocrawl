@@ -50,6 +50,11 @@ crawl:
   # downgrade; both checks are re-applied on every redirect hop. Not supported with
   # render: "headless" (Chromium cannot scope the header per host), which errors out.
   basic_auth: ""
+  # Raw Cookie header sent on every request, for sites gated by an app-level session cookie
+  # (e.g. a Shopify storefront password page) rather than server-level Basic Auth — for an
+  # operator who already has a valid session and supplies its cookie by hand. Scoped and
+  # leak-guarded the same way as basic_auth; also not supported with render: "headless".
+  cookie: ""
   timeout: "15s"        # per-request timeout
   max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report

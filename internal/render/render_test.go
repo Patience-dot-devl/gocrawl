@@ -48,6 +48,17 @@ func TestNewHeadlessFetcherRejectsBasicAuth(t *testing.T) {
 	}
 }
 
+// TestNewHeadlessFetcherRejectsCookie mirrors TestNewHeadlessFetcherRejectsBasicAuth: Chromium's
+// extra-headers mechanism can't be scoped to a single host, so a Cookie header would leak to
+// every third-party subresource the page loads.
+func TestNewHeadlessFetcherRejectsCookie(t *testing.T) {
+	opts := crawler.DefaultOptions()
+	opts.Cookie = "storefront_digest=abc123"
+	if _, err := NewHeadlessFetcher(opts); err == nil {
+		t.Fatal("expected an error combining --cookie with --render headless, got nil")
+	}
+}
+
 func TestHeadlessFetchCapturesCWV(t *testing.T) {
 	if !hasBrowser() {
 		t.Skip("no Chromium-class browser available on PATH")

@@ -189,6 +189,29 @@ equivalent: it would attach the `Authorization` header to every request the page
 including third-party subresources (fonts, analytics, ads) on other hosts. `--basic-auth` with
 `--render headless` is rejected with an error; use raw mode (the default) for auth-gated sites.
 
+### Cookie-gated sites (e.g. a Shopify storefront password)
+
+Some sites gate access at the application layer with a session cookie rather than a server-level
+Basic Auth realm — the most common case is a Shopify store's storefront password page, which sets
+a signed session cookie (`_shopify_essential`) once you enter the password in a browser. gocrawl
+has no login-form automation, but if you already have a valid session in your browser you can
+hand that cookie to the crawler instead. Set `cookie` (or `--cookie`) to the raw `Cookie` header
+value:
+
+```sh
+gocrawl crawl https://your-store.myshopify.com --cookie "_shopify_essential=:AZ_...:"
+```
+
+To get the value: open the site in a browser past the password page, then in DevTools →
+Application (Chrome) / Storage (Firefox) → Cookies, copy the value of the session cookie set for
+that host (for Shopify, `_shopify_essential`; the exact name can vary by site/platform).
+
+**Scoping.** Identical to `--basic-auth` above: the `Cookie` header is sent only to the seed
+host (plus subdomains under `--subdomains`), never survives a scheme downgrade, is re-checked on
+every redirect hop, and is restricted the same way for the `sitemap`/`geo`/`wordpress`
+analyzers' extra fetches. Not supported with `--render headless`, for the same per-host-scoping
+reason as `--basic-auth`.
+
 ## Selecting analyzers
 
 Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (see
@@ -373,6 +396,11 @@ crawl:
   # downgrade; both checks are re-applied on every redirect hop. Not supported with
   # render: "headless" (Chromium cannot scope the header per host), which errors out.
   basic_auth: ""
+  # Raw Cookie header sent on every request, for sites gated by an app-level session cookie
+  # (e.g. a Shopify storefront password page) rather than server-level Basic Auth — for an
+  # operator who already has a valid session and supplies its cookie by hand. Scoped and
+  # leak-guarded the same way as basic_auth; also not supported with render: "headless".
+  cookie: ""
   timeout: "15s"        # per-request timeout
   max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report

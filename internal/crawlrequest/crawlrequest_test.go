@@ -106,6 +106,16 @@ func TestToConfig_SeedUserinfoBecomesBasicAuth(t *testing.T) {
 	}
 }
 
+func TestToConfig_MapsCookie(t *testing.T) {
+	cfg, _, err := Params{URL: "https://example.com", Cookie: "storefront_digest=abc123"}.ToConfig()
+	if err != nil {
+		t.Fatalf("ToConfig: %v", err)
+	}
+	if cfg.Crawl.Cookie != "storefront_digest=abc123" {
+		t.Errorf("Cookie = %q, want storefront_digest=abc123", cfg.Crawl.Cookie)
+	}
+}
+
 func TestToConfig_ExplicitBasicAuthWinsOverSeedUserinfo(t *testing.T) {
 	cfg, _, err := Params{URL: "https://user:pass@example.com", BasicAuth: "explicit:auth"}.ToConfig()
 	if err != nil {
