@@ -7,10 +7,10 @@ A highly-customizable, free and open-source (FOSS) website crawler for **SEO** a
 over every page — checking technical SEO, redirects, broken links, `robots.txt`,
 `sitemap.xml` coverage, structured data, and more — then writes a JSON, CSV, or HTML report.
 
-> **Status:** early, working vertical slice. Raw-HTML crawling, the core SEO analyzers, the
-> SEA analyzers (UTM auditing, tracking-pixel detection, landing-page relevance), the
-> AI-search analyzers (Answer Engine and Generative Engine Optimization), and headless
-> rendering with lab-mode Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) are all implemented. The
+> **Status:** v0.6.0, actively developed. Twenty-four analyzers cover technical SEO, SEA,
+> AI-search, and CMS-specific checks; raw-HTML and headless (chromedp) rendering with
+> lab-mode Core Web Vitals; JSON/CSV/HTML reports; crawl storage & comparison over time; an
+> MCP server; and a web app (`gocrawl serve`) with a REST API and embedded browser UI. The
 > design's whole point is that checks slot in as new analyzers without touching the engine —
 > see the [Roadmap](#roadmap) for what's next.
 
@@ -43,6 +43,17 @@ cd gocrawl
 make build      # produces ./gocrawl  (on Windows: go build -o gocrawl.exe ./cmd/gocrawl)
 ```
 
+To build with the browser UI embedded (needs [Node](https://nodejs.org/) too):
+
+```sh
+make web-build  # compiles web/ into internal/webserver/webui/dist/ (needs npm)
+make build      # embeds that build into ./gocrawl
+```
+
+Plain `make build` without `make web-build` first still works — it embeds a placeholder page
+for `gocrawl serve` instead of the real UI. Run `gocrawl path` after building to add the
+binary's directory to your shell PATH.
+
 📖 **See [docs/install.md](docs/install.md)** for full per-platform instructions — PATH setup
 on each OS, building without `make` on Windows, verifying the install, and the optional
 Chromium browser needed for `--render headless`.
@@ -50,6 +61,10 @@ Chromium browser needed for `--render headless`.
 ## Quick start
 
 ```sh
+# No arguments on an interactive terminal launches a guided menu (pick URL, depth,
+# analyzers, output format, etc.) instead of requiring flags up front
+gocrawl
+
 # Crawl one level deep and write a JSON report
 gocrawl crawl https://example.com --depth 1 --out report.json
 
@@ -83,7 +98,31 @@ gocrawl crawl https://example.com --config gocrawl.yaml
 
 # Verify a HubSpot redirect-rule export against the live site
 gocrawl check-redirects --input redirects.csv --domain example.com --output results.csv
+
+# Run as a web app: REST API + embedded browser UI on :8080
+gocrawl serve
+
+# Run as an MCP server over stdio, for agentic tools
+gocrawl mcp
 ```
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `gocrawl` (no args) | Interactive menu on a terminal — pick URL, scope, analyzers, output |
+| `gocrawl crawl <url>` | Crawl and write a report |
+| `gocrawl render <report>` | Re-render a saved JSON report as another format, no recrawl |
+| `gocrawl analyzers list` | List every available analyzer |
+| `gocrawl init` | Write a fully-commented example YAML config |
+| `gocrawl history [host]` | List crawls saved with `--save` |
+| `gocrawl compare <base> <current>` | Diff two crawls: new / resolved / persisting issues |
+| `gocrawl check-redirects` | Verify a redirect-rule CSV export against a live site |
+| `gocrawl mcp` | Run as an MCP server over stdio |
+| `gocrawl serve` | Run as a web app: REST API + embedded browser UI |
+| `gocrawl path` | Add the binary's directory to your shell PATH |
+
+Every command accepts `-c/--config <file>`; run `gocrawl <command> --help` for its flags.
 
 ## Documentation
 
@@ -172,27 +211,40 @@ Key crawl options:
 | Analyzers | `--analyzers` | Comma-separated allow-list |
 | Specialized checks | `--specialized` | Enable opt-in checks: AI-search heuristics + WordPress security probes (off by default) |
 | Security audit | `--security-audit` | Enable the opt-in TLS/certificate, cookie, and response-header audit (off by default) |
+| Ignore external tagging | `--ignore-external-tagging` | Suppress the `utm` analyzer's tagging-quality warnings for links leaving the domain (on by default) |
 
-## Analyzers (v1)
+## Analyzers
+
+Twenty-four analyzers, run in registration order:
 
 | Name | What it checks |
 | --- | --- |
-| `seo` | Title, meta description, meta robots, canonical, headings, `lang`, viewport, charset, OpenGraph/Twitter |
+| `seo` | Title, meta description, meta/`X-Robots-Tag` robots directives, meta-refresh, canonical, headings, `lang`, viewport, charset, OpenGraph |
 | `redirects` | Status codes, redirect chains/loops, slow responses, mixed content |
-| `links` | Internal/external links, broken links, links to redirects, `nofollow` |
+| `links` | Internal/external links, broken links, links to redirects, empty anchors, inbound-link counts |
 | `robots` | `robots.txt` discovery/parsing, declared sitemaps, disallow violations |
 | `sitemap` | `sitemap.xml` discovery/parsing and crawl-coverage cross-check |
-| `structured` | JSON-LD extraction and schema.org `@type` reporting |
+| `structured` | JSON-LD extraction, schema.org `@type` reporting, required-field validation |
 | `perf` | Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) against Google's thresholds — populated with `--render headless` |
+| `images` | Missing `alt` text and missing `width`/`height` dimensions |
+| `urls` | URL hygiene: uppercase paths, underscores, non-ASCII characters, overly long URLs |
+| `security` | Insecure forms and response-header hygiene (baseline); TLS/certificate/cookie audit with `--security-audit` |
+| `pagination` | `rel=next/prev` sequence detection and broken pagination targets |
+| `hreflang` | `hreflang` code validity, missing `x-default`/self-reference, missing reciprocal links |
+| `amp` | AMP-page detection, missing canonical/runtime, broken `amphtml` links |
+| `duplicates` | Exact-duplicate body content, titles, and meta descriptions across pages |
+| `content` | Thin pages (< 100 words) and pages well below the crawl's average word count |
 | `botwall` | **Crawl integrity** — detects CAPTCHA / bot-challenge walls (reCAPTCHA, hCaptcha, Turnstile, Cloudflare/DataDome/AWS WAF/PerimeterX/Imperva) served instead of real content, so a silently-blocked crawl isn't mistaken for a clean audit |
+| `wordpress` | **CMS** — WordPress detection: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, multilingual/WPML setup, leaked ACF markup, and opt-in xmlrpc/user-enumeration/directory-listing/readme probes |
 | `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
 | `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
 | `datalayer` | **SEA** — GTM/dataLayer audit: snippet wiring, Consent Mode, event inventory, GA4 e-commerce validation, duplicate conversions, PII; runtime checks need `--render headless` |
 | `landing` | **SEA** — landing-page relevance: campaign-keyword alignment + indexability/HTTPS/title/H1 |
 | `consent` | **SEA / compliance** — CMP detection, Google Consent Mode v2 configuration, and the tracking cookies and beacons served *before* consent (the crawl never clicks a banner, so every visit is a pre-consent one); use `--render headless` for the full cookie jar |
-| `wordpress` | **CMS** — WordPress detection: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, multilingual/WPML setup, leaked ACF markup, and opt-in xmlrpc/user-enumeration/directory-listing/readme probes |
 | `aeo` | **AI search** — Answer Engine Optimization: FAQ/HowTo structured data, question headings, concise answers, direct-answer lead, snippet-friendly formatting |
 | `geo` | **AI search** — Generative Engine Optimization: AI-crawler `robots.txt` policy, `/llms.txt` presence, author/date/main-content citability, JS-dependent content, quotable-data density |
+
+`seaurl` is a shared UTM-parsing helper used by `utm`/`tracking`, not a registered analyzer.
 
 The `aeo` direct-answer-lead and `geo` quotable-density checks, plus the `wordpress`
 security-endpoint probes, are **opt-in** specialized checks, off by default; enable them with
@@ -236,10 +288,13 @@ checks cheap to add. See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-analyzer
 
 ## Roadmap
 
-Recently shipped: **headless rendering** via chromedp, **lab-mode Core Web Vitals**
-(LCP, FCP, CLS, TBT, TTFB) in the `perf` analyzer, and the **HTML report** format. Next up:
-resumable crawls and export integrations. See the full [feature roadmap](docs/roadmap.md)
-for status on each.
+Recently shipped: **`gocrawl serve`** (REST API + embedded web UI), Screaming-Frog-parity
+analyzers (`images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
+`content`), **headless rendering** via chromedp with **lab-mode Core Web Vitals** in the
+`perf` analyzer, and **crawl storage & comparison** (`--save` / `gocrawl history` /
+`gocrawl compare`). Planned next: Internal Link Score, orphan-page detection, resumable
+crawls, and API integrations (Search Console, PageSpeed Insights, backlink data). See the
+full [feature roadmap](docs/roadmap.md) for status on each.
 
 ## License
 
