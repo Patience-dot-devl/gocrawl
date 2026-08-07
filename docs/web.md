@@ -47,7 +47,8 @@ Three views, all against the API below:
   audit, and an option to ignore UTM tagging issues on external links, and an "Advanced"
   section for include/exclude regexes, User-Agent (or a rotating pool), proxy (or a rotating
   pool), and HTTP Basic Auth. (A few CLI-only flags with no menu
-  equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form either.) Starts
+  equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form either; nor is
+  `--cookie`/`cookie`, which has an interactive-menu field but no web-form field yet.) Starts
   a job and jumps to its report.
 - **Report** — polls the running job, then shows a partial-coverage banner when the crawl
   didn't reach the whole site, summary counts by severity/analyzer/page-status, an issues

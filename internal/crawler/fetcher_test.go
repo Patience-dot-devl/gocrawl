@@ -192,6 +192,104 @@ func TestFetchSendsBasicAuthToIPv6SeedHost(t *testing.T) {
 	}
 }
 
+func TestFetchSendsCookieToRequestedHost(t *testing.T) {
+	var gotCookie string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		fmt.Fprint(w, "ok")
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:       &http.Client{},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+		cookie:       "storefront_digest=abc123",
+	}
+	if _, err := f.Fetch(context.Background(), ts.URL); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if want := "storefront_digest=abc123"; gotCookie != want {
+		t.Errorf("Cookie = %q, want %q", gotCookie, want)
+	}
+}
+
+func TestFetchOmitsCookieWhenUnset(t *testing.T) {
+	var gotCookie string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		fmt.Fprint(w, "ok")
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:       &http.Client{},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+	}
+	if _, err := f.Fetch(context.Background(), ts.URL); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if gotCookie != "" {
+		t.Errorf("Cookie = %q, want empty", gotCookie)
+	}
+}
+
+// TestFetchDoesNotLeakCookieAcrossHostRedirect guards against a real credential leak: a page on
+// the authenticated host redirecting to a different host must not carry the Cookie header to
+// that other host, mirroring the same guarantee already made for Basic Auth (see
+// TestFetchDoesNotLeakBasicAuthAcrossHostRedirect).
+func TestFetchDoesNotLeakCookieAcrossHostRedirect(t *testing.T) {
+	var originCookie, otherCookie string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originCookie = r.Header.Get("Cookie")
+		http.Redirect(w, r, "http://other.invalid/asset", http.StatusFound)
+	}))
+	defer origin.Close()
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		otherCookie = r.Header.Get("Cookie")
+		fmt.Fprint(w, "ok")
+	}))
+	defer other.Close()
+
+	otherAddr := strings.TrimPrefix(other.URL, "http://")
+	dialer := &net.Dialer{}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if strings.HasPrefix(addr, "other.invalid:") {
+				addr = otherAddr
+			}
+			return dialer.DialContext(ctx, network, addr)
+		},
+	}
+
+	f := &HTTPFetcher{
+		client: &http.Client{
+			Transport:     transport,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+		cookie:       "storefront_digest=abc123",
+	}
+	page, err := f.Fetch(context.Background(), origin.URL)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if len(page.Redirects) != 1 {
+		t.Fatalf("got %d redirects, want 1 (fetch didn't reach the cross-host target)", len(page.Redirects))
+	}
+	if want := "storefront_digest=abc123"; originCookie != want {
+		t.Errorf("origin Cookie = %q, want %q", originCookie, want)
+	}
+	if otherCookie != "" {
+		t.Errorf("other-host Cookie = %q, want empty (cookie leaked across redirect)", otherCookie)
+	}
+}
+
 type stubRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }

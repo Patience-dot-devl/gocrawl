@@ -73,6 +73,7 @@ fields fall back to the built-in defaults:
 | `proxies` | string[] | *(none)* | Pool of proxy URLs to rotate across. |
 | `proxy_rotation` | string | `round-robin` | `off`, `round-robin`, `random`, or `sticky-host`. |
 | `basic_auth` | string | *(none)* | HTTP Basic Auth credentials as `user:pass`, for sites gated by server-level Basic Auth (see [Configuration](configuration.md#http-basic-auth)). |
+| `cookie` | string | *(none)* | Raw `Cookie` header sent on every request, for sites gated by an app-level session cookie rather than server-level Basic Auth, e.g. a Shopify storefront password page (see [Configuration](configuration.md#cookie-gated-sites-eg-a-shopify-storefront-password)). |
 
 **Output** ([`CrawlOutput`](../internal/mcpserver/server.go)): `{ "report": <Report> }`, where
 `<Report>` is the full crawl report documented in the [Output reference](output.md).

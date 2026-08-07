@@ -23,6 +23,7 @@ type HTTPFetcher struct {
 	maxRedirects  int
 	basicAuthUser string
 	basicAuthPass string
+	cookie        string
 
 	// allowRedirect, when set, gates each redirect hop against crawl scope, exclude rules,
 	// and robots.txt — the same check applied to a URL before it's ever enqueued. Without
@@ -32,12 +33,12 @@ type HTTPFetcher struct {
 	// such as the robots.txt fetcher, which has no crawl scope to check against.
 	allowRedirect func(ctx context.Context, u *url.URL) bool
 
-	// authHostAllowed, when set, restricts Basic Auth to hosts it approves of. This is
-	// deliberately independent of allowRedirect/crawl scope: inScope stops enforcing the
-	// seed-host check the moment FollowExternal is set, but credentials configured for the
-	// seed must never follow a link off it regardless — otherwise a crawl with
-	// --external --basic-auth sends the seed's Authorization header to every third-party
-	// host it discovers a link to. Set by Engine.New, and by RestrictBasicAuthToHost for
+	// authHostAllowed, when set, restricts Basic Auth and the Cookie header to hosts it
+	// approves of. This is deliberately independent of allowRedirect/crawl scope: inScope
+	// stops enforcing the seed-host check the moment FollowExternal is set, but credentials
+	// configured for the seed must never follow a link off it regardless — otherwise a crawl
+	// with --external --basic-auth sends the seed's Authorization header to every third-party
+	// host it discovers a link to. Set by Engine.New, and by RestrictCredentialsToHost for
 	// fetchers built outside an Engine (e.g. runner.Run's analyzer-registry fetcher, which
 	// the sitemap analyzer drives to fetch whatever URL robots.txt's Sitemap: directive
 	// names — any host, with no FollowExternal needed to reach it). Nil (unrestricted,
@@ -46,13 +47,13 @@ type HTTPFetcher struct {
 	authHostAllowed func(host string) bool
 }
 
-// RestrictBasicAuthToHost limits this fetcher's Basic Auth to requests whose host is
-// seedHost, or one of its subdomains when allowSubdomains is set — the same scope rule the
-// crawl itself uses (see Engine.authHostAllowed). Exported so packages outside crawler that
-// build their own HTTPFetcher for crawl-scoped work (currently runner.Run, for the
-// sitemap/geo/wordpress analyzers) can apply the same restriction Engine.New wires onto its
-// own fetchers.
-func (f *HTTPFetcher) RestrictBasicAuthToHost(seedHost string, allowSubdomains bool) {
+// RestrictCredentialsToHost limits this fetcher's Basic Auth and Cookie header to requests
+// whose host is seedHost, or one of its subdomains when allowSubdomains is set — the same
+// scope rule the crawl itself uses (see Engine.authHostAllowed). Exported so packages outside
+// crawler that build their own HTTPFetcher for crawl-scoped work (currently runner.Run, for
+// the sitemap/geo/wordpress analyzers) can apply the same restriction Engine.New wires onto
+// its own fetchers.
+func (f *HTTPFetcher) RestrictCredentialsToHost(seedHost string, allowSubdomains bool) {
 	f.authHostAllowed = func(host string) bool { return sameSite(seedHost, host, allowSubdomains) }
 }
 
@@ -91,6 +92,7 @@ func NewHTTPFetcher(opts Options) *HTTPFetcher {
 		maxRedirects:  maxRedirects,
 		basicAuthUser: opts.BasicAuthUser,
 		basicAuthPass: opts.BasicAuthPass,
+		cookie:        opts.Cookie,
 	}
 }
 
@@ -147,6 +149,9 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 		}
 		if f.basicAuthUser != "" && authHostOK && schemeOK {
 			req.SetBasicAuth(f.basicAuthUser, f.basicAuthPass)
+		}
+		if f.cookie != "" && authHostOK && schemeOK {
+			req.Header.Set("Cookie", f.cookie)
 		}
 
 		resp, err := f.client.Do(req)

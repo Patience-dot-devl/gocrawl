@@ -158,10 +158,11 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	// fetcher inside crawler.New — it isn't restricted to the seed's own host by default.
 	// The sitemap analyzer fetches whatever URL robots.txt's Sitemap: directive names, which
 	// is routinely a different host (a CDN, a separate subdomain) with no FollowExternal
-	// needed to reach it, so Basic Auth must be restricted here explicitly.
+	// needed to reach it, so Basic Auth and the Cookie header must be restricted here
+	// explicitly.
 	analyzerFetcher := crawler.NewHTTPFetcher(opts)
 	if seedURL, perr := url.Parse(seed); perr == nil {
-		analyzerFetcher.RestrictBasicAuthToHost(seedURL.Host, opts.AllowSubdomains)
+		analyzerFetcher.RestrictCredentialsToHost(seedURL.Host, opts.AllowSubdomains)
 	}
 	reg := BuildRegistry(analyzerFetcher, RegistryOptions{
 		Specialized:           cfg.Analyzers.Specialized,

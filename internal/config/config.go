@@ -51,8 +51,13 @@ type CrawlConfig struct {
 	// the crawled host — for sites gated by server-level Basic Auth, which is common on
 	// staging/acceptance environments (e.g. a reverse-proxy realm challenge in front of the
 	// whole site, independent of any app-level login).
-	BasicAuth string        `mapstructure:"basic_auth"`
-	Timeout   time.Duration `mapstructure:"timeout"`
+	BasicAuth string `mapstructure:"basic_auth"`
+	// Cookie is sent verbatim as the Cookie header on every request to the crawled host — for
+	// app-level session gates (e.g. a Shopify storefront password page) where the operator
+	// already has a valid session and supplies its cookie by hand, as opposed to BasicAuth's
+	// server-level realm challenge.
+	Cookie  string        `mapstructure:"cookie"`
+	Timeout time.Duration `mapstructure:"timeout"`
 	// MaxDuration bounds the crawl's total wall-clock time (0 = unlimited). When it elapses,
 	// the crawl stops early and still produces a report from whatever was fetched so far.
 	MaxDuration     time.Duration `mapstructure:"max_duration"`
@@ -169,6 +174,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("crawl.proxies", d.Crawl.Proxies)
 	v.SetDefault("crawl.proxy_rotation", d.Crawl.ProxyRotation)
 	v.SetDefault("crawl.basic_auth", d.Crawl.BasicAuth)
+	v.SetDefault("crawl.cookie", d.Crawl.Cookie)
 	v.SetDefault("crawl.timeout", d.Crawl.Timeout)
 	v.SetDefault("crawl.max_duration", d.Crawl.MaxDuration)
 	v.SetDefault("crawl.max_body_bytes", d.Crawl.MaxBodyBytes)
@@ -262,6 +268,7 @@ func (c Config) ToOptions() (crawler.Options, error) {
 		o.BasicAuthUser = user
 		o.BasicAuthPass = pass
 	}
+	o.Cookie = c.Crawl.Cookie
 
 	inc, err := compile(c.Crawl.Include)
 	if err != nil {

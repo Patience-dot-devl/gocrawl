@@ -303,6 +303,12 @@ type Options struct {
 	// than in response to a 401 challenge.
 	BasicAuthUser   string
 	BasicAuthPass   string
+	// Cookie, when non-empty, is sent verbatim as the Cookie header on every request to the
+	// crawled host — for app-level session gates (e.g. a Shopify storefront password page,
+	// or any site whose access check lives in a cookie rather than a Basic Auth realm) where
+	// the operator already has a valid session and supplies its cookie by hand. Scoped and
+	// leak-guarded identically to BasicAuthUser/Pass (see HTTPFetcher.authHostAllowed).
+	Cookie          string
 	Include         []*regexp.Regexp
 	Exclude         []*regexp.Regexp
 	RespectRobots   bool

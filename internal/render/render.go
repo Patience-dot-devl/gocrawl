@@ -54,6 +54,11 @@ func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 		// point callers there rather than leaking credentials to whatever the page loads.
 		return nil, fmt.Errorf("--basic-auth is not supported with --render headless (Chromium can't scope the header to the target host, so it would be sent to every third-party resource the page loads); use raw mode instead")
 	}
+	if opts.Cookie != "" {
+		// Same host-scoping problem as --basic-auth above: Chromium's extra-headers mechanism
+		// has no per-host equivalent.
+		return nil, fmt.Errorf("--cookie is not supported with --render headless (Chromium can't scope the header to the target host, so it would be sent to every third-party resource the page loads); use raw mode instead")
+	}
 	allocOpts := append([]chromedp.ExecAllocatorOption{},
 		chromedp.DefaultExecAllocatorOptions[:]...)
 	ua := crawler.NewUAPool(opts)

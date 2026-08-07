@@ -96,6 +96,18 @@ func TestToOptionsRejectsBasicAuthWithoutColon(t *testing.T) {
 	}
 }
 
+func TestToOptionsPassesCookie(t *testing.T) {
+	c := Default()
+	c.Crawl.Cookie = "storefront_digest=abc123"
+	o, err := c.ToOptions()
+	if err != nil {
+		t.Fatalf("ToOptions: %v", err)
+	}
+	if o.Cookie != "storefront_digest=abc123" {
+		t.Errorf("Cookie = %q, want storefront_digest=abc123", o.Cookie)
+	}
+}
+
 // TestLoadPicksUpEnvVarsForEveryField guards against a real gap: viper's AutomaticEnv only
 // resolves a GOCRAWL_* env var for a key already registered via SetDefault (it doesn't add
 // unbound keys to AllKeys()), so any Config field missing from setDefaults had its env var
