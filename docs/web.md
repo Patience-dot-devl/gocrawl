@@ -46,10 +46,10 @@ Three views, all against the API below:
   robots.txt/subdomain/external-link scope, analyzer selection, specialized checks, security
   audit, and an option to ignore UTM tagging issues on external links, and an "Advanced"
   section for include/exclude regexes, User-Agent (or a rotating pool), proxy (or a rotating
-  pool), and HTTP Basic Auth. (A few CLI-only flags with no menu
-  equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form either; nor is
-  `--cookie`/`cookie`, which has an interactive-menu field but no web-form field yet.) Starts
-  a job and jumps to its report.
+  pool), HTTP Basic Auth, and a session-cookie field (a checkbox reveals a paste box) for sites
+  gated by an app-level cookie, e.g. a Shopify storefront password page. (A few CLI-only flags
+  with no menu equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form
+  either.) Starts a job and jumps to its report.
 - **Report** — polls the running job, then shows a partial-coverage banner when the crawl
   didn't reach the whole site, summary counts by severity/analyzer/page-status, an issues
   table (filterable by severity, analyzer, and free-text search) with each issue's

@@ -28,6 +28,8 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   const [proxyRotation, setProxyRotation] = useState('round-robin')
   const [basicAuthUser, setBasicAuthUser] = useState('')
   const [basicAuthPass, setBasicAuthPass] = useState('')
+  const [cookieAuth, setCookieAuth] = useState(false)
+  const [cookie, setCookie] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -100,6 +102,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       params.proxy_rotation = proxyRotation
     }
     if (basicAuthUser.trim()) params.basic_auth = `${basicAuthUser.trim()}:${basicAuthPass}`
+    if (cookieAuth && cookie.trim()) params.cookie = cookie.trim()
     try {
       const job = await startCrawl(params)
       onStarted(job.id)
@@ -275,6 +278,24 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
             <input type="password" value={basicAuthPass} onChange={(e) => setBasicAuthPass(e.target.value)} />
           </label>
         </div>
+
+        <label className="checkbox">
+          <input type="checkbox" checked={cookieAuth} onChange={(e) => setCookieAuth(e.target.checked)} />
+          Site is gated by a session cookie (e.g. a Shopify storefront password page)
+        </label>
+        {cookieAuth && (
+          <label>
+            Cookie header (paste the session cookie from a browser that's already past the gate —
+            DevTools → Application/Storage → Cookies; sent only to the seed host, not supported
+            with headless rendering)
+            <textarea
+              rows={2}
+              placeholder="_shopify_essential=:AZ_..."
+              value={cookie}
+              onChange={(e) => setCookie(e.target.value)}
+            />
+          </label>
+        )}
       </details>
 
       {error && <p className="error">{error}</p>}
