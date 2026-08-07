@@ -8,6 +8,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawlrequest"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 	"github.com/Patience-dot-devl/gocrawl/internal/runner"
@@ -17,9 +19,24 @@ import (
 // alias for crawlrequest.Params, the mapping shared with the web API.
 type CrawlInput = crawlrequest.Params
 
-// CrawlOutput is the MCP "crawl" tool output: the full crawl report.
+// CrawlReport mirrors report.Report for the MCP "crawl" tool, minus SiteMap. SiteMap's
+// *sitemapgen.Node is self-referential (Children []*Node), and the go-sdk schema reflector
+// panics on cyclic types when building the tool's output schema. Agents reason over the flat
+// Issues list, not the tree, so it's dropped here; the CLI/web JSON report still includes it.
+type CrawlReport struct {
+	Seed         string            `json:"seed"`
+	StartedAt    string            `json:"started_at"`
+	FinishedAt   string            `json:"finished_at"`
+	PagesCrawled int               `json:"pages_crawled"`
+	Summary      report.Summary    `json:"summary"`
+	Issues       []analyze.Issue   `json:"issues"`
+	Notes        []string          `json:"notes,omitempty"`
+	Coverage     *crawler.Coverage `json:"coverage,omitempty"`
+}
+
+// CrawlOutput is the MCP "crawl" tool output.
 type CrawlOutput struct {
-	Report *report.Report `json:"report"`
+	Report CrawlReport `json:"report"`
 }
 
 // ListAnalyzersInput is the (empty) input for the "list_analyzers" tool.
@@ -56,7 +73,16 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 	if err != nil {
 		return nil, CrawlOutput{}, err
 	}
-	return nil, CrawlOutput{Report: rep}, nil
+	return nil, CrawlOutput{Report: CrawlReport{
+		Seed:         rep.Seed,
+		StartedAt:    rep.StartedAt,
+		FinishedAt:   rep.FinishedAt,
+		PagesCrawled: rep.PagesCrawled,
+		Summary:      rep.Summary,
+		Issues:       rep.Issues,
+		Notes:        rep.Notes,
+		Coverage:     rep.Coverage,
+	}}, nil
 }
 
 func handleListAnalyzers(_ context.Context, _ *mcp.CallToolRequest, _ ListAnalyzersInput) (*mcp.CallToolResult, ListAnalyzersOutput, error) {
