@@ -27,6 +27,46 @@ export interface Coverage {
   max_depth?: number
 }
 
+export interface PageIssue {
+  severity: 'info' | 'warning' | 'error'
+  code: string
+  analyzer: string
+  message: string
+}
+
+export interface SevCounts {
+  error?: number
+  warning?: number
+  info?: number
+}
+
+export interface SiteMapNode {
+  label: string
+  url?: string
+  title?: string
+  status?: number
+  depth?: number
+  issues?: PageIssue[]
+  counts?: SevCounts
+  subtotal?: SevCounts
+  children?: SiteMapNode[]
+}
+
+export interface SiteMapEntry {
+  loc: string
+  lastmod?: string
+}
+
+export interface SiteMap {
+  seed: string
+  host: string
+  generated: string
+  entries?: SiteMapEntry[]
+  root?: SiteMapNode
+  site_wide?: PageIssue[]
+  totals?: SevCounts
+}
+
 export interface Report {
   seed: string
   started_at: string
@@ -36,6 +76,7 @@ export interface Report {
   issues: Issue[]
   notes?: string[]
   coverage?: Coverage
+  site_map?: SiteMap
 }
 
 export interface Explanation {
