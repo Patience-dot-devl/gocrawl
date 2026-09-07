@@ -6,14 +6,55 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-07
+
 ### Added
 
+- **Three alt-text states in the `images` analyzer.** The analyzer previously only knew
+  "has an `alt` attribute" vs "has none", so a page where every content image carries
+  `alt=""` looked clean — the common CMS/theme failure mode. It now distinguishes
+  **missing**, **empty** and **present**, and adds the checks that only make sense once alt
+  values are compared to each other and to the filename: `img-empty-alt` (info, since
+  `alt=""` is correct markup for decorative images — reported with an `images_total` ratio
+  rather than flagged as a defect), `img-duplicate-alt` (warning), `img-alt-is-filename`
+  (warning, e.g. `kantoor.jpg` with `alt="Kantoor"`) and `img-nondescriptive-filename`
+  (info: pure digits, camera/export defaults, content hashes, stems of three characters or
+  fewer). Every per-image finding now also carries a full `sources` list (deduplicated,
+  capped at 100 per page) alongside the existing five-item `sample`, with image URLs
+  resolved against the page URL and falling back to `data-src` / `data-original` / `srcset`
+  so lazy-loading themes report the real image instead of a placeholder.
+- **`--cookie` flag for app-level session-cookie auth.** Sites gated by a session cookie
+  rather than server-level HTTP Basic Auth (a Shopify storefront password page being the
+  common case) had no way to authenticate. `--cookie` sends a raw `Cookie` header, scoped
+  and leak-guarded exactly like `--basic-auth` (seed host plus subdomains only, no scheme
+  downgrade, rejected under `--render headless`). Exposed in the CLI, interactive menu,
+  config, MCP, web API and the web UI's crawl form.
 - **Ignore external-link UTM tagging by default.** The `utm` analyzer's tagging-quality
   warnings (partial/empty/duplicate/casing) no longer fire for outbound links to other
   domains, since the site owner doesn't control third-party tagging (e.g. a widget's own
   "powered by" badge link). Toggle with `--ignore-external-tagging=false` / `analyzers.
   ignore_external_tagging: false` / `ignore_external_tagging: false` (MCP/web API) to restore
   them.
+
+### Changed
+
+- **Web UI and HTML export unified.** The live SPA and the static HTML export had drifted
+  into two visual languages and two feature sets. Both now share one token system (colors,
+  type, shadows; dark mode added to the export), and the SPA gained the export's
+  functionality: severity toggles, a codes multiselect, sortable/sticky tables, a per-issue
+  review workflow with bulk actions and reviewed-JSON export, and a Site map tab driven by
+  the report's existing site-map tree. Plus a sectioned crawl form, analyzer
+  select-all/none, cancel confirmation, an elapsed-time/progress indicator, and
+  history search/sort.
+
+### Fixed
+
+- **`gocrawl mcp` panicked on startup.** The MCP `crawl` tool returned the full
+  `report.Report`, whose `SiteMap` embeds a self-referential `*sitemapgen.Node`
+  (`Children []*Node`); the go-sdk schema reflector cannot express cyclic types and panicked
+  in `AddTool` on every invocation. The tool now returns a flat `CrawlReport` (seed, summary,
+  issues, notes, coverage). CLI and web JSON reports are unaffected and still include the
+  full site map.
 
 ## [0.6.0] - 2026-07-29
 
@@ -201,7 +242,12 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.1.0...v0.2.0

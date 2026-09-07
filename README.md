@@ -226,7 +226,7 @@ Twenty-four analyzers, run in registration order:
 | `sitemap` | `sitemap.xml` discovery/parsing and crawl-coverage cross-check |
 | `structured` | JSON-LD extraction, schema.org `@type` reporting, required-field validation |
 | `perf` | Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) against Google's thresholds — populated with `--render headless` |
-| `images` | Missing `alt` text and missing `width`/`height` dimensions |
+| `images` | Alt text (missing, empty, duplicated, filename-derived), non-descriptive filenames, missing `width`/`height` dimensions |
 | `urls` | URL hygiene: uppercase paths, underscores, non-ASCII characters, overly long URLs |
 | `security` | Insecure forms and response-header hygiene (baseline); TLS/certificate/cookie audit with `--security-audit` |
 | `pagination` | `rel=next/prev` sequence detection and broken pagination targets |
