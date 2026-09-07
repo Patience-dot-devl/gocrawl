@@ -221,12 +221,36 @@ every HTML `200` page. Aggregates per page (one issue per code, not per image).
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
-| `img-missing-alt` | warning | One or more `<img>` have no `alt` attribute at all | `count`, `sample` |
-| `img-missing-dimensions` | info | One or more `<img>` are missing a `width` or `height` attribute | `count` |
+| `img-missing-alt` | warning | One or more `<img>` have no `alt` attribute at all | `count`, `sample`, `sources` |
+| `img-empty-alt` | info | One or more `<img>` have an explicit `alt=""` (or whitespace-only) | `count`, `images_total`, `sample`, `sources` |
+| `img-duplicate-alt` | warning | The same non-empty alt text is used by more than one image on the page | `count`, `duplicates` |
+| `img-alt-is-filename` | warning | The alt text is just the filename restated (`kantoor.jpg` → `alt="Kantoor"`) | `count`, `sample`, `sources` |
+| `img-nondescriptive-filename` | info | The filename carries no meaning: pure digits, camera/export defaults, a content hash, or a stem of 3 characters or fewer | `count`, `sample`, `sources` |
+| `img-missing-dimensions` | info | One or more `<img>` are missing a `width` or `height` attribute | `count`, `sample`, `sources` |
 
-> An explicit empty `alt=""` is **valid** for decorative images and is not flagged — only a
-> missing `alt` attribute counts. `sample` lists up to five offending `src` values. Broken or
-> oversized images are out of scope (they would require fetching the image bytes).
+### Three alt states, not two
+
+The analyzer distinguishes **missing** (`<img src=…>`), **empty** (`alt=""`) and **present**
+(`alt="…"`). Empty alt is the *correct* markup for a decorative image, so it is reported as
+`info` rather than treated as a defect — but it is reported, because a theme or CMS that emits
+`alt=""` for every content image is indistinguishable from a correctly decorated page unless
+you can see the list. `images_total` on that finding gives the ratio at a glance (e.g. 42 of
+67). Deciding which of those images are actually decorative is a human call.
+
+### Image URLs in `data`
+
+`sample` lists up to five image URLs for readability; `sources` lists every one (deduplicated,
+capped at 100 per finding per page, with `truncated: true` when the cap is hit) so tooling can
+act on the full set. URLs are resolved against the page URL. `src` is preferred, falling back
+to `data-src` / `data-original` and then the first `srcset` candidate, so lazy-loading themes
+still report the real image rather than a placeholder.
+
+`duplicates` is a list of `{alt, count, sample}` groups, most-repeated first; the finding's
+`count` is the total number of images involved in any duplicate group.
+
+> Anything requiring the image bytes is out of scope: gocrawl never fetches images, so file
+> size, real dimensions, and format-vs-content mismatches (a photo shipped as PNG) are not
+> checked. Filename and alt checks are markup-only.
 
 ---
 

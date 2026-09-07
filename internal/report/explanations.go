@@ -459,6 +459,26 @@ var explanations = map[string]Explanation{
 		Impact: "Hurts accessibility for screen-reader users and removes image-search/context signals.",
 		Fix:    "Add descriptive alt text to meaningful images; use empty alt=\"\" for purely decorative ones.",
 	},
+	"img-empty-alt": {
+		What:   "One or more images have an explicit empty alt=\"\". This is informational, not a defect: alt=\"\" is the correct markup for a purely decorative image, and gocrawl cannot tell from markup alone whether an image carries meaning.",
+		Impact: "If the images are decorative, nothing is wrong. If they are content images (product shots, diagrams, photos), an empty alt hides them from screen readers and from image search, and a CMS or theme that emits alt=\"\" for everything looks identical to a correctly decorated page unless you review the list.",
+		Fix:    "Review the listed images. Give the meaningful ones descriptive alt text; leave alt=\"\" on the ones that are purely decorative.",
+	},
+	"img-duplicate-alt": {
+		What:   "Several images on the same page share the same alt text.",
+		Impact: "Repeated alt text stops distinguishing the images: screen-reader users hear the same label many times, and image search gets no signal about what each variant actually shows.",
+		Fix:    "Write alt text that describes each specific image (angle, variant, context) rather than reusing one product or page name.",
+	},
+	"img-alt-is-filename": {
+		What:   "The alt text is just the image's filename restated (e.g. kantoor.jpg with alt=\"Kantoor\").",
+		Impact: "A filename is not a description, so the alt adds no accessibility or image-search value while looking populated to automated checks.",
+		Fix:    "Replace it with a sentence fragment describing what the image shows.",
+	},
+	"img-nondescriptive-filename": {
+		What:   "Image filenames carry no meaning — pure numbers (7.jpg), camera or export defaults (IMG_1234.jpg, unnamed.png), content hashes, or names too short to be words (hs1.png).",
+		Impact: "Filenames are a ranking signal for image search and are used as a fallback label; meaningless ones waste that signal.",
+		Fix:    "Rename files to short, hyphenated descriptions of their content before upload (aed-wall-cabinet.jpg).",
+	},
 	"img-missing-dimensions": {
 		What:   "One or more images lack explicit width/height attributes.",
 		Impact: "Missing dimensions cause layout shift (CLS), degrading Core Web Vitals and user experience.",
