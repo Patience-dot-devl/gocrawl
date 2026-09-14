@@ -126,3 +126,108 @@ func TestAbsentValueOnOneBlockIsNotADisagreement(t *testing.T) {
 		t.Error("an absent value on one block must not be reported as a conflict")
 	}
 }
+
+func TestRelativeURLInMarkup(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"/cdn/shop/t.jpg","url":"/products/tee"}
+	</script></head><body></body></html>`)
+	issues := structured.New().Analyze(context.Background(), res)
+	got := findAll(issues, "structured-relative-url")
+	if len(got) != 2 {
+		t.Fatalf("expected a finding for each of image and url, got %d", len(got))
+	}
+}
+
+func TestAbsoluteAndProtocolRelativeURLsAreFine(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"//cdn.shop.test/t.jpg","url":"https://shop.test/products/tee"}
+	</script></head><body></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-relative-url"); ok {
+		t.Error("absolute and protocol-relative URLs are both resolvable")
+	}
+}
+
+func TestInvalidDate(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"BlogPosting","headline":"Hi","datePublished":"14/09/2026"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-invalid-date")
+	if !ok {
+		t.Fatal("expected structured-invalid-date for a non-ISO date")
+	}
+	if is.Data["property"] != "datePublished" {
+		t.Errorf("expected property datePublished, got %v", is.Data["property"])
+	}
+}
+
+func TestISODatesAccepted(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"BlogPosting","headline":"Hi","datePublished":"2026-09-14",
+		 "dateModified":"2026-09-14T08:30:00+02:00"}
+	</script></head><body></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-invalid-date"); ok {
+		t.Error("a date-only and an RFC3339 timestamp are both valid ISO 8601")
+	}
+}
+
+func TestMalformedPrice(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"$1,299.00","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-malformed-price")
+	if !ok {
+		t.Fatal("expected structured-malformed-price for a formatted price string")
+	}
+	if is.Data["value"] != "$1,299.00" {
+		t.Errorf("expected the offending value in data, got %v", is.Data["value"])
+	}
+}
+
+func TestNumericAndPlainStringPricesAccepted(t *testing.T) {
+	for _, price := range []string{`19.99`, `"19.99"`, `"1299"`} {
+		res := page(t, `<html><head><script type="application/ld+json">
+			{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+			 "offers":{"@type":"Offer","price":`+price+`,"priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+		</script></head><body></body></html>`)
+		if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-malformed-price"); ok {
+			t.Errorf("price %s is well formed", price)
+		}
+	}
+}
+
+func TestPriceMismatchWithPage(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+	</script></head><body><p class="price">$24.99</p><button>Add to cart</button></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch")
+	if !ok {
+		t.Fatal("expected structured-price-mismatch")
+	}
+	if is.Data["markup"] != "19.99" || is.Data["page"] != "24.99" {
+		t.Errorf("expected markup 19.99 vs page 24.99, got %v / %v", is.Data["markup"], is.Data["page"])
+	}
+}
+
+func TestPriceMatchIsSilent(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"24.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+	</script></head><body><p class="price">$24.99</p><button>Add to cart</button></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
+		t.Error("a matching price must not be flagged")
+	}
+}
+
+func TestAmbiguousPageStaysSilent(t *testing.T) {
+	// A sale price next to a struck-through original, or a variant selector, puts more than
+	// one price on the page. There is no single on-page price to disagree with.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+	</script></head><body><s>$29.99</s><p class="price">$24.99</p><button>Add to cart</button></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
+		t.Error("a page showing two prices is ambiguous, not wrong")
+	}
+}

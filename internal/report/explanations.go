@@ -1026,6 +1026,26 @@ var explanations = map[string]Explanation{
 		Impact: "The reference silently drops whatever it was meant to convey (a publisher, a brand, a parent product); engines see the property as absent.",
 		Fix:    "Declare the referenced node on the page, or replace the reference with the inline object.",
 	},
+	"structured-relative-url": {
+		What:   "A structured-data URL property holds a relative path rather than an absolute URL.",
+		Impact: "Structured data is consumed outside the page's context, so a relative path resolves against nothing and the image or link is discarded.",
+		Fix:    "Emit absolute URLs (including scheme and host) for url, image, logo, thumbnailUrl, contentUrl, embedUrl and sameAs.",
+	},
+	"structured-invalid-date": {
+		What:   "A structured-data date property is not in ISO 8601 format.",
+		Impact: "An unparseable date is ignored, costing whatever it signalled — article freshness, event timing, or an offer's expiry.",
+		Fix:    "Format dates as YYYY-MM-DD or a full ISO 8601 timestamp such as 2026-09-14T08:30:00+02:00.",
+	},
+	"structured-malformed-price": {
+		What:   "A price property carries a currency symbol, a thousands separator, or a range instead of a bare decimal number.",
+		Impact: "The price fails to parse, which makes the offer invalid and removes the product from price-bearing rich results.",
+		Fix:    "Write the price as digits with an optional decimal point (19.99, not $1,299.00) and put the currency in priceCurrency.",
+	},
+	"structured-price-mismatch": {
+		What:   "The price in Product structured data differs from the price rendered on the page.",
+		Impact: "Markup that contradicts visible content violates Google's structured-data guidelines and risks a manual action suppressing every rich result on the site.",
+		Fix:    "Generate the markup price from the same data that renders the visible price, so discounts and currency changes cannot drift apart.",
+	},
 	"structured-none": {
 		What:   "The page has no JSON-LD structured data.",
 		Impact: "The page is ineligible for rich results and gives engines fewer explicit entity signals.",

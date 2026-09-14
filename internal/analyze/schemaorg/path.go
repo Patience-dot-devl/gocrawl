@@ -70,6 +70,14 @@ func sameObject(a, b map[string]any) bool {
 	return true
 }
 
+// Values returns every raw, undecoded value at a dotted path below n. Callers that need to
+// distinguish a JSON string from a JSON number — a price written "19.99" is well-formed,
+// one written "$1,299.00" is not, and both arrive as strings while a bare 19.99 does not —
+// use this rather than Strs, which renders everything as a string.
+func (g Graph) Values(n Node, path string) []any {
+	return g.values(n.Props, strings.Split(path, "."))
+}
+
 // Str returns the first value at path rendered as a string. Numbers are formatted without a
 // trailing ".0" so that a price written as 19.99 and one written as "19.99" compare equal.
 func (g Graph) Str(n Node, path string) string {

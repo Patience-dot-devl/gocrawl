@@ -1,8 +1,12 @@
 package structured
 
 import (
+	"net/url"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/schemaorg"
@@ -26,6 +30,7 @@ func integrityIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
 	var issues []analyze.Issue
 	issues = append(issues, duplicateIssues(p, g)...)
 	issues = append(issues, unresolvedIDIssues(p, g)...)
+	issues = append(issues, valueIssues(p, g)...)
 	return issues
 }
 
@@ -176,4 +181,194 @@ func firstType(n schemaorg.Node) string {
 		return ""
 	}
 	return n.Types[0]
+}
+
+// urlProperties hold values that must resolve on their own. A search engine reads structured
+// data out of the page's context, so a relative path in markup resolves against nothing.
+var urlProperties = []string{"url", "image", "logo", "thumbnailUrl", "contentUrl", "embedUrl", "sameAs"}
+
+// dateProperties must carry ISO 8601. A locale-formatted date is silently unparseable, which
+// costs the page whatever the date was signalling — article freshness, event timing, an offer
+// expiry.
+var dateProperties = []string{
+	"datePublished", "dateModified", "uploadDate",
+	"startDate", "endDate", "validFrom", "priceValidUntil",
+	"offers.priceValidUntil", "offers.validFrom",
+}
+
+// priceProperties must carry a bare decimal. Google's documentation is explicit that a price
+// may not include currency symbols, thousands separators, or a range.
+var priceProperties = []string{"price", "offers.price", "lowPrice", "highPrice", "offers.lowPrice", "offers.highPrice"}
+
+// isoDateLayouts are the ISO 8601 shapes schema.org accepts, most specific first.
+var isoDateLayouts = []string{
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02T15:04",
+	"2006-01-02",
+	"2006-01",
+	"2006",
+}
+
+// bareDecimalRe matches a price a search engine can parse: digits, optionally one decimal
+// point, nothing else.
+var bareDecimalRe = regexp.MustCompile(`^\d+(\.\d+)?$`)
+
+// digitsRe pulls the numeric part out of a rendered on-page price such as "$1,299.00".
+var digitsRe = regexp.MustCompile(`\d[\d,.]*\d|\d`)
+
+// valueIssues checks the formats of individual property values, and whether the price in the
+// markup agrees with the price the page shows a visitor.
+func valueIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
+	var issues []analyze.Issue
+	// A nested node is reachable both on its own and through its parent's dotted path, so a
+	// bad price on an Offer inside a Product would otherwise be reported twice — once as
+	// "offers.price" from the Product and once as "price" from the Offer. One bad value is
+	// one finding regardless of how many paths reach it.
+	seen := make(map[string]bool)
+	add := func(sev analyze.Severity, code, msg string, data map[string]any) {
+		key := code + "\x00" + value(data)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		issues = append(issues, analyze.Issue{
+			Analyzer: "structured", URL: p.FinalURL, Severity: sev, Code: code, Message: msg, Data: data,
+		})
+	}
+
+	for _, n := range g.Nodes {
+		for _, prop := range urlProperties {
+			for _, v := range g.Strs(n, prop) {
+				if isResolvableURL(v) {
+					continue
+				}
+				add(analyze.Warning, "structured-relative-url",
+					"A structured-data URL is relative and will not resolve outside the page",
+					map[string]any{"type": firstType(n), "property": prop, "value": v})
+			}
+		}
+		for _, prop := range dateProperties {
+			for _, v := range g.Strs(n, prop) {
+				if isISODate(v) {
+					continue
+				}
+				add(analyze.Warning, "structured-invalid-date",
+					"A structured-data date is not in ISO 8601 format",
+					map[string]any{"type": firstType(n), "property": prop, "value": v})
+			}
+		}
+		for _, prop := range priceProperties {
+			for _, raw := range g.Values(n, prop) {
+				s, isString := raw.(string)
+				// A JSON number is always well formed; only a string can carry a symbol,
+				// a separator, or a range.
+				if !isString || bareDecimalRe.MatchString(strings.TrimSpace(s)) {
+					continue
+				}
+				add(analyze.Warning, "structured-malformed-price",
+					"A structured-data price is not a bare decimal number",
+					map[string]any{"type": firstType(n), "property": prop, "value": s})
+			}
+		}
+	}
+	issues = append(issues, priceMismatchIssues(p, g)...)
+	return issues
+}
+
+// priceMismatchIssues compares the price in Product markup against the price rendered on the
+// page. It only runs when the page shows exactly one distinct price: a sale price beside a
+// struck-through original, or a variant selector that changes the price, puts several on the
+// page, and there is then no single visible price for the markup to contradict.
+func priceMismatchIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
+	onPage := distinctPagePrices(p)
+	if len(onPage) != 1 {
+		return nil
+	}
+	shown := onPage[0]
+	var issues []analyze.Issue
+	for _, n := range topLevelOfType(g, "Product") {
+		marked, ok := normalizePrice(g.Str(n, "offers.price"))
+		if !ok || marked == shown {
+			continue
+		}
+		issues = append(issues, analyze.Issue{
+			Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
+			Code:    "structured-price-mismatch",
+			Message: "The price in Product structured data differs from the price shown on the page",
+			Data: map[string]any{
+				"markup": formatPrice(marked),
+				"page":   formatPrice(shown),
+			},
+		})
+	}
+	return issues
+}
+
+// distinctPagePrices returns the distinct prices rendered in the page body, using the same
+// regexp the product candidate heuristic uses to recognize one.
+func distinctPagePrices(p *crawler.Page) []float64 {
+	seen := make(map[float64]bool)
+	var out []float64
+	for _, m := range priceRe.FindAllString(p.Doc.Find("body").Text(), -1) {
+		v, ok := normalizePrice(m)
+		if !ok || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
+}
+
+// normalizePrice extracts a comparable number from either a markup price or a rendered one,
+// dropping currency symbols and thousands separators.
+func normalizePrice(s string) (float64, bool) {
+	digits := digitsRe.FindString(s)
+	if digits == "" {
+		return 0, false
+	}
+	digits = strings.ReplaceAll(digits, ",", "")
+	// A trailing separator ("19.99." at a sentence end) is not part of the number.
+	digits = strings.TrimSuffix(digits, ".")
+	v, err := strconv.ParseFloat(digits, 64)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
+// formatPrice renders a normalized price for a finding's data.
+func formatPrice(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// isResolvableURL reports whether a URL value stands on its own: absolute, protocol-relative,
+// or a data URI.
+func isResolvableURL(v string) bool {
+	if v == "" {
+		return true // absence is a different finding
+	}
+	if strings.HasPrefix(v, "//") || strings.HasPrefix(v, "data:") {
+		return true
+	}
+	u, err := url.Parse(v)
+	return err == nil && u.IsAbs()
+}
+
+// value returns a finding's offending value, used to de-duplicate findings that describe the
+// same bad value reached by two different paths.
+func value(data map[string]any) string {
+	s, _ := data["value"].(string)
+	return s
+}
+
+// isISODate reports whether a value parses as one of the ISO 8601 shapes schema.org accepts.
+func isISODate(v string) bool {
+	for _, layout := range isoDateLayouts {
+		if _, err := time.Parse(layout, v); err == nil {
+			return true
+		}
+	}
+	return false
 }
