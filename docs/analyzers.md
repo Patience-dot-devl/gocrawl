@@ -4,12 +4,12 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships twenty-four analyzers, run in this registration order
+gocrawl ships twenty-five analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
 the technical/on-page set `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
 `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
-`content`, `botwall`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`,
-`datalayer`, `landing`, `consent`, and the AI-search analyzers `aeo`, `geo`.
+`content`, `botwall`, the CMS-specific `wordpress` and `shopify`, the SEA analyzers `utm`,
+`tracking`, `datalayer`, `landing`, `consent`, and the AI-search analyzers `aeo`, `geo`.
 
 List them at any time:
 
@@ -551,6 +551,96 @@ permalink check is per page.
 > `textarea` blocks excluded, so ACF tutorials are not flagged) for field tags or shortcodes that
 > were printed instead of executed. ACF field *values*, once rendered, are ordinary HTML and are
 > not distinguishable from hand-written content, so the analyzer only catches this leak failure.
+
+---
+
+## `shopify` — Shopify detection and store-specific structured-data checks (CMS)
+
+Source: [`internal/analyze/shopify/`](../internal/analyze/shopify/). Like `wordpress`, it stays
+completely silent on a site it does not recognize, so enabling it costs nothing on the rest of
+the web.
+
+**Detection is tiered, not one flat list of fingerprints.** *Strong* fingerprints — the inline
+`Shopify.theme` bootstrap object a theme's layout sets and the `shopify-features` storefront
+runtime script — appear only in a Shopify theme's own layout, so either one alone means the
+crawled site *is* a Shopify storefront; the `X-ShopId` and `X-Shopify-Stage` response headers
+identify a store on their own too. *Weak* fingerprints — `cdn.shopify.com` asset URLs, a
+`.myshopify.com` reference, `/cdn/shop/` paths — are recorded in `shopify-detected`'s `signals`
+data but never flip detection by themselves. The reason: a site that is not itself hosted on
+Shopify but embeds a Shopify Buy Button widget (a single product's checkout dropped into a
+WordPress, Squarespace, or hand-rolled page) serves exactly those weak markers and nothing
+else, and treating them as sufficient would make the analyzer invent per-template
+structured-data findings against a site that has no Shopify templates to check. The deliberate
+cost of that caution: a headless Shopify storefront (Hydrogen) that strips both strong markers
+from its rendered output goes undetected, and the analyzer stays silent on it rather than
+guess — one silently-skipped site costs less than a confidently wrong report.
+
+Once a store is detected, every crawled URL is classified into a **template** by its path
+shape — Shopify's URL structure is fixed by the platform rather than chosen per store, which is
+what makes classifying by path reliable here in a way it would not be on an arbitrary site —
+and checked against the schema.org types that template should carry. A gap is a property of
+the template, not of one page: `shopify-template-schema-gap` fires per (template, missing type)
+pair, carrying the count of pages found missing it and up to five example URLs, rather than
+repeating the same fact once per page.
+
+| Code | Severity | Scope | Triggered when | `data` |
+| --- | --- | --- | --- | --- |
+| `shopify-detected` | info | **site** | A strong fingerprint (`Shopify.theme`, `shopify-features`) is found on any crawled page, or a response carries `X-ShopId`/`X-Shopify-Stage`; weak fingerprints alone never trigger this | `signals`, `theme`, `theme_id` |
+| `shopify-template-schema-gap` | warning | **site** | One or more crawled, `200`-status HTML pages of a template lack a schema.org type that template should carry | `template`, `expected`, `pages`, `examples` |
+| `shopify-schema-app-conflict` | error | page | The page's `Product` JSON-LD is attributed to two or more different script sources (typically the theme and an SEO app) | `sources` |
+| `shopify-schema-client-injected` | info | page | The page's raw HTML has zero JSON-LD nodes, its template is not `utility`/`unknown`, and a recognized structured-data app's script is present | `app`, `apps`, `template` |
+| `shopify-flat-variant-product` | warning | page | A `product`-template page exposes 2+ variants in the DOM, declares one or more `Product` nodes, none of which carries `hasVariant`/`isVariantOf`, and the page declares no `ProductGroup` type either | `variants` |
+| `shopify-single-offer-range` | info | page | The page's embedded variant JSON has 2+ distinct prices, a `Product` node declares exactly one `Offer`, and no `AggregateOffer` is present | `prices`, `variants` |
+
+> **`shopify-template-schema-gap` counts affected pages, not "every page."** Despite the
+> message text ("… pages have no … structured data"), the check does not require that *all*
+> pages of a template be missing the type before it fires — it walks every crawled page,
+> and any page of the right template that lacks the expected type contributes to that
+> template/type's `pages` count and (up to five) `examples`. A template where only some pages
+> lack the markup still produces one issue, with `pages` telling you how many.
+
+**Expected schema per template:**
+
+| Template | Path shape | Expected | Notes |
+| --- | --- | --- | --- |
+| `home` | `/` | `Organization` (or `LocalBusiness`), and `WebSite` | |
+| `product` | `/products/<handle>`, `/collections/<handle>/products/<handle>` | `Product` (or `ProductGroup`), and `BreadcrumbList` | |
+| `collection` | `/collections/<handle>` | `CollectionPage` or `ItemList`, and `BreadcrumbList` | |
+| `article` | `/blogs/<blog>/<article>` | `BlogPosting` (or `Article`/`NewsArticle`), and `BreadcrumbList` | |
+| `blog` | `/blogs/<blog>`, `/blogs/<blog>/tagged/<tag>` | `Blog` or `CollectionPage` | A tag-filtered listing (`/tagged/<tag>`) routes here, not to `article` — it is a filtered index of posts, not a single post, and demanding `BlogPosting` on it would false-positive on every tag page of every store with a blog. |
+| `page` | `/pages/<handle>` | `WebPage`, `AboutPage`, `ContactPage`, or `FAQPage` | |
+| `policy` | `/policies/<handle>` | nothing asserted | Shopify's built-in legal pages (refund, privacy, terms). Deliberately **not** folded into `utility`: `utility` means "should not be indexable," and a later check flags indexable utility pages, but policy pages are meant to be indexed — filing them under `utility` would make that check false-positive on every store's policy pages. |
+| `utility` | `/cart`, `/search`, `/account/*`, `/challenge`, `/checkouts/*`, `/orders/*`, `/password` | nothing asserted | A cart, search, account, or password-gate page has nothing to say to a search engine. |
+| `unknown` | anything else (app-proxy routes such as `/apps/<app>`, custom page types) | nothing asserted | Not a route Shopify's own templates render, so no schema expectation is known to assert. |
+
+> **Shopify Markets locale prefixes are skipped for classification only, never stripped from
+> the URL.** `/en-ca/products/tee` and `/fr/collections/all` classify identically to their
+> unprefixed equivalents — a Markets storefront serves every route under a locale prefix, and
+> refusing to recognize it would silently drop a whole localized store's URLs into `unknown`.
+> The prefix is preserved in the URL itself; only the classification logic skips over it,
+> because a later check that rebuilds a canonical URL from the page's own URL must keep the
+> prefix or it will point a canonical at a path that does not exist in that market.
+
+> **Attribution is by script attributes, never contents.** Each JSON-LD block is attributed to
+> the app named in its own `src`/`id`/`class`, else to the nearest recognized app script before
+> it, else to the theme. An app's name appears inside unrelated inline JSON often enough that
+> matching on script *contents* would misattribute blocks. Recognized apps: JSON-LD for SEO,
+> Schema Plus, SearchPie, Schema App, SEOAnt, Yoast for Shopify, TinyIMG, Smart SEO, Avada SEO.
+
+> **Raw mode sees what every crawler sees.** Shopify themes render JSON-LD server-side, so a
+> raw crawl finds it. Several SEO apps inject it with JavaScript instead; when one is installed
+> and the raw HTML has none, `shopify-schema-client-injected` says so rather than reporting the
+> page as bare. Re-run with `--render headless` to see what the app emits.
+
+> **Variant counts take the maximum across DOM selectors, not the sum.** A theme commonly
+> renders its variant picker more than once — a `<select>` for narrow viewports, radio inputs
+> for wide — and summing every selector would double-count, letting a single-variant product
+> trip the two-variant gate on nothing more than a duplicated control. `<option>` elements with
+> no value or an empty one (a placeholder such as "Choose an option") are filtered out of the
+> two option-based selectors so a placeholder is never counted as a variant either. This remains
+> an undercount in one direction: `[data-variant-id]` attached to several swatch or thumbnail
+> elements per variant, or a duplicated `input[name="id"]` for the same variant, can still
+> overcount.
 
 ---
 
