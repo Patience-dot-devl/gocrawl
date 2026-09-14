@@ -138,11 +138,21 @@ The existing `requiredFields` map supplies the starting point for the other type
 `LocalBusiness`, `Person`, `BreadcrumbList`, `FAQPage`, `VideoObject`); each gains a
 `recommended` list drawn from the matching rich-result documentation.
 
-One deliberate behaviour change: `Offer` stops being a top-level table entry, because its
-fields are now reached through `Product` via dotted paths. A page emitting a bare
-top-level `Offer` with no `price` currently raises `structured-missing-required` and will
-stop doing so. This is the only intended regression in the phase 1 refactor; the pinning
-tests are written to expect it explicitly rather than to pass by accident.
+Three deliberate behaviour changes come with this, each pinned by a test that expects the
+new result explicitly rather than passing by accident:
+
+1. `Offer` stops being a top-level table entry, because its fields are now reached through
+   `Product` via dotted paths. A page emitting a bare top-level `Offer` with no `price`
+   currently raises `structured-missing-required` and will stop doing so.
+2. `structured-data` will list more types. Today's `collectTypes` descends only into
+   `@graph`, so a nested `Offer` or `Brand` never appears in the reported type list — and
+   never suppresses a `*-candidate` heuristic either. `schemaorg.Parse` walks all nested
+   objects, so both the reported types and candidate suppression get more complete. (The
+   existing doc comment on `collectTypes` already claims it descends into nested objects;
+   the code does not. This closes that gap.)
+3. `Product`'s required tier grows from `{name}` to the five fields in the table below, so
+   pages carrying a name-only `Product` start raising `structured-missing-required`. This
+   is the point of the change, not a side effect.
 
 Codes:
 
@@ -224,11 +234,15 @@ General SEO checks (phase 3):
 
 | Code | Severity | Fires when |
 | --- | --- | --- |
-| `shopify-indexable-search` | warning | `/search` is crawlable and not `noindex` |
-| `shopify-indexable-facet` | warning | Crawlable `?sort_by=` / faceted collection URLs without a self-referential canonical |
-| `shopify-duplicate-product-path` | warning | A product reachable at both `/products/<h>` and `/collections/<c>/products/<h>` without a canonical pointing at the former |
+| `shopify-indexable-utility` | warning | A utility path (`/search`, `/cart`, `/account/*`, `/challenge`) is crawlable and not `noindex` |
+| `shopify-indexable-facet` | warning | Crawlable `?sort_by=` / `?filter.*=` collection URLs without a canonical pointing at the unfiltered collection |
+| `shopify-duplicate-product-path` | warning | A product reachable at `/collections/<c>/products/<h>` without a canonical pointing at `/products/<h>` |
 | `shopify-products-json-exposed` | info | `/products.json` returns a product feed (opt-in; an extra fetch) |
-| `shopify-default-theme-meta` | warning | A default theme title or description template survives in production |
+
+A fifth check, `shopify-default-theme-meta`, was considered and cut: every concrete signal
+for it reduces to a missing or templated `<title>` / `<meta name="description">`, which the
+`seo` analyzer already reports. Duplicating those findings under a second analyzer name
+would add noise without adding information.
 
 ### Plumbing
 
