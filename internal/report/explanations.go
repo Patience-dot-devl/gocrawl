@@ -366,6 +366,11 @@ var explanations = map[string]Explanation{
 		Impact: "Each permutation is the same products in a different order, competing with the collection it came from and multiplying crawl budget across near-identical pages.",
 		Fix:    "Emit a canonical pointing at the unfiltered collection URL on every faceted variant, and consider disallowing the parameters in robots.txt.",
 	},
+	"shopify-duplicate-product-path": {
+		What:   "A product is served at /collections/<collection>/products/<handle> without a canonical pointing at /products/<handle>.",
+		Impact: "Shopify serves a product once per collection it belongs to, so a product in ten collections becomes ten competing URLs, splitting link signals across all of them.",
+		Fix:    "Most themes already emit the right canonical; if yours does not, set it to {{ product.url }} prefixed with the shop URL rather than {{ canonical_url }} in a collection context.",
+	},
 
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {

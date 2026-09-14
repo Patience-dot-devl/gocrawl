@@ -130,3 +130,67 @@ func TestFacetParamIsDeterministicWithMultipleParams(t *testing.T) {
 		}
 	}
 }
+
+func TestDuplicateProductPathPreservesLocale(t *testing.T) {
+	// A Markets storefront serves the product under its locale prefix. The canonical we
+	// recommend must keep that prefix; /products/tee does not exist in the en-ca market.
+	nested := `<html><head>` + shopifyShell + `</head><body><h1>Tee</h1></body></html>`
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/": shopifyHome,
+		"https://shop.test/en-ca/collections/all/products/tee": nested,
+	})
+	is, ok := find(run(t, res), "shopify-duplicate-product-path")
+	if !ok {
+		t.Fatal("expected shopify-duplicate-product-path on a locale-prefixed nested product URL")
+	}
+	if is.Data["canonical_should_be"] != "https://shop.test/en-ca/products/tee" {
+		t.Errorf("canonical must keep the locale prefix, got %v", is.Data["canonical_should_be"])
+	}
+}
+
+func TestDuplicateProductPath(t *testing.T) {
+	nested := `<html><head>` + shopifyShell + `</head><body><h1>Tee</h1></body></html>`
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":                             shopifyHome,
+		"https://shop.test/collections/all/products/tee": nested,
+	})
+	is, ok := find(run(t, res), "shopify-duplicate-product-path")
+	if !ok {
+		t.Fatal("expected shopify-duplicate-product-path for an uncanonicalised nested product URL")
+	}
+	if is.Data["canonical_should_be"] != "https://shop.test/products/tee" {
+		t.Errorf("expected the canonical target in data, got %v", is.Data["canonical_should_be"])
+	}
+}
+
+func TestNestedProductWithCorrectCanonicalIsFine(t *testing.T) {
+	nested := `<html><head>` + shopifyShell +
+		`<link rel="canonical" href="https://shop.test/products/tee"></head><body><h1>Tee</h1></body></html>`
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":                             shopifyHome,
+		"https://shop.test/collections/all/products/tee": nested,
+	})
+	issues := run(t, res)
+	// Guard against a vacuous pass: if detection failed, Analyze returns nil and the absence
+	// of shopify-duplicate-product-path below would prove nothing.
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected, otherwise this test passes vacuously")
+	}
+	if _, ok := find(issues, "shopify-duplicate-product-path"); ok {
+		t.Error("a nested product URL canonicalised to /products/<handle> is correct")
+	}
+}
+
+func TestCanonicalProductPathIsNotFlagged(t *testing.T) {
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":             shopifyHome,
+		"https://shop.test/products/tee": `<html><head>` + shopifyShell + `</head><body><h1>Tee</h1></body></html>`,
+	})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected, otherwise this test passes vacuously")
+	}
+	if _, ok := find(issues, "shopify-duplicate-product-path"); ok {
+		t.Error("the canonical product path is not a duplicate of itself")
+	}
+}

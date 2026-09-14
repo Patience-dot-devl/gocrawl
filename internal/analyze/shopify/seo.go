@@ -71,6 +71,20 @@ func seoIssues(p *crawler.Page, tmpl Template) []analyze.Issue {
 			}
 		}
 	}
+
+	// Shopify serves every product at /products/<handle> and again under each collection it
+	// belongs to. The nested copies are the same page; without a canonical pointing at the
+	// short path, a product with ten collections is ten competing URLs.
+	if want, ok := canonicalProductURL(p.FinalURL); ok {
+		if canonical := canonicalOf(p.Doc); canonical == "" || !sameURL(canonical, want) {
+			issues = append(issues, analyze.Issue{
+				Analyzer: "shopify", URL: p.FinalURL, Severity: analyze.Warning,
+				Code:    "shopify-duplicate-product-path",
+				Message: "A product is served under a collection path without a canonical pointing at /products/<handle>",
+				Data:    map[string]any{"canonical": canonical, "canonical_should_be": want},
+			})
+		}
+	}
 	return issues
 }
 
@@ -110,6 +124,31 @@ func stripFragment(raw string) string {
 		return raw[:i]
 	}
 	return raw
+}
+
+// canonicalProductURL returns the /products/<handle> form of a nested
+// /collections/<c>/products/<handle> URL. It returns false for any other URL, including the
+// canonical product path itself.
+//
+// A Shopify Markets storefront serves every route under a locale prefix, so the match skips
+// that prefix via localeOffset — but the returned URL PUTS IT BACK. Recommending a canonical
+// that drops the locale would point the store at a path that does not exist in that market.
+func canonicalProductURL(rawURL string) (string, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", false
+	}
+	segs := pathSegments(u.Path)
+	off := localeOffset(segs)
+	rest := segs[off:]
+	if len(rest) < 4 || rest[0] != "collections" || rest[2] != "products" {
+		return "", false
+	}
+	prefix := ""
+	if off > 0 {
+		prefix = "/" + segs[0]
+	}
+	return u.Scheme + "://" + u.Host + prefix + "/products/" + rest[3], true
 }
 
 // pathOf returns a URL's path for use in a finding's data.
