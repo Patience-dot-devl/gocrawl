@@ -38,17 +38,6 @@ func find(issues []analyze.Issue, code string) (analyze.Issue, bool) {
 	return analyze.Issue{}, false
 }
 
-//nolint:unused // consumed by later shopify tasks (9-11) that add tests to this package
-func findAll(issues []analyze.Issue, code string) []analyze.Issue {
-	var out []analyze.Issue
-	for _, is := range issues {
-		if is.Code == code {
-			out = append(out, is)
-		}
-	}
-	return out
-}
-
 func run(t *testing.T, res *crawler.Result) []analyze.Issue {
 	t.Helper()
 	return shopify.New(nil).Analyze(context.Background(), res)
@@ -91,5 +80,22 @@ func TestSilentOnNonShopifySite(t *testing.T) {
 	})
 	if issues := run(t, res); len(issues) != 0 {
 		t.Errorf("expected complete silence on a non-Shopify site, got %d issues: %+v", len(issues), issues)
+	}
+}
+
+// TestSilentOnWeakMarkersAlone reproduces the huel.com / Shopify Buy Button shape: a site that
+// is NOT itself a Shopify storefront but embeds a Shopify Buy Button widget, so its page loads
+// cdn.shopify.com assets and references a *.myshopify.com backing store without carrying either
+// strong theme-runtime fingerprint anywhere on the site. Weak markers alone must not flip
+// detection, or every such embed gets misclassified as a full storefront.
+func TestSilentOnWeakMarkersAlone(t *testing.T) {
+	res := store(t, "https://blog.test", map[string]string{
+		"https://blog.test/": `<html><head>
+			<script src="https://cdn.shopify.com/s/files/1/buy-button/buy-button-storefront.js"></script>
+			<script>var buyButtonShop = "example-store.myshopify.com";</script>
+		</head><body><h1>Buy our thing</h1></body></html>`,
+	})
+	if issues := run(t, res); len(issues) != 0 {
+		t.Errorf("expected complete silence on weak markers alone (Buy Button embed), got %d issues: %+v", len(issues), issues)
 	}
 }
