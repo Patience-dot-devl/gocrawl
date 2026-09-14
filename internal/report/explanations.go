@@ -356,6 +356,16 @@ var explanations = map[string]Explanation{
 		Impact: "The stated price is wrong for every variant that does not match it, and a price that contradicts the page risks suppression of price-bearing rich results.",
 		Fix:    "Use an AggregateOffer with lowPrice and highPrice, or give each variant its own Offer under a ProductGroup.",
 	},
+	"shopify-indexable-utility": {
+		What:   "A Shopify utility page — /search, /cart, /account or /challenge — is crawlable and not marked noindex.",
+		Impact: "These pages carry no content worth ranking, and /search in particular generates an unbounded set of URLs from whatever anyone links to, wasting crawl budget and risking thin-content pages in the index.",
+		Fix:    "Add <meta name=\"robots\" content=\"noindex,follow\"> to the utility templates in theme.liquid, or disallow the paths in robots.txt.liquid.",
+	},
+	"shopify-indexable-facet": {
+		What:   "A sorted or filtered collection URL (?sort_by=, ?filter.*=) is indexable and does not canonicalise to the unfiltered collection.",
+		Impact: "Each permutation is the same products in a different order, competing with the collection it came from and multiplying crawl budget across near-identical pages.",
+		Fix:    "Emit a canonical pointing at the unfiltered collection URL on every faceted variant, and consider disallowing the parameters in robots.txt.",
+	},
 
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {

@@ -82,6 +82,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	tmpl := Classify(p.FinalURL)
 	issues := schemaIssues(p, g, tmpl)
 	issues = append(issues, variantIssues(p, g, tmpl)...)
+	issues = append(issues, seoIssues(p, tmpl)...)
 	return issues
 }
 
