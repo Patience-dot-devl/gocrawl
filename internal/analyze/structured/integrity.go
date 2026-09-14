@@ -306,13 +306,28 @@ func priceMismatchIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
 }
 
 // distinctPagePrices returns the distinct prices rendered in the page body, using the same
-// regexp the product candidate heuristic uses to recognize one.
+// regexp the product candidate heuristic uses to recognize one. goquery's Text() walks every
+// descendant text node with no tag exclusion, so JSON embedded in a <script> that lives in
+// <body> is scraped as page text too; priceRe requires an adjacent currency symbol or code, so
+// a raw JSON number such as "price":1999 does not match it, but a pre-formatted string some
+// themes embed ("$19.99") does. The net effect can only ever add a distinct price, which makes
+// this check fire less often, never more — an accidental safety margin, not something to
+// "optimize" away.
 func distinctPagePrices(p *crawler.Page) []float64 {
 	seen := make(map[float64]bool)
 	var out []float64
 	for _, m := range priceRe.FindAllString(p.Doc.Find("body").Text(), -1) {
 		v, ok := normalizePrice(m)
-		if !ok || seen[v] {
+		if !ok {
+			// A price we can't confidently parse (see disambiguateSeparators) must not be
+			// silently dropped: doing so could turn a page that actually shows two prices
+			// into one that looks like it shows a single, comparable price, which is
+			// exactly the ambiguous case the mismatch check exists to stay silent on.
+			// Treat "can't tell what this price is" the same as "there's more than one
+			// price on this page" and give up on the whole page.
+			return nil
+		}
+		if seen[v] {
 			continue
 		}
 		seen[v] = true
@@ -321,21 +336,70 @@ func distinctPagePrices(p *crawler.Page) []float64 {
 	return out
 }
 
-// normalizePrice extracts a comparable number from either a markup price or a rendered one,
-// dropping currency symbols and thousands separators.
+// normalizePrice extracts a comparable number from either a markup price or a rendered one.
+// It decides what "." and "," mean rather than assuming a comma is always a thousands
+// separator: comma-as-decimal is standard across DE/FR/NL/IT/ES, so "€19,99" and "$1,299" need
+// to be told apart, not both read as thousands-grouped integers.
 func normalizePrice(s string) (float64, bool) {
 	digits := digitsRe.FindString(s)
 	if digits == "" {
 		return 0, false
 	}
-	digits = strings.ReplaceAll(digits, ",", "")
 	// A trailing separator ("19.99." at a sentence end) is not part of the number.
 	digits = strings.TrimSuffix(digits, ".")
-	v, err := strconv.ParseFloat(digits, 64)
+	if digits == "" {
+		return 0, false
+	}
+	normalized, ok := disambiguateSeparators(digits)
+	if !ok {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(normalized, 64)
 	if err != nil {
 		return 0, false
 	}
 	return v, true
+}
+
+// disambiguateSeparators decides what role "." and "," play in a numeric string pulled from a
+// price. Applied in order:
+//  1. Both separators present: whichever occurs last is the decimal point; every instance of
+//     the other is discarded as thousands grouping ("$1,299.00" and "€1.299,00" both become
+//     "1299.00").
+//  2. One kind of separator, appearing more than once: thousands grouping, strip all of it
+//     ("1.234.567" and "1,234,567" both become "1234567").
+//  3. One kind, appearing exactly once, followed by exactly two digits: a decimal point
+//     ("€19,99" becomes "19.99").
+//  4. One kind, appearing exactly once, followed by exactly three digits: genuinely ambiguous
+//     — "1.299" and "1,299" are each plausibly 1299 or 1.299, and guessing risks the exact
+//     false-positive storm this check exists to avoid, so this reports ok=false.
+//  5. No separator: the digits are already a plain integer or decimal.
+func disambiguateSeparators(digits string) (normalized string, ok bool) {
+	hasDot := strings.Contains(digits, ".")
+	hasComma := strings.Contains(digits, ",")
+
+	switch {
+	case hasDot && hasComma:
+		if strings.LastIndex(digits, ".") > strings.LastIndex(digits, ",") {
+			return strings.ReplaceAll(digits, ",", ""), true
+		}
+		return strings.Replace(strings.ReplaceAll(digits, ".", ""), ",", ".", 1), true
+	case hasDot || hasComma:
+		sep := "."
+		if hasComma {
+			sep = ","
+		}
+		if strings.Count(digits, sep) > 1 {
+			return strings.ReplaceAll(digits, sep, ""), true
+		}
+		frac := digits[strings.Index(digits, sep)+1:]
+		if len(frac) == 3 {
+			return "", false
+		}
+		return strings.Replace(digits, sep, ".", 1), true
+	default:
+		return digits, true
+	}
 }
 
 // formatPrice renders a normalized price for a finding's data.

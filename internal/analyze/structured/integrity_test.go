@@ -231,3 +231,91 @@ func TestAmbiguousPageStaysSilent(t *testing.T) {
 		t.Error("a page showing two prices is ambiguous, not wrong")
 	}
 }
+
+func TestRelativeURLDuplicateValueAcrossPropertiesCollapses(t *testing.T) {
+	// Two different properties (image, url) holding the exact same bad value must collapse
+	// into one finding: the add closure de-duplicates on code + the offending value, not on
+	// which property carried it.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"/same-path","url":"/same-path"}
+	</script></head><body></body></html>`)
+	got := findAll(structured.New().Analyze(context.Background(), res), "structured-relative-url")
+	if len(got) != 1 {
+		t.Fatalf("expected the same bad value on two properties to collapse into one finding, got %d: %+v", len(got), got)
+	}
+}
+
+func TestNormalizePriceFormats(t *testing.T) {
+	// Exercises normalizePrice's separator disambiguation through the public analyzer
+	// behaviour: for each case, markup and on-page price are the same underlying amount
+	// written in a different format, so the check must stay silent. The two ambiguous forms
+	// carry a markup price that genuinely differs, to prove the guard suppresses the check
+	// entirely rather than coincidentally agreeing.
+	cases := []struct {
+		name        string
+		markupPrice string // offers.price in JSON-LD, already a bare decimal
+		pagePrice   string // as it appears in the page body
+	}{
+		{"us decimal point", "19.99", "$19.99"},
+		{"eu decimal comma", "19.99", "€19,99"},
+		{"us thousands dot then decimal", "1299.00", "$1,299.00"},
+		{"eu thousands dot then decimal comma", "1299.00", "€1.299,00"},
+		{"dot thousands grouping only", "1234567", "1.234.567 EUR"},
+		{"comma thousands grouping only", "1234567", "1,234,567 USD"},
+		{"ambiguous single comma stays silent", "999.00", "$1,299"},
+		{"ambiguous single dot stays silent", "999.00", "€1.299"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := page(t, `<html><head><script type="application/ld+json">
+				{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+				 "offers":{"@type":"Offer","price":"`+tc.markupPrice+`","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+			</script></head><body><p class="price">`+tc.pagePrice+`</p><button>Add to cart</button></body></html>`)
+			if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
+				t.Errorf("markup=%s page=%s: expected no mismatch", tc.markupPrice, tc.pagePrice)
+			}
+		})
+	}
+}
+
+func TestNormalizePriceStillCatchesRealMismatches(t *testing.T) {
+	// Guards against a fix that makes the check trivially silent for every format: a genuine
+	// disagreement expressed in EU notation must still fire.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+	</script></head><body><p class="price">€24,99</p><button>Add to cart</button></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch")
+	if !ok {
+		t.Fatal("expected structured-price-mismatch for a genuine EU-notation disagreement")
+	}
+	if is.Data["markup"] != "19.99" || is.Data["page"] != "24.99" {
+		t.Errorf("expected markup 19.99 vs page 24.99, got %v / %v", is.Data["markup"], is.Data["page"])
+	}
+}
+
+func TestEUPriceMatchIsSilent(t *testing.T) {
+	// End-to-end: an EU-formatted page whose single on-page price genuinely matches the
+	// markup must raise no structured-price-mismatch.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"1299.00","priceCurrency":"EUR","availability":"https://schema.org/InStock"}}
+	</script></head><body><p class="price">€1.299,00</p><button>Add to cart</button></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
+		t.Error("a matching EU-formatted price must not be flagged")
+	}
+}
+
+func TestAmbiguousPagePriceSuppressesCheckEvenAmongMultiplePrices(t *testing.T) {
+	// An ambiguous price must not be silently dropped from the distinct-price count: if it
+	// were, a page that actually shows two prices (one ambiguous, one not) could look like
+	// it shows exactly one, and the mismatch check would fire on a comparison it has no
+	// business making. distinctPagePrices must give up on the whole page instead.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+	</script></head><body><p class="price">$19.99</p><s>$1,299</s><button>Add to cart</button></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
+		t.Error("an ambiguous price anywhere on the page must suppress the mismatch check")
+	}
+}
