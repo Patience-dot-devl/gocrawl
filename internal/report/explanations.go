@@ -325,6 +325,13 @@ var explanations = map[string]Explanation{
 		Fix:    "Delete or block access to readme.html in production (many security plugins/server rules can do this automatically).",
 	},
 
+	// --- shopify: Shopify storefront checks ---
+	"shopify-detected": {
+		What:   "The site was identified as a Shopify storefront, with the theme it runs.",
+		Impact: "Informational. It tells the rest of this report which template each URL renders and which checks apply.",
+		Fix:    "No action needed.",
+	},
+
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {
 		What:   "The page body is identical to one or more other crawled pages.",
