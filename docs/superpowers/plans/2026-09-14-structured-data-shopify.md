@@ -2712,6 +2712,16 @@ git commit -m "feat(shopify): detect Shopify storefronts and register the analyz
 
 ### Task 9: Template classification and per-template schema gaps
 
+> **Every Shopify fixture must carry a STRONG detection marker.** Detection was tiered during
+> execution: `cdn.shopify.com`, `.myshopify.com` and `/cdn/shop/` are WEAK markers that never
+> set `detected` on their own, because a non-Shopify site embedding a Shopify Buy Button emits
+> exactly those. Only the `X-ShopId`/`X-Shopify-Stage` header, the `Shopify.theme` bootstrap
+> object, or the `shopify-features` script make a site a store. A fixture carrying only a
+> `cdn.shopify.com` script is NOT detected, the analyzer returns nil, and any test asserting
+> "no finding" against it passes vacuously while any test asserting a finding fails. Every
+> fixture below therefore includes the `Shopify.theme` bootstrap line.
+
+
 **Files:**
 - Create: `internal/analyze/shopify/template.go`
 - Create: `internal/analyze/shopify/template_test.go`
@@ -2766,6 +2776,7 @@ Append to `internal/analyze/shopify/shopify_test.go`:
 ```go
 const bareProductPage = `<html><head>
 	<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 </head><body><h1>Tee</h1><p>$19.99</p><button>Add to cart</button></body></html>`
 
 func TestTemplateSchemaGapRollsUpPerTemplate(t *testing.T) {
@@ -2799,6 +2810,7 @@ func TestTemplateSchemaGapRollsUpPerTemplate(t *testing.T) {
 func TestTemplateSchemaGapSilentWhenSchemaPresent(t *testing.T) {
 	product := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
 		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
 		<script type="application/ld+json">{"@type":"BreadcrumbList","itemListElement":[]}</script>
@@ -3068,6 +3080,7 @@ func TestSchemaAppConflict(t *testing.T) {
 	// The theme emits its own Product, then an SEO app injects a second one.
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee","offers":{"@type":"Offer","price":"19.99"}}</script>
 		<script src="https://cdn.shopify.com/extensions/abc/json-ld-for-seo/assets/app.js"></script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee","offers":{"@type":"Offer","price":"24.99"}}</script>
@@ -3092,6 +3105,7 @@ func TestTwoThemeBlocksAreNotAConflict(t *testing.T) {
 	// conflict.
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
 	</head><body><h1>Tee</h1></body></html>`
@@ -3105,6 +3119,7 @@ func TestAppAttributedByBlockIDAttribute(t *testing.T) {
 	// Several apps mark their own block rather than loading a recognizable script first.
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
 		<script type="application/ld+json" id="schemaplus-product">{"@type":"Product","name":"Tee"}</script>
 	</head><body><h1>Tee</h1></body></html>`
@@ -3128,6 +3143,7 @@ func TestAppAttributedByBlockIDAttribute(t *testing.T) {
 func TestClientInjectedSchemaWarning(t *testing.T) {
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script src="https://cdn.shopify.com/extensions/abc/searchpie/assets/app.js"></script>
 	</head><body><h1>Tee</h1></body></html>`
 	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
@@ -3143,6 +3159,7 @@ func TestClientInjectedSchemaWarning(t *testing.T) {
 func TestNoClientInjectionWarningWhenSchemaIsPresent(t *testing.T) {
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script src="https://cdn.shopify.com/extensions/abc/searchpie/assets/app.js"></script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
 	</head><body><h1>Tee</h1></body></html>`
@@ -3369,6 +3386,7 @@ const variantSelector = `<variant-radios><select name="id">
 func TestFlatVariantProduct(t *testing.T) {
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
 		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
 	</head><body><h1>Tee</h1>` + variantSelector + `</body></html>`
@@ -3385,6 +3403,7 @@ func TestFlatVariantProduct(t *testing.T) {
 func TestProductGroupSuppressesFlatVariantWarning(t *testing.T) {
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"ProductGroup","name":"Tee","productGroupID":"T",
 		 "hasVariant":[{"@type":"Product","name":"Tee S"},{"@type":"Product","name":"Tee M"}]}</script>
 	</head><body><h1>Tee</h1>` + variantSelector + `</body></html>`
@@ -3397,6 +3416,7 @@ func TestProductGroupSuppressesFlatVariantWarning(t *testing.T) {
 func TestSingleVariantProductIsNotFlagged(t *testing.T) {
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
 	</head><body><h1>Tee</h1><select name="id"><option value="1">Default</option></select></body></html>`
 	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
@@ -3408,6 +3428,7 @@ func TestSingleVariantProductIsNotFlagged(t *testing.T) {
 func TestSingleOfferForMultiplePrices(t *testing.T) {
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
 		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
 	</head><body><h1>Tee</h1>` + variantSelector + `
@@ -3427,6 +3448,7 @@ func TestSingleOfferForMultiplePrices(t *testing.T) {
 func TestUniformVariantPricesNeedNoRange(t *testing.T) {
 	html := `<html><head>
 		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
 		<script type="application/ld+json">{"@type":"Product","name":"Tee",
 		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
 	</head><body><h1>Tee</h1>` + variantSelector + `
@@ -3771,7 +3793,8 @@ package shopify_test
 
 import "testing"
 
-const shopifyShell = `<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>`
+const shopifyShell = `<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>`
 
 func TestIndexableUtilityPage(t *testing.T) {
 	res := store(t, "https://shop.test", map[string]string{
