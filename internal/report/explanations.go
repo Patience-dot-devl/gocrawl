@@ -1009,7 +1009,17 @@ var explanations = map[string]Explanation{
 	"structured-missing-required": {
 		What:   "A structured-data object is missing required schema.org fields.",
 		Impact: "Incomplete markup is ineligible for the corresponding rich results.",
-		Fix:    "Add the required properties for the schema type (per schema.org / Google's documentation).",
+		Fix:    "Add the required properties for the schema type, per the required tier documented for that type (per schema.org / Google's documentation).",
+	},
+	"structured-missing-recommended": {
+		What:   "Structured data of this type omits fields Google recommends for its rich result, across the pages listed.",
+		Impact: "The page stays eligible for the rich result but renders a plainer one — no ratings, no author, no imagery — so it wins fewer clicks than a fully described competitor.",
+		Fix:    "Add the listed properties to the template that emits this type. Because the gap repeats site-wide, one template edit fixes every affected page.",
+	},
+	"structured-missing-merchant": {
+		What:   "Product markup omits the fields Google Shopping and free product listings read: a product identifier, price validity, shipping, and return policy.",
+		Impact: "Products are ineligible for, or downranked in, Shopping and free listing surfaces, and shoppers see no shipping or returns detail before clicking.",
+		Fix:    "Emit gtin (or mpn), priceValidUntil, offers.shippingDetails and hasMerchantReturnPolicy. Most of this can be templated once from store-level shipping and return settings.",
 	},
 	"structured-duplicate-type": {
 		What:   "A page-level type (Product, Organization, WebSite, ...) is declared in more than one JSON-LD block, usually because a theme and an SEO/marketing app each emit their own copy.",
@@ -1052,7 +1062,7 @@ var explanations = map[string]Explanation{
 		Fix:    "Add relevant JSON-LD (e.g. Article, Product, Organization, BreadcrumbList) where appropriate.",
 	},
 	"structured-data": {
-		What:   "Valid JSON-LD structured data was found, with its declared types.",
+		What:   "Valid JSON-LD structured data was found, with its declared types, including types nested inside other objects (an Offer inside a Product, an Author inside an Article).",
 		Impact: "Positive signal. Enables rich results and clearer entity understanding.",
 		Fix:    "No action needed. Keep the markup accurate and aligned with visible content.",
 	},

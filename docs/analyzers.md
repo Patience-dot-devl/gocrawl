@@ -140,28 +140,53 @@ The coverage `data` lets you spot pages that are crawlable but missing from the 
 
 ## `structured` — JSON-LD structured data
 
-Source: [`internal/analyze/structured/structured.go`](../internal/analyze/structured/structured.go).
-Runs on every HTML page that returned `200`. Extracts `<script type="application/ld+json">`
-blocks and reports their schema.org `@type` values (descending into `@graph` and arrays).
+Runs on every HTML page that returned `200`. Reads the page's `<script
+type="application/ld+json">` blocks through the shared schema.org graph parser (which flattens
+nested objects, `@graph`, and arrays into an addressable node list), then checks what a page
+declares against what its rich results actually require, whether declarations contradict each
+other or the page they sit on, and which pages look like they are missing markup they should
+have.
 
-| Code | Severity | Triggered when | `data` |
-| --- | --- | --- | --- |
-| `structured-invalid-jsonld` | warning | A JSON-LD block is not valid JSON | `error` |
-| `structured-none` | info | The page has no JSON-LD blocks | — |
-| `structured-data` | info | JSON-LD found; lists the de-duplicated `@type`s | `types` |
-| `structured-missing-required` | warning | A typed object of a recognized schema.org type omits a required field | `type`, `missing` |
-| `structured-breadcrumb-candidate` | warning | Breadcrumb-styled nav (aria-label/class containing "breadcrumb") with ≥2 links, no `BreadcrumbList` | `links` |
-| `structured-product-candidate` | warning | Leftover Product/price microdata, or an on-page price plus a cart/buy call-to-action, with no `Product`/`Offer` | `signal` |
-| `structured-article-candidate` | warning | A substantial `<article>` (150+ words) with an author or publish-date signal, no `Article`/`NewsArticle`/`BlogPosting`/`TechArticle`/`Report` | `words` |
-| `structured-video-candidate` | warning | A native `<video>` or YouTube/Vimeo iframe embed, no `VideoObject` | `src` |
+| Code | Severity | Scope | Triggered when | `data` |
+| --- | --- | --- | --- | --- |
+| `structured-invalid-jsonld` | warning | page | A JSON-LD block is not valid JSON | `error` |
+| `structured-none` | info | page | The parsed graph has zero typed nodes and zero parse errors | — |
+| `structured-data` | info | page | JSON-LD found; lists the de-duplicated `@type`s, including nested ones | `types` |
+| `structured-missing-required` | warning | page | A typed object omits a field its rich result requires | `type`, `missing`, `path` |
+| `structured-missing-recommended` | info | **site** | A type omits recommended fields, aggregated across the crawl | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-missing-merchant` | info | **site** | `Product` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-duplicate-type` | warning | page | A page-level type is declared in two or more JSON-LD blocks | `type`, `blocks` |
+| `structured-conflicting-value` | error | page | Duplicate blocks disagree on `name`, `sku`, or an `offers` field | `type`, `field`, `values` |
+| `structured-unresolved-id` | warning | page | An `@id` reference has no matching node on the page | `id`, `property`, `type` |
+| `structured-relative-url` | warning | page | A URL property holds a relative path | `type`, `property`, `value` |
+| `structured-invalid-date` | warning | page | A date property is not ISO 8601 | `type`, `property`, `value` |
+| `structured-malformed-price` | warning | page | A price string carries a symbol, separator, or range | `type`, `property`, `value` |
+| `structured-price-mismatch` | warning | page | `offers.price` differs from the single price rendered on the page | `markup`, `page` |
+| `structured-breadcrumb-candidate` | warning | page | Breadcrumb-styled nav with ≥2 links, no `BreadcrumbList` | `links` |
+| `structured-product-candidate` | warning | page | Product/price microdata, or a price plus a cart call-to-action, with no `Product`/`Offer` | `signal` |
+| `structured-article-candidate` | warning | page | A 150+ word `<article>` with an author or date signal, no article type | `words` |
+| `structured-video-candidate` | warning | page | A `<video>` or YouTube/Vimeo embed, no `VideoObject` | `src` |
 
-> Required-field validation covers a pragmatic subset of common types (`Product`, `Article`,
-> `Event`, `Organization`, `BreadcrumbList`, `FAQPage`, `Recipe`, …), not the full schema.org
-> vocabulary. It descends into `@graph` the same way type extraction does.
+> **Field tiers.** Each recognized type carries a *required* set (absence blocks the rich
+> result), a *recommended* set (absence degrades it), and — for `Product` — a *merchant* set
+> feeding Shopping and free listings. A field written with `|` separators is an any-of group:
+> `gtin|gtin8|gtin12|gtin13|gtin14|mpn` is satisfied by any one identifier.
 
-> The `*-candidate` checks are low-noise heuristics (the same pattern as `aeo`'s
-> `aeo-faq-candidate`): they only fire when the page shows a fairly specific on-page signal for
-> the type, and never fire if a matching `@type` is already present anywhere on the page.
+> **Why two of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
+> so a recommended-field gap repeats identically on every page of a template. Those two codes
+> aggregate into one issue per type, carrying the affected page count and up to five example
+> URLs, instead of one issue per page.
+
+> **Thin copies are exempt.** Objects nested under `itemListElement`, `hasVariant`,
+> `isVariantOf`, `isSimilarTo`, `isRelatedTo` or `isAccessoryOrSparePartFor` are deliberately
+> minimal — a collection page's product tiles carry a name and a URL and nothing else — so
+> eligibility and duplicate checks skip them.
+
+> The `*-candidate` checks are low-noise heuristics: they only fire on a fairly specific
+> on-page signal and never fire when a matching `@type` is already present anywhere on the page.
+
+Source: [`internal/analyze/structured/`](../internal/analyze/structured/), reading pages
+through the shared [`internal/analyze/schemaorg`](../internal/analyze/schemaorg/) parser.
 
 ---
 

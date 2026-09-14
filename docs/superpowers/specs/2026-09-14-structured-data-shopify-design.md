@@ -153,6 +153,13 @@ new result explicitly rather than passing by accident:
 3. `Product`'s required tier grows from `{name}` to the five fields in the table below, so
    pages carrying a name-only `Product` start raising `structured-missing-required`. This
    is the point of the change, not a side effect.
+4. `structured-none` now fires when the parsed graph has zero typed nodes and zero parse
+   errors. The old code fired it when the page had zero `<script
+   type="application/ld+json">` elements. So a page whose only JSON-LD block holds an
+   untyped object (e.g. `{"foo":1}`) previously produced neither `structured-none` nor
+   `structured-data` — it was silent. It now correctly reports `structured-none`.
+   Rationale: a block with no typed object conveys nothing to a search engine, so "has no
+   structured data" is the accurate report and the old silence was a gap.
 
 Codes:
 

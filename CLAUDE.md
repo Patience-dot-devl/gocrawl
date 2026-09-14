@@ -57,6 +57,7 @@ analyzers, and hands everything to the report builder.
 | `internal/crawler` | Concurrent crawl engine, HTTP fetcher, robots.txt, URL normalization, scope rules, link extraction. Defines `Page`, `Link`, `Redirect`, `Result`, `Options`, `Fetcher`. |
 | `internal/render` | Render-mode fetcher selection; headless rendering via chromedp (Core Web Vitals). |
 | `internal/analyze` | The `Analyzer` interface, `Issue`/`Severity` types, `Registry`, and the `EachPage` helper. |
+| `internal/analyze/schemaorg` | Shared JSON-LD parser: flattens a page's `ld+json` into an addressable node graph (`Node`, `Graph`, dotted paths, `@id` resolution). Not an analyzer — the same role `seaurl` plays for UTM parsing. |
 | `internal/analyze/<name>` | One package per analyzer (see below). |
 | `internal/runner` | Wires engine + registry + report into `Run`; also `BuildRegistry` and `ListAnalyzers`. |
 | `internal/report` | Builds the `Report` and serializes it (JSON, CSV, HTML); issue explanations live here. |
@@ -89,7 +90,8 @@ Registered analyzers (in order): `seo`, `redirects` (pkg `httpx`), `links`, `rob
 `hreflang`, `amp`, `duplicates`, `content`, `botwall` (CAPTCHA / bot-challenge detection),
 `wordpress` (CMS-specific), the SEA analyzers `utm` / `tracking` / `datalayer` / `landing` /
 `consent`, and the AI-search analyzers `aeo` (Answer Engine Optimization) / `geo` (Generative
-Engine Optimization). `seaurl` is a shared UTM-parsing helper, **not** an analyzer.
+Engine Optimization). `seaurl` is a shared UTM-parsing helper and `schemaorg` a shared JSON-LD
+parser, **not** analyzers.
 
 `consent` leans on a property of the crawl rather than on markup alone: gocrawl never clicks a
 consent banner, so every page it fetches is a pre-consent visit, and any tracking cookie or
