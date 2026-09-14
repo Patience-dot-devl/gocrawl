@@ -4023,6 +4023,23 @@ git commit -m "feat(shopify): flag indexable utility pages and self-canonical fa
 Append to `internal/analyze/shopify/seo_test.go`:
 
 ```go
+func TestDuplicateProductPathPreservesLocale(t *testing.T) {
+	// A Markets storefront serves the product under its locale prefix. The canonical we
+	// recommend must keep that prefix; /products/tee does not exist in the en-ca market.
+	nested := `<html><head>` + shopifyShell + `</head><body><h1>Tee</h1></body></html>`
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":                                    shopifyHome,
+		"https://shop.test/en-ca/collections/all/products/tee":  nested,
+	})
+	is, ok := find(run(t, res), "shopify-duplicate-product-path")
+	if !ok {
+		t.Fatal("expected shopify-duplicate-product-path on a locale-prefixed nested product URL")
+	}
+	if is.Data["canonical_should_be"] != "https://shop.test/en-ca/products/tee" {
+		t.Errorf("canonical must keep the locale prefix, got %v", is.Data["canonical_should_be"])
+	}
+}
+
 func TestDuplicateProductPath(t *testing.T) {
 	nested := `<html><head>` + shopifyShell + `</head><body><h1>Tee</h1></body></html>`
 	res := store(t, "https://shop.test", map[string]string{
@@ -4092,16 +4109,26 @@ And add:
 // canonicalProductURL returns the /products/<handle> form of a nested
 // /collections/<c>/products/<handle> URL. It returns false for any other URL, including the
 // canonical product path itself.
+//
+// A Shopify Markets storefront serves every route under a locale prefix, so the match skips
+// that prefix via localeOffset — but the returned URL PUTS IT BACK. Recommending a canonical
+// that drops the locale would point the store at a path that does not exist in that market.
 func canonicalProductURL(rawURL string) (string, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", false
 	}
 	segs := pathSegments(u.Path)
-	if len(segs) < 4 || segs[0] != "collections" || segs[2] != "products" {
+	off := localeOffset(segs)
+	rest := segs[off:]
+	if len(rest) < 4 || rest[0] != "collections" || rest[2] != "products" {
 		return "", false
 	}
-	return u.Scheme + "://" + u.Host + "/products/" + segs[3], true
+	prefix := ""
+	if off > 0 {
+		prefix = "/" + segs[0]
+	}
+	return u.Scheme + "://" + u.Host + prefix + "/products/" + rest[3], true
 }
 ```
 
