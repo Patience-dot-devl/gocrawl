@@ -80,7 +80,9 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 	}
 	g, _ := schemaorg.Parse(p.Doc)
 	tmpl := Classify(p.FinalURL)
-	return schemaIssues(p, g, tmpl)
+	issues := schemaIssues(p, g, tmpl)
+	issues = append(issues, variantIssues(p, g, tmpl)...)
+	return issues
 }
 
 // site is what detection learned about the store, aggregated across every crawled page.

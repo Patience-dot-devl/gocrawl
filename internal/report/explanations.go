@@ -346,6 +346,16 @@ var explanations = map[string]Explanation{
 		Impact: "Google renders JavaScript and will usually see it, but rendering is deferred and other crawlers and AI answer engines often do not render at all, so the markup is invisible to them.",
 		Fix:    "Re-run the crawl with --render headless to confirm what the app emits. Prefer server-rendered structured data in theme Liquid, where every crawler sees it on the first fetch.",
 	},
+	"shopify-flat-variant-product": {
+		What:   "The page sells several variants but its markup describes a single Product, with no ProductGroup or hasVariant.",
+		Impact: "Search engines see one item where the store sells several, so variant-level attributes — size, colour, per-variant price and availability — never reach Shopping or rich results.",
+		Fix:    "Emit a ProductGroup with productGroupID and variesBy, and one Product per variant under hasVariant.",
+	},
+	"shopify-single-offer-range": {
+		What:   "The product's variants are priced differently, but the markup states one Offer price.",
+		Impact: "The stated price is wrong for every variant that does not match it, and a price that contradicts the page risks suppression of price-bearing rich results.",
+		Fix:    "Use an AggregateOffer with lowPrice and highPrice, or give each variant its own Offer under a ProductGroup.",
+	},
 
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {

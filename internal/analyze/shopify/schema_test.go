@@ -106,3 +106,96 @@ func TestNoClientInjectionWarningWhenSchemaIsPresent(t *testing.T) {
 		t.Error("no warning is needed when the raw HTML already carries JSON-LD")
 	}
 }
+
+const variantSelector = `<variant-radios><select name="id">
+	<option value="1">Small</option><option value="2">Medium</option></select></variant-radios>`
+
+func TestFlatVariantProduct(t *testing.T) {
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
+	</head><body><h1>Tee</h1>` + variantSelector + `</body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	is, ok := find(run(t, res), "shopify-flat-variant-product")
+	if !ok {
+		t.Fatal("expected shopify-flat-variant-product")
+	}
+	if is.Data["variants"] != 2 {
+		t.Errorf("expected variants=2, got %v", is.Data["variants"])
+	}
+}
+
+func TestProductGroupSuppressesFlatVariantWarning(t *testing.T) {
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script type="application/ld+json">{"@type":"ProductGroup","name":"Tee","productGroupID":"T",
+		 "hasVariant":[{"@type":"Product","name":"Tee S"},{"@type":"Product","name":"Tee M"}]}</script>
+	</head><body><h1>Tee</h1>` + variantSelector + `</body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected — otherwise this test passes vacuously")
+	}
+	if _, ok := find(issues, "shopify-flat-variant-product"); ok {
+		t.Error("a ProductGroup already models the variants")
+	}
+}
+
+func TestSingleVariantProductIsNotFlagged(t *testing.T) {
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
+	</head><body><h1>Tee</h1><select name="id"><option value="1">Default</option></select></body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected — otherwise this test passes vacuously")
+	}
+	if _, ok := find(issues, "shopify-flat-variant-product"); ok {
+		t.Error("a product with one variant has nothing to model")
+	}
+}
+
+func TestSingleOfferForMultiplePrices(t *testing.T) {
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
+	</head><body><h1>Tee</h1>` + variantSelector + `
+		<script type="application/json" id="ProductJson-product-template">
+			{"variants":[{"id":1,"price":1999},{"id":2,"price":2499}]}
+		</script></body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	is, ok := find(run(t, res), "shopify-single-offer-range")
+	if !ok {
+		t.Fatal("expected shopify-single-offer-range")
+	}
+	if is.Data["prices"] != 2 {
+		t.Errorf("expected prices=2, got %v", is.Data["prices"])
+	}
+}
+
+func TestUniformVariantPricesNeedNoRange(t *testing.T) {
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
+	</head><body><h1>Tee</h1>` + variantSelector + `
+		<script type="application/json" id="ProductJson-product-template">
+			{"variants":[{"id":1,"price":1999},{"id":2,"price":1999}]}
+		</script></body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected — otherwise this test passes vacuously")
+	}
+	if _, ok := find(issues, "shopify-single-offer-range"); ok {
+		t.Error("variants that all cost the same are correctly described by one Offer")
+	}
+}

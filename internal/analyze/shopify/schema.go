@@ -1,7 +1,9 @@
 package shopify
 
 import (
+	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -138,4 +140,124 @@ func schemaIssues(p *crawler.Page, g schemaorg.Graph, tmpl Template) []analyze.I
 		}
 	}
 	return issues
+}
+
+// variantIssues reports product pages whose markup describes fewer things than the page sells.
+// Shopify's own variant machinery is visible in the DOM, so the gap between what the page
+// offers and what the markup says is directly measurable.
+func variantIssues(p *crawler.Page, g schemaorg.Graph, tmpl Template) []analyze.Issue {
+	if tmpl != TemplateProduct {
+		return nil
+	}
+	variants := variantCount(p.Doc)
+	if variants < 2 {
+		return nil
+	}
+	var issues []analyze.Issue
+
+	products := g.OfType("Product")
+	modelled := g.HasType("ProductGroup")
+	for _, n := range products {
+		if g.HasValue(n, "hasVariant") || g.HasValue(n, "isVariantOf") {
+			modelled = true
+		}
+	}
+	if len(products) > 0 && !modelled {
+		issues = append(issues, analyze.Issue{
+			Analyzer: "shopify", URL: p.FinalURL, Severity: analyze.Warning,
+			Code:    "shopify-flat-variant-product",
+			Message: "Product markup describes one item but the page sells several variants",
+			Data:    map[string]any{"variants": variants},
+		})
+	}
+
+	// A single Offer states one price. When the variants do not share a price, that price is
+	// wrong for most of them, and an AggregateOffer with a low/high range is the honest shape.
+	prices := variantPrices(p.Doc)
+	if len(prices) > 1 && !g.HasType("AggregateOffer") {
+		singleOffer := false
+		for _, n := range products {
+			if len(g.NodesAt(n, "offers")) == 1 {
+				singleOffer = true
+			}
+		}
+		if singleOffer {
+			issues = append(issues, analyze.Issue{
+				Analyzer: "shopify", URL: p.FinalURL, Severity: analyze.Info,
+				Code:    "shopify-single-offer-range",
+				Message: "Variants are priced differently but the markup states a single Offer price",
+				Data:    map[string]any{"prices": len(prices), "variants": variants},
+			})
+		}
+	}
+	return issues
+}
+
+// variantSelectors are the DOM shapes Shopify themes use to let a shopper pick a variant.
+var variantSelectors = []string{
+	`select[name="id"] option`,
+	`input[name="id"]`,
+	`variant-radios input`,
+	`variant-selects option`,
+	`[data-variant-id]`,
+}
+
+// variantCount returns the largest number of variants any selector on the page exposes.
+func variantCount(doc *goquery.Document) int {
+	most := 0
+	for _, sel := range variantSelectors {
+		if n := doc.Find(sel).Length(); n > most {
+			most = n
+		}
+	}
+	return most
+}
+
+// variantPrices returns the distinct variant prices from the product JSON Shopify themes
+// embed for their own JavaScript. The units do not matter — themes emit cents here and
+// decimals elsewhere — because only the count of distinct values is used.
+func variantPrices(doc *goquery.Document) []float64 {
+	var raw string
+	doc.Find(`script[type="application/json"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		id, _ := s.Attr("id")
+		if !strings.HasPrefix(id, "ProductJson") && !strings.Contains(id, "product-json") {
+			return true
+		}
+		raw = s.Text()
+		return false
+	})
+	if raw == "" {
+		return nil
+	}
+	var payload struct {
+		Variants []struct {
+			Price any `json:"price"`
+		} `json:"variants"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil
+	}
+	seen := make(map[float64]bool)
+	var out []float64
+	for _, v := range payload.Variants {
+		var price float64
+		switch t := v.Price.(type) {
+		case float64:
+			price = t
+		case string:
+			parsed, err := strconv.ParseFloat(strings.ReplaceAll(t, ",", ""), 64)
+			if err != nil {
+				continue
+			}
+			price = parsed
+		default:
+			continue
+		}
+		if seen[price] {
+			continue
+		}
+		seen[price] = true
+		out = append(out, price)
+	}
+	return out
 }
