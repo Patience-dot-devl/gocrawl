@@ -245,34 +245,82 @@ func TestRelativeURLDuplicateValueAcrossPropertiesCollapses(t *testing.T) {
 	}
 }
 
-func TestNormalizePriceFormats(t *testing.T) {
-	// Exercises normalizePrice's separator disambiguation through the public analyzer
-	// behaviour: for each case, markup and on-page price are the same underlying amount
-	// written in a different format, so the check must stay silent. The two ambiguous forms
-	// carry a markup price that genuinely differs, to prove the guard suppresses the check
-	// entirely rather than coincidentally agreeing.
+func TestNormalizePriceFormatsProduceExactValues(t *testing.T) {
+	// Exercises normalizePrice's separator disambiguation for six on-page price formats.
+	// Each case is paired against a sentinel markup price (0.01) that cannot coincide with
+	// any correct OR plausibly-wrong reading of these page prices, so the assertion cannot
+	// pass by accident: if the format fails to parse at all, find() returns ok=false and the
+	// test fails outright (rather than the mismatch check being silently guard-suppressed and
+	// the test passing for the wrong reason); if it parses to the wrong number, the
+	// Data["page"] check catches it directly.
+	//
+	// An earlier version of this table instead set markup equal to each page price and
+	// asserted silence. That let four of the eight rows (plain US decimal, US
+	// thousands-then-decimal, comma-only thousands grouping, and — worst of all — dot-only
+	// thousands grouping, which fails to parse under the pre-fix code and is silently
+	// guard-suppressed rather than actually matched) pass unchanged against the pre-fix,
+	// comma-strip-only normalizePrice. Asserting an exact Data["page"] value against a markup
+	// that can never coincidentally match removes that blind spot.
+	const markup = "0.01"
 	cases := []struct {
-		name        string
-		markupPrice string // offers.price in JSON-LD, already a bare decimal
-		pagePrice   string // as it appears in the page body
+		name      string
+		pagePrice string
+		want      string // formatPrice's rendering of the correctly parsed page price
 	}{
-		{"us decimal point", "19.99", "$19.99"},
-		{"eu decimal comma", "19.99", "€19,99"},
-		{"us thousands dot then decimal", "1299.00", "$1,299.00"},
-		{"eu thousands dot then decimal comma", "1299.00", "€1.299,00"},
-		{"dot thousands grouping only", "1234567", "1.234.567 EUR"},
-		{"comma thousands grouping only", "1234567", "1,234,567 USD"},
-		{"ambiguous single comma stays silent", "999.00", "$1,299"},
-		{"ambiguous single dot stays silent", "999.00", "€1.299"},
+		{"us decimal point", "$19.99", "19.99"},
+		{"eu decimal comma", "€19,99", "19.99"},
+		{"us thousands dot then decimal", "$1,299.00", "1299"},
+		{"eu thousands dot then decimal comma", "€1.299,00", "1299"},
+		{"dot thousands grouping only", "1.234.567 EUR", "1234567"},
+		{"comma thousands grouping only", "1,234,567 USD", "1234567"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			res := page(t, `<html><head><script type="application/ld+json">
 				{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
-				 "offers":{"@type":"Offer","price":"`+tc.markupPrice+`","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+				 "offers":{"@type":"Offer","price":"`+markup+`","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+			</script></head><body><p class="price">`+tc.pagePrice+` </p><button>Add to cart</button></body></html>`)
+			// The trailing space inside <p> matters for the "...EUR"/"...USD" suffix
+			// cases: goquery's Text() concatenates adjacent elements with no inserted
+			// whitespace, so "EUR" immediately followed by "Add" would fail priceRe's
+			// trailing \b word boundary (both are word characters) if the space weren't
+			// there.
+			is, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch")
+			if !ok {
+				t.Fatalf("page=%s: expected structured-price-mismatch against sentinel markup %s (found none, meaning the page price failed to parse)", tc.pagePrice, markup)
+			}
+			if is.Data["page"] != tc.want {
+				t.Errorf("page=%s: expected normalized page price %s, got %v", tc.pagePrice, tc.want, is.Data["page"])
+			}
+			if is.Data["markup"] != markup {
+				t.Errorf("page=%s: expected markup price %s, got %v", tc.pagePrice, markup, is.Data["markup"])
+			}
+		})
+	}
+}
+
+func TestAmbiguousPriceFormsStaySilent(t *testing.T) {
+	// A single separator followed by exactly three digits ("$1,299", "€1.299") is genuinely
+	// ambiguous: it could be 1299 or 1.299. The markup price (999.00) deliberately differs
+	// from every plausible reading of the page price, so a wrongly permissive implementation
+	// — one that guesses at the value instead of reporting it unparseable — would produce a
+	// mismatch here, not a coincidental match; only correctly recognizing the ambiguity and
+	// skipping the comparison keeps this silent.
+	cases := []struct {
+		name      string
+		pagePrice string
+	}{
+		{"ambiguous single comma", "$1,299"},
+		{"ambiguous single dot", "€1.299"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := page(t, `<html><head><script type="application/ld+json">
+				{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+				 "offers":{"@type":"Offer","price":"999.00","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
 			</script></head><body><p class="price">`+tc.pagePrice+`</p><button>Add to cart</button></body></html>`)
 			if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
-				t.Errorf("markup=%s page=%s: expected no mismatch", tc.markupPrice, tc.pagePrice)
+				t.Errorf("page=%s: an ambiguous price must not be compared against markup", tc.pagePrice)
 			}
 		})
 	}
@@ -308,14 +356,28 @@ func TestEUPriceMatchIsSilent(t *testing.T) {
 
 func TestAmbiguousPagePriceSuppressesCheckEvenAmongMultiplePrices(t *testing.T) {
 	// An ambiguous price must not be silently dropped from the distinct-price count: if it
-	// were, a page that actually shows two prices (one ambiguous, one not) could look like
+	// were, a page that actually shows two prices (one clear, one ambiguous) would look like
 	// it shows exactly one, and the mismatch check would fire on a comparison it has no
-	// business making. distinctPagePrices must give up on the whole page instead.
+	// business making.
+	//
+	// The markup price (24.99) deliberately DISAGREES with the page's unambiguous price
+	// (19.99) — that disagreement is what makes this test load-bearing. Under the correct
+	// implementation, distinctPagePrices hits the ambiguous "$1,299", returns nil, and the
+	// len(onPage) != 1 guard suppresses the check before markup is even compared: no finding.
+	// Under a skip-and-continue implementation that drops unparseable prices instead of
+	// giving up on the page, the ambiguous price would simply be dropped, onPage would end up
+	// [19.99], the guard would pass, 24.99 would disagree with 19.99, and a finding WOULD
+	// fire. An earlier version of this test used a markup price equal to the page's
+	// unambiguous price; both the correct and the skip-and-continue implementation produce
+	// silence in that shape (agreement in one case, guard-bypass-then-coincidental-agreement
+	// in the other), so it never actually exercised the divergence — reverting
+	// distinctPagePrices to skip-and-continue left it passing. See the fix-round-2 report
+	// entry for the deliberate-revert run that caught this.
 	res := page(t, `<html><head><script type="application/ld+json">
 		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
-		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+		 "offers":{"@type":"Offer","price":"24.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
 	</script></head><body><p class="price">$19.99</p><s>$1,299</s><button>Add to cart</button></body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
-		t.Error("an ambiguous price anywhere on the page must suppress the mismatch check")
+		t.Error("an ambiguous price anywhere on the page must suppress the mismatch check, even when a different, unambiguous price on the page would otherwise disagree with markup")
 	}
 }
