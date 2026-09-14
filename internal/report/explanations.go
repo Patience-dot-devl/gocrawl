@@ -331,6 +331,11 @@ var explanations = map[string]Explanation{
 		Impact: "Informational. It tells the rest of this report which template each URL renders and which checks apply.",
 		Fix:    "No action needed.",
 	},
+	"shopify-template-schema-gap": {
+		What:   "Every crawled page of this Shopify template is missing a schema.org type that template should carry.",
+		Impact: "The whole template is ineligible for its rich result — product pages without Product markup win no price, rating, or availability treatment in search.",
+		Fix:    "Add the markup to the template once (theme Liquid or an SEO app), and every page it renders gains it. Check the example URLs to confirm the template was identified correctly.",
+	},
 
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {

@@ -66,6 +66,7 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 		Analyzer: "shopify", URL: base, Severity: analyze.Info,
 		Code: "shopify-detected", Message: "Site is a Shopify storefront", Data: data,
 	}}
+	issues = append(issues, templateGapIssues(result, base)...)
 	return issues
 }
 
