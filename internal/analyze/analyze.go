@@ -6,6 +6,7 @@ package analyze
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
@@ -124,4 +125,20 @@ func Run(ctx context.Context, analyzers []Analyzer, result *crawler.Result) []Is
 		issues = append(issues, a.Analyze(ctx, result)...)
 	}
 	return issues
+}
+
+// SiteBase returns the scheme://host of the crawl, derived from the seed or, failing that,
+// from the first crawled page's final URL. Analyzers that aggregate a finding across the
+// whole crawl — a server configuration, a CMS fingerprint, a template-wide schema gap — use
+// it as the issue URL, so one site-wide fact does not repeat on every page of the report.
+func SiteBase(result *crawler.Result) string {
+	if u, err := url.Parse(result.Seed); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	for _, p := range result.Pages {
+		if u, err := url.Parse(p.FinalURL); err == nil && u.Host != "" {
+			return u.Scheme + "://" + u.Host
+		}
+	}
+	return result.Seed
 }

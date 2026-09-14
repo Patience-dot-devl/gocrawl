@@ -79,8 +79,11 @@ func TestStructuredMissingRequired(t *testing.T) {
 }
 
 func TestStructuredValidProductNoViolation(t *testing.T) {
+	// Deliberate change 3: Product's required tier is now name, image, offers.price,
+	// offers.priceCurrency and offers.availability, so a complete Product needs all five.
 	res := page(t, `<html><head><script type="application/ld+json">
-		{"@context":"https://schema.org","@type":"Product","name":"Widget"}
+		{"@context":"https://schema.org","@type":"Product","name":"Widget","image":"https://x.test/w.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
 	</script></head><body></body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); ok {
 		t.Error("did not expect structured-missing-required for a complete Product")
@@ -182,5 +185,51 @@ func TestStructuredVideoCandidateSuppressedByExistingType(t *testing.T) {
 	</body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-video-candidate"); ok {
 		t.Error("did not expect structured-video-candidate when VideoObject is already present")
+	}
+}
+
+// Pinned: the three deliberate behaviour changes from the phase 1 refactor. Each of these
+// documents a case whose result intentionally differs from the pre-schemaorg analyzer.
+
+func TestStructuredNestedTypesAreReported(t *testing.T) {
+	// Deliberate change 2: the old collectTypes descended only into @graph, so a nested
+	// Offer never appeared in the reported type list.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","offers":{"@type":"Offer","price":"19.99",
+		 "priceCurrency":"USD","availability":"https://schema.org/InStock"},"image":"https://x.test/a.jpg"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-data")
+	if !ok {
+		t.Fatal("expected structured-data issue")
+	}
+	types, _ := is.Data["types"].([]string)
+	var sawOffer bool
+	for _, ty := range types {
+		if ty == "Offer" {
+			sawOffer = true
+		}
+	}
+	if !sawOffer {
+		t.Errorf("expected the nested Offer in the reported types, got %v", types)
+	}
+}
+
+func TestStructuredNestedOfferSuppressesProductCandidate(t *testing.T) {
+	// Deliberate change 2, second half: a nested Offer now suppresses the product candidate.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"WebPage","mainEntity":{"@type":"Offer","price":"19.99"}}
+	</script></head><body><p>$19.99</p><button>Add to cart</button></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate"); ok {
+		t.Error("did not expect structured-product-candidate when a nested Offer is present")
+	}
+}
+
+func TestStructuredBareOfferNoLongerRequired(t *testing.T) {
+	// Deliberate change 1: Offer left the top-level required-field table.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Offer","url":"https://x.test/p"}
+	</script></head><body></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); ok {
+		t.Error("a bare top-level Offer is no longer checked for required fields")
 	}
 }
