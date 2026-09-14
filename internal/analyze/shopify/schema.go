@@ -202,11 +202,34 @@ var variantSelectors = []string{
 	`[data-variant-id]`,
 }
 
-// variantCount returns the largest number of variants any selector on the page exposes.
+// optionSelectors are the variantSelectors entries that select <option> elements, where a
+// theme's leading placeholder ("Choose an option", "Select size") carries no value or an
+// empty value and must not be counted as a variant.
+var optionSelectors = map[string]bool{
+	`select[name="id"] option`: true,
+	`variant-selects option`:   true,
+}
+
+// variantCount returns the largest number of variants any selector on the page exposes. It
+// takes the maximum across selector shapes, not the sum: themes routinely render the same
+// variant set twice — a <select> for narrow viewports, radio inputs for wide — and summing
+// would double-count, letting a single-variant product trip the >= 2 gate on nothing more than
+// a duplicated control. A placeholder <option> with no value (or an empty one) is filtered out
+// of the two option-based selectors so it is not counted as a variant either. This remains an
+// approximation in one direction: [data-variant-id] attached to several swatch or thumbnail
+// elements per variant, or an input[name="id"] rendered more than once for the same variant,
+// would still overcount.
 func variantCount(doc *goquery.Document) int {
 	most := 0
 	for _, sel := range variantSelectors {
-		if n := doc.Find(sel).Length(); n > most {
+		found := doc.Find(sel)
+		if optionSelectors[sel] {
+			found = found.FilterFunction(func(_ int, s *goquery.Selection) bool {
+				v, ok := s.Attr("value")
+				return ok && strings.TrimSpace(v) != ""
+			})
+		}
+		if n := found.Length(); n > most {
 			most = n
 		}
 	}

@@ -199,3 +199,46 @@ func TestUniformVariantPricesNeedNoRange(t *testing.T) {
 		t.Error("variants that all cost the same are correctly described by one Offer")
 	}
 }
+
+func TestVariantCountTakesMaxAcrossSelectorsNotSum(t *testing.T) {
+	// A single variant, rendered twice by two different selector shapes: a hidden input for
+	// the buy form and a data-variant-id element for a swatch. max(1,1) = 1, below the >= 2
+	// gate. A regression to summing across selectors would read 1+1 = 2 and trip it on a
+	// product with nothing to model.
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
+	</head><body><h1>Tee</h1>
+		<input type="hidden" name="id" value="1">
+		<div data-variant-id="1">In stock</div>
+	</body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected — otherwise this test passes vacuously")
+	}
+	if _, ok := find(issues, "shopify-flat-variant-product"); ok {
+		t.Error("one variant rendered by two selectors is still one variant, not two")
+	}
+}
+
+func TestPlaceholderOptionIsNotCountedAsVariant(t *testing.T) {
+	// A leading "Choose an option" placeholder with no value is not a variant. A single real
+	// variant plus that placeholder must not trip the >= 2 gate.
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
+	</head><body><h1>Tee</h1>
+		<select name="id"><option value="">Choose an option</option><option value="1">Default</option></select>
+	</body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected — otherwise this test passes vacuously")
+	}
+	if _, ok := find(issues, "shopify-flat-variant-product"); ok {
+		t.Error("a placeholder option with no value is not a second variant")
+	}
+}
