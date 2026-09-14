@@ -24,11 +24,14 @@ func (Analyzer) Description() string {
 }
 
 func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
-	issues := analyze.EachPage(result, a.analyzePage)
-	return issues
+	roll := newRollup()
+	issues := analyze.EachPage(result, func(p *crawler.Page) []analyze.Issue {
+		return a.analyzePage(p, roll)
+	})
+	return append(issues, roll.issues(analyze.SiteBase(result))...)
 }
 
-func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
+func (a Analyzer) analyzePage(p *crawler.Page, roll *rollup) []analyze.Issue {
 	if !p.IsHTML() || p.StatusCode != 200 {
 		return nil
 	}
@@ -42,7 +45,7 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 			Data: map[string]any{"error": e.Err},
 		})
 	}
-	issues = append(issues, requiredIssues(p, g)...)
+	issues = append(issues, requiredIssues(p, g, roll)...)
 	issues = append(issues, candidateIssues(p, g)...)
 
 	// A page with no parsed nodes and no failed blocks has no JSON-LD at all. Checking the
@@ -62,49 +65,4 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		})
 	}
 	return issues
-}
-
-// requiredIssues reports typed nodes missing the fields their rich result requires. Task 4
-// replaces this with the table-driven eligibility check in eligibility.go.
-func requiredIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
-	var issues []analyze.Issue
-	for _, n := range g.Nodes {
-		for _, ty := range n.Types {
-			req, known := legacyRequired[ty]
-			if !known {
-				continue
-			}
-			var missing []string
-			for _, f := range req {
-				if !g.HasValue(n, f) {
-					missing = append(missing, f)
-				}
-			}
-			if len(missing) > 0 {
-				issues = append(issues, analyze.Issue{
-					Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
-					Code: "structured-missing-required", Message: "Structured-data object is missing required schema.org fields",
-					Data: map[string]any{"type": ty, "missing": missing},
-				})
-			}
-		}
-	}
-	return issues
-}
-
-// legacyRequired is the pre-eligibility required-field table, carried unchanged except that
-// Offer has left it — its fields are now reached through Product via a dotted path.
-var legacyRequired = map[string][]string{
-	"Product":        {"name"},
-	"Article":        {"headline"},
-	"NewsArticle":    {"headline"},
-	"BlogPosting":    {"headline"},
-	"Recipe":         {"name"},
-	"Event":          {"name", "startDate"},
-	"Organization":   {"name"},
-	"LocalBusiness":  {"name"},
-	"Person":         {"name"},
-	"BreadcrumbList": {"itemListElement"},
-	"FAQPage":        {"mainEntity"},
-	"VideoObject":    {"name", "thumbnailUrl"},
 }
