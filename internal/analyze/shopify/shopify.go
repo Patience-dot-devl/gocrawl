@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
+	"github.com/Patience-dot-devl/gocrawl/internal/analyze/schemaorg"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
@@ -67,7 +68,19 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 		Code: "shopify-detected", Message: "Site is a Shopify storefront", Data: data,
 	}}
 	issues = append(issues, templateGapIssues(result, base)...)
+	issues = append(issues, analyze.EachPage(result, a.analyzePage)...)
 	return issues
+}
+
+// analyzePage runs the checks that are genuinely per page — a conflict or a flattened variant
+// is a property of one template render, not of the store.
+func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
+	if !p.IsHTML() || p.StatusCode != 200 {
+		return nil
+	}
+	g, _ := schemaorg.Parse(p.Doc)
+	tmpl := Classify(p.FinalURL)
+	return schemaIssues(p, g, tmpl)
 }
 
 // site is what detection learned about the store, aggregated across every crawled page.

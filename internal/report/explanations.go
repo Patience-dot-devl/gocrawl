@@ -336,6 +336,16 @@ var explanations = map[string]Explanation{
 		Impact: "The whole template is ineligible for its rich result — product pages without Product markup win no price, rating, or availability treatment in search.",
 		Fix:    "Add the markup to the template once (theme Liquid or an SEO app), and every page it renders gains it. Check the example URLs to confirm the template was identified correctly.",
 	},
+	"shopify-schema-app-conflict": {
+		What:   "Two sources — typically the theme and an SEO app — each emit Product structured data on the same page, without knowing about each other.",
+		Impact: "Search engines pick one and discard the other, so the page may be represented by stale or incomplete markup, and any disagreement between them risks a structured-data manual action.",
+		Fix:    "Pick one owner. Either disable structured data in the theme (most themes expose a setting) or turn off the app's Product schema, so a single source emits it.",
+	},
+	"shopify-schema-client-injected": {
+		What:   "A structured-data app is installed, but the HTML served to the crawler contains no JSON-LD — the app is injecting it with JavaScript.",
+		Impact: "Google renders JavaScript and will usually see it, but rendering is deferred and other crawlers and AI answer engines often do not render at all, so the markup is invisible to them.",
+		Fix:    "Re-run the crawl with --render headless to confirm what the app emits. Prefer server-rendered structured data in theme Liquid, where every crawler sees it on the first fetch.",
+	},
 
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {
