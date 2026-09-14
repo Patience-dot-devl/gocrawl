@@ -12,6 +12,16 @@
 
 ## Global Constraints
 
+> **Correction applied mid-execution (Task 5).** The repo already has
+> `TestAllAnalyzerCodesHaveExplanations` in `internal/report/explanations_test.go`, a static
+> contract test that fails the whole-repo suite the moment an analyzer emits a code with no
+> entry in `internal/report/explanations.go`. That means **every task that introduces a new
+> issue code must add its explanation entry in the same commit** — the suite will not go green
+> otherwise. Tasks 7, 12 and 16 therefore do NOT add entries for codes an earlier task already
+> shipped; re-adding them is a duplicate-map-key compile error. Those three tasks are
+> verification and documentation only, plus entries for any code not yet covered.
+
+
 - Module path is `github.com/Patience-dot-devl/gocrawl`. Go 1.26+.
 - Analyzers must be **pure**: read a `crawler.Result`, return `[]analyze.Issue`. Never fetch, never mutate shared state, never print. The single exception in this plan is the opt-in `/products.json` probe in Task 15, which uses the injected `crawler.Fetcher` exactly like the `sitemap` and `wordpress` analyzers do.
 - `schemaorg` is **not** an analyzer. It emits no `analyze.Issue` and is never registered. It is a shared helper, the same role `internal/analyze/seaurl` plays for UTM parsing.
@@ -2167,6 +2177,12 @@ Extend `integrity.go`'s import block to `"net/url"`, `"regexp"`, `"sort"`, `"str
 	issues = append(issues, valueIssues(p, g)...)
 ```
 
+Then add explanation entries for all four new codes to `internal/report/explanations.go`, using
+the text given in Task 7 Step 3 for `structured-relative-url`, `structured-invalid-date`,
+`structured-malformed-price` and `structured-price-mismatch`. The repo's
+`TestAllAnalyzerCodesHaveExplanations` fails the whole-repo suite without them, so they belong
+in this commit rather than Task 7's.
+
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `go test ./internal/analyze/structured/ ./internal/analyze/schemaorg/ -v`
@@ -2246,7 +2262,12 @@ and 6; `TestDynamicallyCodedIssuesHaveExplanations` names the two rollup codes.
 
 - [ ] **Step 3: Add the explanations**
 
-Insert into the `structured` block of `explanations` in `internal/report/explanations.go`:
+Tasks 5 and 6 have already added entries for `structured-duplicate-type`,
+`structured-conflicting-value`, `structured-unresolved-id`, `structured-relative-url`,
+`structured-invalid-date`, `structured-malformed-price` and `structured-price-mismatch` — the
+contract test forced them into those commits. **Do not re-add any of them; a duplicate map key
+will not compile.** Verify each is present and complete, then add ONLY the two codes the
+contract test cannot see, because the rollup builds its `Code` from a variable:
 
 ```go
 	"structured-missing-recommended": {
@@ -2258,41 +2279,6 @@ Insert into the `structured` block of `explanations` in `internal/report/explana
 		What:   "Product markup omits the fields Google Shopping and free product listings read: a product identifier, price validity, shipping, and return policy.",
 		Impact: "Products are ineligible for, or downranked in, Shopping and free listing surfaces, and shoppers see no shipping or returns detail before clicking.",
 		Fix:    "Emit gtin (or mpn), priceValidUntil, offers.shippingDetails and hasMerchantReturnPolicy. Most of this can be templated once from store-level shipping and return settings.",
-	},
-	"structured-duplicate-type": {
-		What:   "The page declares the same page-level schema.org type in more than one JSON-LD block, usually because a theme and an SEO app each emit their own.",
-		Impact: "Search engines choose one block and ignore the rest, and which one they choose is not under the site's control — so the page may be represented by whichever markup is less complete.",
-		Fix:    "Emit each page-level type once. Disable structured data in either the theme or the app so a single source owns it.",
-	},
-	"structured-conflicting-value": {
-		What:   "Duplicate structured-data blocks give different answers for a key property such as price, SKU, or name.",
-		Impact: "One of the two is wrong. A price that disagrees with the page can trigger a manual action for mismatched structured data and suppress rich results entirely.",
-		Fix:    "Remove the duplicate block. Keep the source that reflects live product data and make sure it matches what the page displays.",
-	},
-	"structured-unresolved-id": {
-		What:   "A JSON-LD property references another node by @id, but no node with that @id exists on the page.",
-		Impact: "The referenced entity — a publisher, brand, or parent product — is silently dropped, so the property conveys nothing.",
-		Fix:    "Either declare the referenced node on the page or inline the entity's properties instead of referencing it.",
-	},
-	"structured-relative-url": {
-		What:   "A structured-data URL property holds a relative path rather than an absolute URL.",
-		Impact: "Structured data is consumed outside the page's context, so a relative path resolves against nothing and the image or link is discarded.",
-		Fix:    "Emit absolute URLs (including scheme and host) for url, image, logo, thumbnailUrl, contentUrl, embedUrl and sameAs.",
-	},
-	"structured-invalid-date": {
-		What:   "A structured-data date property is not in ISO 8601 format.",
-		Impact: "An unparseable date is ignored, costing whatever it signalled — article freshness, event timing, or an offer's expiry.",
-		Fix:    "Format dates as YYYY-MM-DD or a full ISO 8601 timestamp such as 2026-09-14T08:30:00+02:00.",
-	},
-	"structured-malformed-price": {
-		What:   "A price property carries a currency symbol, a thousands separator, or a range instead of a bare decimal number.",
-		Impact: "The price fails to parse, which makes the offer invalid and removes the product from price-bearing rich results.",
-		Fix:    "Write the price as digits with an optional decimal point (19.99, not $1,299.00) and put the currency in priceCurrency.",
-	},
-	"structured-price-mismatch": {
-		What:   "The price in Product structured data differs from the price rendered on the page.",
-		Impact: "Markup that contradicts visible content violates Google's structured-data guidelines and risks a manual action suppressing every rich result on the site.",
-		Fix:    "Generate the markup price from the same data that renders the visible price, so discounts and currency changes cannot drift apart.",
 	},
 ```
 
@@ -4388,6 +4374,13 @@ jq -r '.issues[] | select(.analyzer=="shopify" or .analyzer=="structured") | "\(
 Expected: `shopify-detected` present; `structured-missing-merchant` present for `Product`;
 no `structured-price-mismatch` storm (if one appears on most pages, the mismatch heuristic
 needs its ambiguity guard reviewed before this ships).
+
+Also check `structured-unresolved-id` specifically. Task 5's implementer flagged that
+`Graph.Resolve` is scoped to one page, so a site that declares `Organization` or `WebSite` once
+(on the homepage) and references it by `@id` from every other page would raise this warning
+site-wide. If the smoke test shows it firing on most pages, the fix is a site-wide `@id` index
+built in `Analyze` before the per-page pass — report only references unresolvable anywhere in
+the crawl. Do not make that change speculatively; make it only if the evidence appears.
 
 - [ ] **Step 10: Commit**
 
