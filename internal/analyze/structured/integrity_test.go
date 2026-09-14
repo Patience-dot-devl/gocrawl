@@ -89,3 +89,40 @@ func TestResolvedIDReferenceIsSilent(t *testing.T) {
 		t.Error("a reference whose target is on the page must not be flagged")
 	}
 }
+
+func TestMultipleUnresolvedIDsOnOneNodeAreDeterministic(t *testing.T) {
+	// One node carries two different dangling references, on two different properties.
+	// n.Props is a map, and Go randomizes map iteration order per run, so a naive range
+	// over it would make both the order of the emitted issues and, via the seen dedup,
+	// which property gets reported a coin flip. Assert both fire and pin the order
+	// explicitly (sorted by property name: "brand" before "publisher") so a regression to
+	// map-range order breaks this test rather than passing by luck.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee",
+		 "brand":{"@id":"https://shop.test/#brand-missing"},
+		 "publisher":{"@id":"https://shop.test/#publisher-missing"}}
+	</script></head><body></body></html>`)
+	got := findAll(structured.New().Analyze(context.Background(), res), "structured-unresolved-id")
+	if len(got) != 2 {
+		t.Fatalf("expected 2 unresolved-id issues, got %d: %+v", len(got), got)
+	}
+	if got[0].Data["property"] != "brand" || got[0].Data["id"] != "https://shop.test/#brand-missing" {
+		t.Errorf("expected the brand reference first, got %+v", got[0].Data)
+	}
+	if got[1].Data["property"] != "publisher" || got[1].Data["id"] != "https://shop.test/#publisher-missing" {
+		t.Errorf("expected the publisher reference second, got %+v", got[1].Data)
+	}
+}
+
+func TestAbsentValueOnOneBlockIsNotADisagreement(t *testing.T) {
+	// The first block declares an offers.price; the second says nothing about price at
+	// all. Silence is not disagreement — disagreement requires two distinct non-empty
+	// values, and a missing field on one side is neither.
+	res := page(t, `<html><head>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee","offers":{"@type":"Offer","price":"19.99"}}</script>
+		<script type="application/ld+json">{"@type":"Product","name":"Tee"}</script>
+	</head><body></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-conflicting-value"); ok {
+		t.Error("an absent value on one block must not be reported as a conflict")
+	}
+}

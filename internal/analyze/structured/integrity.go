@@ -97,6 +97,16 @@ func disagreement(g schemaorg.Graph, nodes []schemaorg.Node, field string) []str
 	return out
 }
 
+// idRef pairs a property name with the @id it references, so unresolvedIDIssues can sort
+// them into a deterministic order before de-duplicating and emitting issues. n.Props is a
+// map, and Go randomizes map iteration order per run; ranging it directly would make both the
+// order of emitted issues and — via the seen de-dup — which property "wins" for a repeated id
+// a coin flip.
+type idRef struct {
+	key string
+	id  string
+}
+
 // unresolvedIDIssues flags {"@id": ...} stubs whose target is not declared anywhere on the
 // page. A dangling reference silently drops whatever the property was meant to convey — a
 // publisher, a brand, a parent product.
@@ -104,25 +114,35 @@ func unresolvedIDIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
 	seen := make(map[string]bool)
 	var issues []analyze.Issue
 	for _, n := range g.Nodes {
+		var refs []idRef
 		for key, v := range n.Props {
 			if strings.HasPrefix(key, "@") {
 				continue
 			}
 			for _, id := range referencedIDs(v) {
-				if seen[id] {
-					continue
-				}
-				if _, ok := g.Resolve(id); ok {
-					continue
-				}
-				seen[id] = true
-				issues = append(issues, analyze.Issue{
-					Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
-					Code:    "structured-unresolved-id",
-					Message: "A JSON-LD @id reference points at a node that is not on the page",
-					Data:    map[string]any{"id": id, "property": key, "type": firstType(n)},
-				})
+				refs = append(refs, idRef{key: key, id: id})
 			}
+		}
+		sort.Slice(refs, func(i, j int) bool {
+			if refs[i].key != refs[j].key {
+				return refs[i].key < refs[j].key
+			}
+			return refs[i].id < refs[j].id
+		})
+		for _, ref := range refs {
+			if seen[ref.id] {
+				continue
+			}
+			if _, ok := g.Resolve(ref.id); ok {
+				continue
+			}
+			seen[ref.id] = true
+			issues = append(issues, analyze.Issue{
+				Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
+				Code:    "structured-unresolved-id",
+				Message: "A JSON-LD @id reference points at a node that is not on the page",
+				Data:    map[string]any{"id": ref.id, "property": ref.key, "type": firstType(n)},
+			})
 		}
 	}
 	return issues
