@@ -1011,6 +1011,21 @@ var explanations = map[string]Explanation{
 		Impact: "Incomplete markup is ineligible for the corresponding rich results.",
 		Fix:    "Add the required properties for the schema type (per schema.org / Google's documentation).",
 	},
+	"structured-duplicate-type": {
+		What:   "A page-level type (Product, Organization, WebSite, ...) is declared in more than one JSON-LD block, usually because a theme and an SEO/marketing app each emit their own copy.",
+		Impact: "Search engines pick one declaration and ignore the rest; which one is not up to the site, and the ignored copy's fields are wasted.",
+		Fix:    "Consolidate to a single JSON-LD source for the type, or make the duplicate blocks agree exactly.",
+	},
+	"structured-conflicting-value": {
+		What:   "Duplicate declarations of the same type disagree on a key value (name, SKU, price, currency, or availability).",
+		Impact: "One of the two blocks is simply wrong; a price that contradicts the page can trigger a manual action from Google's Merchant Center.",
+		Fix:    "Correct the source that is out of date, or remove the redundant block so only the accurate one remains.",
+	},
+	"structured-unresolved-id": {
+		What:   "A JSON-LD {\"@id\": ...} reference points at a node that is not declared anywhere on the page.",
+		Impact: "The reference silently drops whatever it was meant to convey (a publisher, a brand, a parent product); engines see the property as absent.",
+		Fix:    "Declare the referenced node on the page, or replace the reference with the inline object.",
+	},
 	"structured-none": {
 		What:   "The page has no JSON-LD structured data.",
 		Impact: "The page is ineligible for rich results and gives engines fewer explicit entity signals.",
