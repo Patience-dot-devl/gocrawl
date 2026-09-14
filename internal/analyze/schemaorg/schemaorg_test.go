@@ -113,3 +113,76 @@ func TestTypesAreDeduplicatedInDocumentOrder(t *testing.T) {
 		t.Errorf("expected [Product Organization], got %v", got)
 	}
 }
+
+func TestStrResolvesDottedPath(t *testing.T) {
+	g, _ := parse(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD"}}
+	</script></head><body></body></html>`)
+	p := g.OfType("Product")[0]
+	if got := g.Str(p, "offers.price"); got != "19.99" {
+		t.Errorf("expected 19.99, got %q", got)
+	}
+	if got := g.Str(p, "offers.priceCurrency"); got != "USD" {
+		t.Errorf("expected USD, got %q", got)
+	}
+	if got := g.Str(p, "offers.availability"); got != "" {
+		t.Errorf("expected empty for an absent path, got %q", got)
+	}
+}
+
+func TestStrCoercesNumbers(t *testing.T) {
+	g, _ := parse(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","offers":{"@type":"Offer","price":19.99}}
+	</script></head><body></body></html>`)
+	p := g.OfType("Product")[0]
+	if got := g.Str(p, "offers.price"); got != "19.99" {
+		t.Errorf("expected a numeric price rendered as 19.99, got %q", got)
+	}
+}
+
+func TestPathFollowsIDReference(t *testing.T) {
+	g, _ := parse(t, `<html><head><script type="application/ld+json">
+		{"@graph":[{"@type":"Brand","@id":"https://x.test/#brand","name":"Acme"},
+		           {"@type":"Product","name":"Tee","brand":{"@id":"https://x.test/#brand"}}]}
+	</script></head><body></body></html>`)
+	p := g.OfType("Product")[0]
+	if got := g.Str(p, "brand.name"); got != "Acme" {
+		t.Errorf("expected the @id reference to resolve to Acme, got %q", got)
+	}
+}
+
+func TestPathTraversesArrays(t *testing.T) {
+	g, _ := parse(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","offers":[{"@type":"Offer","price":"10.00"},{"@type":"Offer","price":"20.00"}]}
+	</script></head><body></body></html>`)
+	p := g.OfType("Product")[0]
+	got := g.Strs(p, "offers.price")
+	if len(got) != 2 || got[0] != "10.00" || got[1] != "20.00" {
+		t.Errorf("expected both offer prices, got %v", got)
+	}
+}
+
+func TestHasValueTreatsEmptyAsAbsent(t *testing.T) {
+	g, _ := parse(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","sku":"","description":"  ","image":[],"brand":{"name":"Acme"}}
+	</script></head><body></body></html>`)
+	p := g.OfType("Product")[0]
+	for _, path := range []string{"sku", "description", "image", "gtin"} {
+		if g.HasValue(p, path) {
+			t.Errorf("expected %q to count as absent", path)
+		}
+	}
+	if !g.HasValue(p, "brand") {
+		t.Error("expected a populated brand object to count as present")
+	}
+}
+
+func TestNodesAtReturnsTypedChildren(t *testing.T) {
+	g, _ := parse(t, `<html><head><script type="application/ld+json">
+		{"@type":"ProductGroup","name":"Tee","hasVariant":[{"@type":"Product","name":"S"},{"@type":"Product","name":"M"}]}
+	</script></head><body></body></html>`)
+	pg := g.OfType("ProductGroup")[0]
+	if got := g.NodesAt(pg, "hasVariant"); len(got) != 2 {
+		t.Errorf("expected 2 variant nodes, got %d", len(got))
+	}
+}
