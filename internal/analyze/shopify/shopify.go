@@ -69,7 +69,41 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	}}
 	issues = append(issues, templateGapIssues(result, base)...)
 	issues = append(issues, analyze.EachPage(result, a.analyzePage)...)
+	issues = append(issues, a.productsJSONProbe(ctx, base)...)
 	return issues
+}
+
+// productsJSONProbe checks whether the store's /products.json feed answers unauthenticated
+// requests. Shopify serves it by default, and it returns the full catalogue — titles,
+// handles, variant prices, inventory-adjacent detail — in a form competitors and scrapers can
+// consume wholesale. It is opt-in because it is the analyzer's only extra request; the probe
+// asks for a single product, which is enough to confirm the endpoint is open.
+func (a Analyzer) productsJSONProbe(ctx context.Context, base string) []analyze.Issue {
+	if !a.probe || a.fetcher == nil {
+		return nil
+	}
+	feed := base + "/products.json"
+	page, err := a.fetcher.Fetch(ctx, feed+"?limit=1")
+	if err != nil || page == nil || page.StatusCode != 200 {
+		return nil
+	}
+	var payload struct {
+		Products []struct {
+			Handle string `json:"handle"`
+		} `json:"products"`
+	}
+	if err := json.Unmarshal(page.Body, &payload); err != nil {
+		return nil
+	}
+	if len(payload.Products) == 0 {
+		return nil
+	}
+	return []analyze.Issue{{
+		Analyzer: "shopify", URL: feed, Severity: analyze.Info,
+		Code:    "shopify-products-json-exposed",
+		Message: "The store's /products.json catalogue feed answers unauthenticated requests",
+		Data:    map[string]any{"sample_handle": payload.Products[0].Handle},
+	}}
 }
 
 // analyzePage runs the checks that are genuinely per page — a conflict or a flattened variant

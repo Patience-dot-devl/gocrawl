@@ -371,6 +371,11 @@ var explanations = map[string]Explanation{
 		Impact: "Shopify serves a product once per collection it belongs to, so a product in ten collections becomes ten competing URLs, splitting link signals across all of them.",
 		Fix:    "Most themes already emit the right canonical; if yours does not, set it to {{ product.url }} prefixed with the shop URL rather than {{ canonical_url }} in a collection context.",
 	},
+	"shopify-products-json-exposed": {
+		What:   "The store's /products.json endpoint answers unauthenticated requests with the product catalogue.",
+		Impact: "Titles, handles, variants and prices can be scraped wholesale by competitors and repricing bots. Shopify enables this by default, so it is worth a deliberate decision rather than an accident.",
+		Fix:    "If the catalogue is not meant to be public, block /products.json (and /collections/*/products.json) at the CDN or in robots.txt. Note that robots.txt deters crawlers but does not prevent access.",
+	},
 
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {
