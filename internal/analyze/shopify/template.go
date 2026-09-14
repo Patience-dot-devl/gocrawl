@@ -2,6 +2,7 @@ package shopify
 
 import (
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -22,9 +23,44 @@ const (
 	TemplateArticle    Template = "article"
 	TemplateBlog       Template = "blog"
 	TemplatePage       Template = "page"
-	TemplateUtility    Template = "utility"
-	TemplateUnknown    Template = "unknown"
+	// TemplatePolicy is Shopify's built-in legal pages (/policies/refund-policy,
+	// /policies/privacy-policy, /policies/terms-of-service, ...). It is kept separate from
+	// TemplateUtility deliberately: TemplateUtility means "should not be indexable" (Task 13
+	// flags indexable utility pages), but policy pages are meant to be indexed, so filing them
+	// under TemplateUtility would make Task 13 false-positive on every store's policy pages.
+	TemplatePolicy  Template = "policy"
+	TemplateUtility Template = "utility"
+	TemplateUnknown Template = "unknown"
 )
+
+// localeSegRe matches a Shopify Markets locale or locale-region prefix, e.g. "fr" or "en-ca".
+var localeSegRe = regexp.MustCompile(`^[a-z]{2}(-[a-z]{2})?$`)
+
+// localeRootSegments are the first-segment names Shopify's own routes use. None of them is
+// two letters today, so this exclusion is not load-bearing against any current root — it is
+// kept anyway as cheap insurance against a two-letter app-proxy path such as /tr/... being
+// mistaken for a locale prefix.
+var localeRootSegments = map[string]bool{
+	"products": true, "collections": true, "blogs": true, "pages": true,
+	"cart": true, "search": true, "account": true, "challenge": true,
+	"checkouts": true, "orders": true, "policies": true,
+}
+
+// localeOffset returns the index of the first path segment that is part of Shopify's own
+// route structure, skipping a leading Shopify Markets locale prefix such as "en-ca" or "fr".
+// A Markets storefront serves every route under that prefix, so classifying on segs[0] would
+// put an entire localized store in the unknown bucket and silence every check below.
+// The locale is only skipped for classification — callers that rebuild a URL must keep it,
+// or they will point a canonical at a path that does not exist in that market.
+func localeOffset(segs []string) int {
+	if len(segs) == 0 {
+		return 0
+	}
+	if localeSegRe.MatchString(segs[0]) && !localeRootSegments[segs[0]] {
+		return 1
+	}
+	return 0
+}
 
 // Classify returns the Shopify template a URL addresses. Later tasks (variant flattening,
 // duplicate-path detection, faceted-URL checks) all key off this, so the mapping from path
@@ -35,6 +71,7 @@ func Classify(rawURL string) Template {
 		return TemplateUnknown
 	}
 	segs := pathSegments(u.Path)
+	segs = segs[localeOffset(segs):]
 	if len(segs) == 0 {
 		return TemplateHome
 	}
@@ -53,6 +90,11 @@ func Classify(rawURL string) Template {
 			return TemplateCollection
 		}
 	case "blogs":
+		// /blogs/<handle>/tagged/<tag> is a filtered listing of posts, not a single post —
+		// it belongs with the blog template, not the article template.
+		if len(segs) >= 3 && segs[2] == "tagged" {
+			return TemplateBlog
+		}
 		if len(segs) >= 3 {
 			return TemplateArticle
 		}
@@ -63,7 +105,11 @@ func Classify(rawURL string) Template {
 		if len(segs) >= 2 {
 			return TemplatePage
 		}
-	case "search", "cart", "account", "challenge", "checkouts", "orders":
+	case "policies":
+		if len(segs) >= 2 {
+			return TemplatePolicy
+		}
+	case "search", "cart", "account", "challenge", "checkouts", "orders", "password":
 		return TemplateUtility
 	}
 	return TemplateUnknown

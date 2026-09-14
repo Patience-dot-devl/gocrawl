@@ -176,3 +176,46 @@ func TestUtilityTemplateExpectsNothing(t *testing.T) {
 		}
 	}
 }
+
+// TestTemplateSchemaGapLocalizedStoreSameAsUnlocalized is the test that actually proves the
+// Markets-locale silence is gone: a TestClassify row alone only pins one URL's classification,
+// not that a whole crawled store keeps reporting gaps once every URL carries a locale prefix.
+func TestTemplateSchemaGapLocalizedStoreSameAsUnlocalized(t *testing.T) {
+	localized := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/en-ca/":           shopifyHome,
+		"https://shop.test/en-ca/products/a": bareProductPage,
+		"https://shop.test/en-ca/products/b": bareProductPage,
+	})
+	plain := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":           shopifyHome,
+		"https://shop.test/products/a": bareProductPage,
+		"https://shop.test/products/b": bareProductPage,
+	})
+
+	productGaps := func(res *crawler.Result) []map[string]any {
+		var out []map[string]any
+		for _, is := range findAll(run(t, res), "shopify-template-schema-gap") {
+			if is.Data["template"] == "product" {
+				out = append(out, is.Data)
+			}
+		}
+		return out
+	}
+
+	localizedProduct := productGaps(localized)
+	plainProduct := productGaps(plain)
+
+	if len(localizedProduct) == 0 {
+		t.Fatal("expected product gaps on the localized (/en-ca/) store; got none — a Markets " +
+			"locale prefix silenced classification for the whole store")
+	}
+	if len(localizedProduct) != len(plainProduct) {
+		t.Fatalf("localized store produced %d product gaps, unlocalized produced %d; a Markets "+
+			"storefront must report the same gaps as its unlocalized equivalent", len(localizedProduct), len(plainProduct))
+	}
+	for i := range localizedProduct {
+		if localizedProduct[i]["pages"] != plainProduct[i]["pages"] {
+			t.Errorf("gap %d: localized pages=%v, plain pages=%v", i, localizedProduct[i]["pages"], plainProduct[i]["pages"])
+		}
+	}
+}

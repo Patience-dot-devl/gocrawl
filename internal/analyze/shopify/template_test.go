@@ -20,6 +20,21 @@ func TestClassify(t *testing.T) {
 		"https://shop.test/cart":                          shopify.TemplateUtility,
 		"https://shop.test/account/login":                 shopify.TemplateUtility,
 		"https://shop.test/apps/reviews":                  shopify.TemplateUnknown,
+
+		// Shopify Markets locale/region prefixes must not swallow the whole store into
+		// TemplateUnknown.
+		"https://shop.test/en-ca/products/tee":      shopify.TemplateProduct,
+		"https://shop.test/fr/collections/all":      shopify.TemplateCollection,
+		"https://shop.test/de-de/blogs/news/launch": shopify.TemplateArticle,
+		"https://shop.test/en-ca/":                  shopify.TemplateHome,
+
+		// /blogs/<handle>/tagged/<tag> is a filtered listing, not a single post.
+		"https://shop.test/blogs/news/tagged/summer": shopify.TemplateBlog,
+
+		// Policy pages are meant to be indexed, so they get their own template rather than
+		// folding into TemplateUtility; /password belongs with the other utility gates.
+		"https://shop.test/policies/refund-policy": shopify.TemplatePolicy,
+		"https://shop.test/password":               shopify.TemplateUtility,
 	}
 	for u, want := range cases {
 		if got := shopify.Classify(u); got != want {
