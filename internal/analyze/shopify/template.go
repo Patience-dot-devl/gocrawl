@@ -1,6 +1,7 @@
 package shopify
 
 import (
+	"fmt"
 	"net/url"
 	"regexp"
 	"sort"
@@ -210,8 +211,9 @@ func templateGapIssues(result *crawler.Result, base string) []analyze.Issue {
 		e := entries[key]
 		issues = append(issues, analyze.Issue{
 			Analyzer: "shopify", URL: base, Severity: analyze.Warning,
-			Code:    "shopify-template-schema-gap",
-			Message: "Shopify " + string(key.template) + " pages have no " + key.label + " structured data",
+			Code: "shopify-template-schema-gap",
+			Message: fmt.Sprintf("%d Shopify %s %s no %s structured data",
+				e.pages, key.template, pageCountVerb(e.pages), key.label),
 			Data: map[string]any{
 				"template": string(key.template),
 				"expected": e.anyOf,
@@ -221,4 +223,13 @@ func templateGapIssues(result *crawler.Result, base string) []analyze.Issue {
 		})
 	}
 	return issues
+}
+
+// pageCountVerb returns the subject-verb agreement for a page count, so a single-page gap
+// reads as "1 ... page has ..." rather than the grammatically wrong "1 ... pages have ...".
+func pageCountVerb(pages int) string {
+	if pages == 1 {
+		return "page has"
+	}
+	return "pages have"
 }

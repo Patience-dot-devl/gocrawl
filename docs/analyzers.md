@@ -592,13 +592,6 @@ repeating the same fact once per page.
 | `shopify-flat-variant-product` | warning | page | A `product`-template page exposes 2+ variants in the DOM, declares one or more `Product` nodes, none of which carries `hasVariant`/`isVariantOf`, and the page declares no `ProductGroup` type either | `variants` |
 | `shopify-single-offer-range` | info | page | The page's embedded variant JSON has 2+ distinct prices, a `Product` node declares exactly one `Offer`, and no `AggregateOffer` is present | `prices`, `variants` |
 
-> **`shopify-template-schema-gap` counts affected pages, not "every page."** Despite the
-> message text ("… pages have no … structured data"), the check does not require that *all*
-> pages of a template be missing the type before it fires — it walks every crawled page,
-> and any page of the right template that lacks the expected type contributes to that
-> template/type's `pages` count and (up to five) `examples`. A template where only some pages
-> lack the markup still produces one issue, with `pages` telling you how many.
-
 **Expected schema per template:**
 
 | Template | Path shape | Expected | Notes |

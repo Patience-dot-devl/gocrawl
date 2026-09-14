@@ -141,6 +141,35 @@ func TestTemplateSchemaGapRollsUpPerTemplate(t *testing.T) {
 			t.Errorf("expected 3 examples, got %v", d["examples"])
 		}
 	}
+	for _, is := range gaps {
+		if is.Data["template"] == "product" && !strings.Contains(is.Message, "3 Shopify product pages have no") {
+			t.Errorf("expected the message to carry the affected-page count, got %q", is.Message)
+		}
+	}
+}
+
+// TestTemplateSchemaGapMessageSingular pins the singular wording: a bare "1 ... pages have no
+// ..." message would read as a grammar bug and, worse, would look like the blanket-claim
+// overclaim this message was fixed to avoid.
+func TestTemplateSchemaGapMessageSingular(t *testing.T) {
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":           shopifyHome,
+		"https://shop.test/products/a": bareProductPage,
+	})
+	gaps := findAll(run(t, res), "shopify-template-schema-gap")
+	var found bool
+	for _, is := range gaps {
+		if is.Data["template"] != "product" {
+			continue
+		}
+		found = true
+		if !strings.Contains(is.Message, "1 Shopify product page has no") {
+			t.Errorf("expected singular wording, got %q", is.Message)
+		}
+	}
+	if !found {
+		t.Fatal("expected a product-template gap")
+	}
 }
 
 func TestTemplateSchemaGapSilentWhenSchemaPresent(t *testing.T) {
