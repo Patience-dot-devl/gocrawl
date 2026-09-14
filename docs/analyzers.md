@@ -591,6 +591,17 @@ repeating the same fact once per page.
 | `shopify-schema-client-injected` | info | page | The page's raw HTML has zero JSON-LD nodes, its template is not `utility`/`unknown`, and a recognized structured-data app's script is present | `app`, `apps`, `template` |
 | `shopify-flat-variant-product` | warning | page | A `product`-template page exposes 2+ variants in the DOM, declares one or more `Product` nodes, none of which carries `hasVariant`/`isVariantOf`, and the page declares no `ProductGroup` type either | `variants` |
 | `shopify-single-offer-range` | info | page | The page's embedded variant JSON has 2+ distinct prices, a `Product` node declares exactly one `Offer`, and no `AggregateOffer` is present | `prices`, `variants` |
+| `shopify-indexable-utility` | warning | page | A `utility`-template page (`/search`, `/cart`, `/account/*`, `/challenge`, `/checkouts`, `/orders`, `/password`) is indexable — no `noindex` in meta robots or `X-Robots-Tag` | `path` |
+| `shopify-indexable-facet` | warning | page | A `collection` URL carries a faceting query parameter (`sort_by`, `filter.*`, `constraint`, `pf_*`, `grid_list`) and its canonical is empty or points at itself rather than the unfiltered collection | `parameter`, `canonical` |
+| `shopify-duplicate-product-path` | warning | page | A product is reached via `/collections/<c>/products/<handle>` and its canonical is empty or does not equal the `/products/<handle>` form | `canonical`, `canonical_should_be` |
+| `shopify-products-json-exposed` ⚙︎ | info | **site** | `/products.json?limit=1` answers an unauthenticated request with at least one product | `sample_handle` |
+
+> **One check is opt-in.** `shopify-products-json-exposed` is the only check in this analyzer
+> that fetches anything the crawl did not already fetch, so it rides `--specialized` (or
+> `analyzers.specialized: true`) alongside the WordPress security probes. Everything else here
+> is passive — it reads only the already-crawled HTML and headers. `TemplatePolicy`
+> (`/policies/*`) is deliberately excluded from `shopify-indexable-utility`: refund and privacy
+> pages are meant to be indexed, unlike `/search`, `/cart`, and the rest of the utility set.
 
 **Expected schema per template:**
 

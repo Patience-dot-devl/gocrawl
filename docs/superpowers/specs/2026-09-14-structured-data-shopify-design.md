@@ -165,7 +165,7 @@ Codes:
 
 | Code | Severity | Scope | Data |
 | --- | --- | --- | --- |
-| `structured-missing-required` | warning | per page | `type`, `missing` (unchanged) |
+| `structured-missing-required` | warning | per page | `type`, `missing`, `path` (path added in Phase 1) |
 | `structured-missing-recommended` | info | site | `type`, `missing` (field → page count), `pages`, `examples` |
 | `structured-missing-merchant` | info | site | same shape |
 

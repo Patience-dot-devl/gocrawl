@@ -357,7 +357,7 @@ var explanations = map[string]Explanation{
 		Fix:    "Use an AggregateOffer with lowPrice and highPrice, or give each variant its own Offer under a ProductGroup.",
 	},
 	"shopify-indexable-utility": {
-		What:   "A Shopify utility page — /search, /cart, /account or /challenge — is crawlable and not marked noindex.",
+		What:   "A Shopify utility page — /search, /cart, /account/*, /challenge, /checkouts, /orders or /password — is crawlable and not marked noindex. /policies/* is deliberately excluded: those pages are meant to be indexed.",
 		Impact: "These pages carry no content worth ranking, and /search in particular generates an unbounded set of URLs from whatever anyone links to, wasting crawl budget and risking thin-content pages in the index.",
 		Fix:    "Add <meta name=\"robots\" content=\"noindex,follow\"> to the utility templates in theme.liquid, or disallow the paths in robots.txt.liquid.",
 	},

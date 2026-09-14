@@ -25,8 +25,9 @@ ever touching the engine.
 
 Analyzers are **pure**: they read a `crawler.Result` and return `[]analyze.Issue`. They must
 not fetch, mutate shared state, or print. (Exception: a few analyzers like `sitemap`, `geo`,
-and `wordpress` are constructed with a `crawler.Fetcher` so they can pull a small number of
-extra resources such as `sitemap.xml` or `llms.txt` — these still emit Issues, never print.)
+`wordpress`, and `shopify` are constructed with a `crawler.Fetcher` so they can pull a small
+number of extra resources such as `sitemap.xml`, `llms.txt`, or `/products.json` — these still
+emit Issues, never print.)
 
 ## Data flow
 
@@ -58,6 +59,7 @@ analyzers, and hands everything to the report builder.
 | `internal/render` | Render-mode fetcher selection; headless rendering via chromedp (Core Web Vitals). |
 | `internal/analyze` | The `Analyzer` interface, `Issue`/`Severity` types, `Registry`, and the `EachPage` helper. |
 | `internal/analyze/schemaorg` | Shared JSON-LD parser: flattens a page's `ld+json` into an addressable node graph (`Node`, `Graph`, dotted paths, `@id` resolution). Not an analyzer — the same role `seaurl` plays for UTM parsing. |
+| `internal/analyze/shopify` | Shopify detection, URL-template classification, per-template structured-data coverage, theme/app schema conflicts, variant modelling, and Shopify-specific crawl-hygiene checks. |
 | `internal/analyze/<name>` | One package per analyzer (see below). |
 | `internal/runner` | Wires engine + registry + report into `Run`; also `BuildRegistry` and `ListAnalyzers`. |
 | `internal/report` | Builds the `Report` and serializes it (JSON, CSV, HTML); issue explanations live here. |
@@ -88,7 +90,7 @@ part of the report contract and have explanations in `internal/report/explanatio
 Registered analyzers (in order): `seo`, `redirects` (pkg `httpx`), `links`, `robots` (pkg
 `robotscheck`), `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`,
 `hreflang`, `amp`, `duplicates`, `content`, `botwall` (CAPTCHA / bot-challenge detection),
-`wordpress` (CMS-specific), the SEA analyzers `utm` / `tracking` / `datalayer` / `landing` /
+the CMS-specific `wordpress` and `shopify`, the SEA analyzers `utm` / `tracking` / `datalayer` / `landing` /
 `consent`, and the AI-search analyzers `aeo` (Answer Engine Optimization) / `geo` (Generative
 Engine Optimization). `seaurl` is a shared UTM-parsing helper and `schemaorg` a shared JSON-LD
 parser, **not** analyzers.
@@ -110,8 +112,9 @@ that are off by default, applied to the relevant analyzers via functional option
 value leaves all of them off. When adding another opt-in mode, add a field here rather than
 another positional bool.
 
-- **`Specialized`** — deeper, more aggressive checks: `wordpress` security probes, `aeo`
-  answer-lead, `geo` quotable-density. Surfaced as `--specialized` / `specialized` in MCP.
+- **`Specialized`** — deeper, more aggressive checks: `wordpress` security probes, the Shopify
+  `/products.json` probe, `aeo` answer-lead, `geo` quotable-density. Surfaced as `--specialized`
+  / `specialized` in MCP.
 - **`SecurityAudit`** — the `security` analyzer's audit pass: TLS and certificate inspection,
   `Set-Cookie` attribute hygiene, and response-header policy. Unlike the WordPress probes it
   is passive (no extra fetches); it reads `crawler.Page.TLS`, captured by `HTTPFetcher` from
