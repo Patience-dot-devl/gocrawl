@@ -17,7 +17,7 @@ type fieldSpec struct {
 	required []string
 	// recommended fields do not block eligibility but degrade the result when absent.
 	recommended []string
-	// merchant fields feed Google's Shopping and free-listing surfaces. Product only.
+	// merchant fields feed Google's Shopping and free-listing surfaces.
 	merchant []string
 }
 
@@ -37,6 +37,18 @@ var eligibility = map[string]fieldSpec{
 	"ProductGroup": {
 		required:    []string{"name"},
 		recommended: []string{"hasVariant", "productGroupID", "variesBy", "image", "brand"},
+		// Google accepts these merchant fields on the ProductGroup itself or on each
+		// variant's Offer. A store that models variants correctly (ProductGroup +
+		// hasVariant, exactly what shopify-flat-variant-product tells owners to adopt)
+		// has no top-level Product to carry them: hasVariant children are exempt as
+		// thin copies (see listProperties below), so without this entry the merchant
+		// tier never runs on the best-structured stores.
+		merchant: []string{
+			"gtin|gtin8|gtin12|gtin13|gtin14|mpn",
+			"priceValidUntil",
+			"offers.shippingDetails",
+			"hasMerchantReturnPolicy",
+		},
 	},
 	"Article": {
 		required:    []string{"headline"},

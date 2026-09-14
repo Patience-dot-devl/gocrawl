@@ -167,6 +167,51 @@ func TestAnyOfMerchantFieldSatisfiedByOneAlternative(t *testing.T) {
 	}
 }
 
+// allbirdsProductGroup mirrors a real Shopify storefront (allbirds.com): a ProductGroup
+// carrying name/image/brand/description/productGroupID/variesBy and an offers block with
+// price/priceCurrency/availability, whose only variant is a Product that carries nothing but
+// a url — exactly the shape gocrawl's own shopify-flat-variant-product check tells store
+// owners to adopt.
+const allbirdsProductGroup = `{"@type":"ProductGroup","name":"Wool Runners",
+	"image":"https://shop.test/wool-runners.jpg",
+	"brand":{"@type":"Brand","name":"Allbirds"},
+	"description":"A comfortable, sustainable sneaker.",
+	"productGroupID":"WR-001",
+	"variesBy":["size","color"],
+	"offers":{"@type":"Offer","price":"98.00","priceCurrency":"USD","availability":"https://schema.org/InStock"},
+	"hasVariant":[{"@type":"Product","url":"https://shop.test/products/wool-runners?variant=1"}]}`
+
+func TestProductGroupWithHasVariantStillRaisesMerchantGap(t *testing.T) {
+	// This is the defect from the real-world smoke test: a ProductGroup modeled with
+	// hasVariant (the shape this project's own shopify-flat-variant-product check
+	// recommends) must still surface the merchant-field gap. Before the fix, ProductGroup
+	// had no merchant tier at all, and the sole Product node was exempt as a thin
+	// hasVariant copy, so structured-missing-merchant never fired for this shape.
+	html := `<html><head><script type="application/ld+json">` + allbirdsProductGroup + `</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/wool-runners": html})
+	issues := structured.New().Analyze(context.Background(), res)
+
+	merchant := findAll(issues, "structured-missing-merchant")
+	if len(merchant) != 1 {
+		t.Fatalf("expected 1 merchant-gap issue, got %d: %+v", len(merchant), merchant)
+	}
+	if merchant[0].Data["type"] != "ProductGroup" {
+		t.Errorf("expected type ProductGroup, got %v", merchant[0].Data["type"])
+	}
+	missing, _ := merchant[0].Data["missing"].(map[string]int)
+	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy"} {
+		if missing[f] != 1 {
+			t.Errorf("expected %q reported missing once, got %d (missing=%v)", f, missing[f], missing)
+		}
+	}
+
+	// The thin hasVariant Product must remain exempt: it carries only a url, and
+	// required-field-checking it would put a warning on every variant of every product.
+	if is, ok := find(issues, "structured-missing-required"); ok {
+		t.Errorf("expected no structured-missing-required issue (variant Product must stay exempt), got %+v", is)
+	}
+}
+
 func TestNestedListProductsAreExemptFromEligibility(t *testing.T) {
 	// A Shopify collection page lists products with only a name and a URL. Required-field
 	// checking those would put a warning on every tile of every collection page.

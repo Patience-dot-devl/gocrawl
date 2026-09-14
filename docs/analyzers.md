@@ -154,7 +154,7 @@ have.
 | `structured-data` | info | page | JSON-LD found; lists the de-duplicated `@type`s, including nested ones | `types` |
 | `structured-missing-required` | warning | page | A typed object omits a field its rich result requires | `type`, `missing`, `path` |
 | `structured-missing-recommended` | info | **site** | A type omits recommended fields, aggregated across the crawl | `type`, `missing`, `fields`, `pages`, `examples` |
-| `structured-missing-merchant` | info | **site** | `Product` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-missing-merchant` | info | **site** | `Product`/`ProductGroup` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
 | `structured-duplicate-type` | warning | page | A page-level type is declared in two or more JSON-LD blocks | `type`, `blocks` |
 | `structured-conflicting-value` | error | page | Duplicate blocks disagree on `name`, `sku`, or an `offers` field | `type`, `field`, `values` |
 | `structured-unresolved-id` | warning | page | An `@id` reference has no matching node on the page | `id`, `property`, `type` |
@@ -168,9 +168,12 @@ have.
 | `structured-video-candidate` | warning | page | A `<video>` or YouTube/Vimeo embed, no `VideoObject` | `src` |
 
 > **Field tiers.** Each recognized type carries a *required* set (absence blocks the rich
-> result), a *recommended* set (absence degrades it), and — for `Product` — a *merchant* set
-> feeding Shopping and free listings. A field written with `|` separators is an any-of group:
-> `gtin|gtin8|gtin12|gtin13|gtin14|mpn` is satisfied by any one identifier.
+> result), a *recommended* set (absence degrades it), and — for `Product` and `ProductGroup`
+> — a *merchant* set feeding Shopping and free listings. Google accepts these fields on
+> either the group or each variant's `Offer`, so `ProductGroup` carries its own merchant tier
+> rather than relying on a top-level `Product` that a properly variant-modeled page never has.
+> A field written with `|` separators is an any-of group: `gtin|gtin8|gtin12|gtin13|gtin14|mpn`
+> is satisfied by any one identifier.
 
 > **Why two of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
 > so a recommended-field gap repeats identically on every page of a template. Those two codes
