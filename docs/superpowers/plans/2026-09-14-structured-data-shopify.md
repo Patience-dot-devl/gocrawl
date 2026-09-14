@@ -3624,9 +3624,13 @@ Expected: FAIL, naming `shopify-detected`, `shopify-template-schema-gap`,
 `shopify-schema-app-conflict`, `shopify-schema-client-injected`,
 `shopify-flat-variant-product` and `shopify-single-offer-range`.
 
-- [ ] **Step 3: Add the explanations**
+- [ ] **Step 3: Verify the explanations (do NOT re-add them)**
 
-Add a `// --- shopify: Shopify storefront checks ---` block to `explanations`, placed after the `wordpress` block:
+Tasks 8-11 have already added these six entries — the contract test forced each into the commit
+that introduced its code. **Re-adding any of them is a duplicate map key and will not compile.**
+Verify each is present with a non-empty What/Impact/Fix and accurately describes the code as
+built, correcting wording only where the implementation diverged from what the entry claims.
+For reference, the intended text is:
 
 ```go
 	"shopify-detected": {
@@ -4272,9 +4276,12 @@ Run: `go test ./internal/report/ -run TestAllAnalyzerCodes -v`
 Expected: FAIL, naming `shopify-indexable-utility`, `shopify-indexable-facet`,
 `shopify-duplicate-product-path` and `shopify-products-json-exposed`.
 
-- [ ] **Step 3: Add the explanations**
+- [ ] **Step 3: Verify the explanations (do NOT re-add them)**
 
-Append to the `shopify` block in `internal/report/explanations.go`:
+Tasks 13-15 have already added these four entries — the contract test forced each into the
+commit that introduced its code. **Re-adding any of them is a duplicate map key and will not
+compile.** Verify each is present, complete and accurate against the code as built. For
+reference, the intended text is:
 
 ```go
 	"shopify-indexable-utility": {
@@ -4336,7 +4343,15 @@ In the "Opt-in analyzer modes" section, extend the `Specialized` bullet to menti
 Shopify probe: "`wordpress` security probes, the Shopify `/products.json` probe, `aeo`
 answer-lead, `geo` quotable-density."
 
-- [ ] **Step 7: Update `README.md`**
+- [ ] **Step 7: Fix the stale row in the design spec**
+
+`docs/superpowers/specs/2026-09-14-structured-data-shopify-design.md` carries an older codes
+table whose `structured-missing-required` row still lists `` `type`, `missing` (unchanged) ``.
+The code gained a `path` key during Phase 1, so that row is stale. Add `path` to it. The spec is
+the authority this plan argues from, so a knowingly-stale row there has a cost even though the
+live reference doc (`docs/analyzers.md`) is correct.
+
+- [ ] **Step 9: Update `README.md`**
 
 Find the analyzer list in `README.md` and add `shopify` beside `wordpress`. If the README
 carries an example report or feature bullets mentioning structured data, add a line naming
@@ -4365,7 +4380,7 @@ diff /tmp/emitted /tmp/documented && diff /tmp/emitted /tmp/explained
 ```
 Expected: no output from either diff.
 
-- [ ] **Step 9: End-to-end smoke test against a real store**
+- [ ] **Step 10: End-to-end smoke test against a real store**
 
 ```bash
 ./gocrawl crawl https://kith.com --depth 1 --max-pages 25 --analyzers shopify,structured --output /tmp/kith.json
@@ -4382,7 +4397,7 @@ site-wide. If the smoke test shows it firing on most pages, the fix is a site-wi
 built in `Analyze` before the per-page pass — report only references unresolvable anywhere in
 the crawl. Do not make that change speculatively; make it only if the evidence appears.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add internal/report/ docs/ CLAUDE.md README.md
