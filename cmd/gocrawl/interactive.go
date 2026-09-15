@@ -149,7 +149,7 @@ func runInteractive(cmd *cobra.Command) error {
 				Value(&selected),
 			huh.NewConfirm().
 				Title("Enable specialized checks?").
-				Description("Opt-in: AEO answer-lead, GEO quotable-density, and WordPress security probes.").
+				Description("Opt-in: AEO answer-lead, GEO quotable-density, WordPress security probes, and Shopify /products.json probe.").
 				Value(&specialized),
 			huh.NewConfirm().
 				Title("Enable the security audit?").
