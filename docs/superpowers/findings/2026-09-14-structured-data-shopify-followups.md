@@ -1,22 +1,28 @@
 # Structured-data & Shopify analyzer — follow-up work
 
 Date: 2026-09-14
-Status: **captured, not yet actioned** — deliberately held for a later session
+Status: **P0–P2 and P4 fixed** (2026-09-15, commits `f3d714f..98498ae`); P3 applied; P5–P9 open
 Branch: `shopify-structured-data-analyzer`
 Spec: [`../specs/2026-09-14-structured-data-shopify-design.md`](../specs/2026-09-14-structured-data-shopify-design.md)
 Plan: [`../plans/2026-09-14-structured-data-shopify.md`](../plans/2026-09-14-structured-data-shopify.md)
 
 The sixteen planned tasks are complete, reviewed and committed (`2f1b028..8b339cc`). This
-document records what two end-of-run reviews and one live smoke test found *afterwards*, so the
-work is pickup-ready. Nothing here has been fixed.
+document records what two end-of-run reviews and one live smoke test found *afterwards*.
 
-Items are ordered by what they cost a user, not by effort.
+**Update 2026-09-15.** A fix wave landed in `f3d714f..98498ae`, closing everything marked ✅ below.
+Verified end-to-end against live Allbirds markup served locally: the sitewide false positive is
+gone while all four genuine findings on that page survive, and eight crawls of the same page now
+produce byte-identical output (before, it permuted between runs).
+
+Items are ordered by what they cost a user, not by effort. Each carries its status.
 
 ---
 
 ## P0 — Blocks merge
 
-### F0. `schemaorg.walk` ranges a map, so every report churns between identical crawls
+### ✅ F0. `schemaorg.walk` ranges a map, so every report churns between identical crawls
+
+**FIXED** in `f3d714f`. Keys are sorted before descending; 3 "document order" doc comments corrected to "stable". Verified: 8 identical crawls of a real page now hash identically.
 
 `internal/analyze/schemaorg/schemaorg.go:107` — `for key, val := range t`. Sibling typed children
 are appended to `g.Nodes` in Go's randomized map order.
@@ -45,7 +51,9 @@ for _, key := range keys { val := t[key]; /* ... */ }
 Then correct the `Types()` doc comment — JSON objects have no document order; the honest word is
 "stable".
 
-### F0b. The test named for this is vacuous
+### ✅ F0b. The test named for this is vacuous
+
+**FIXED** in `f3d714f`. Replaced with `TestTypesAreDeduplicatedAndStableAcrossParses` — object fixture, 50 repeated parses. Confirmed 5/5 failures on revert.
 
 `internal/analyze/schemaorg/schemaorg_test.go:107`, `TestTypesAreDeduplicatedInDocumentOrder`,
 uses a top-level JSON **array**, whose order is a slice — so it never exercises the map-key path
@@ -57,7 +65,9 @@ repeated parses.
 
 ## P1 — Bugs in the merchant tier (the feature this work exists for)
 
-### F1. `priceValidUntil` and `hasMerchantReturnPolicy` are checked at paths that can never match
+### ✅ F1. `priceValidUntil` and `hasMerchantReturnPolicy` are checked at paths that can never match
+
+**FIXED** in `9ccf949`. Both are now any-of groups accepting either placement.
 
 `internal/analyze/structured/eligibility.go:32,34` (`Product`) and `:48,50` (`ProductGroup`)
 list bare `priceValidUntil` and `hasMerchantReturnPolicy` in the `merchant` tier. Google
@@ -74,7 +84,9 @@ Fix: change to any-of groups so either placement satisfies the check —
 Test: a `Product` emitting `offers.priceValidUntil` must raise NO merchant gap for that field.
 That test fails today.
 
-### F1b. The `ProductGroup` merchant fix (commit `8b339cc`) introduced a false positive
+### ✅ F1b. The `ProductGroup` merchant fix (commit `8b339cc`) introduced a false positive
+
+**FIXED** in `9ccf949` via a `satisfiedOnVariants` fallback scoped to the merchant tier. The Allbirds regression guard still fires.
 
 `internal/analyze/structured/eligibility.go:46-51`. The comment at :40-45 says Google accepts
 these fields on the ProductGroup itself **or on each variant's Offer** — but the code only checks
@@ -97,7 +109,9 @@ fires, so that test's behaviour assertions stay green.
 
 Note this interacts with F4 below: if the `.hasVariant` exemption is revisited, revisit this too.
 
-### F2. `structured-missing-merchant` sits at `info`
+### ✅ F2. `structured-missing-merchant` sits at `info`
+
+**FIXED** in `9ccf949`. `rollupSeverity` now splits merchant (warning) from recommended (info).
 
 It is the answer to "what structured-data opportunities does this store have", and `info` is the
 severity that also means "no action needed". Raise to `warning` — **but only after F1**, or it
@@ -107,7 +121,9 @@ amplifies a false alarm.
 
 ## P2 — A false positive firing on every page of real stores
 
-### F3. `structured-product-candidate` is satisfied by sitewide boilerplate
+### ✅ F3. `structured-product-candidate` is satisfied by sitewide boilerplate
+
+**FIXED** in `423c169`, and **A/B-verified on the live page that caused it**: before, 5 issues including `product-candidate $100`; after, the same 4 genuine findings with the false positive gone. Type suppression was rejected in favour of co-location — see the rejected-proposals note below, it still applies.
 
 Observed three times on live stores: all 25 crawled pages of one store (signal `"$35.00"`), and
 an Allbirds **collection** page (signal `"$100"`).
@@ -140,7 +156,9 @@ Correct narrowing:
 
 ---
 
-## P3 — Field tiers that misstate Google's requirements
+## ✅ P3 — Field tiers that misstate Google's requirements
+
+**APPLIED** in `98498ae` — all 10 rows, plus `offers.itemCondition` added to both merchant tiers. Three caveats raised by the implementer and left open: `WebSite.url → required` is the weakest row now that Sitelinks Search Box is gone; `brand` stays in `recommended` because Merchant Center's real rule is conditional (required only when there is no GTIN) and the tier model cannot express that; and `ProductGroup.variesBy` looks like it should also be required but was outside the instructed set.
 
 `eligibility.go`'s tables were written from memory and never checked against Google's published
 requirements. A field in the wrong tier either cries wolf or stays silent on something real.
@@ -163,7 +181,9 @@ requires `brand`+`mpn` when there is no GTIN, but `brand` currently sits in `rec
 
 ---
 
-## P4 — Severity calibration
+## ✅ P4 — Severity calibration
+
+**APPLIED** in `98498ae` — `structured-invalid-jsonld`, `structured-malformed-price` and `structured-price-mismatch` are now `error`.
 
 Users find the actionable set by filtering `severity == "error"`. These are invisible there today.
 
@@ -183,7 +203,7 @@ never the only one.
 
 ## P5 — Open question, needs a human decision
 
-### F4. Is the `.hasVariant` eligibility exemption right?
+### ⚠️ F4. Is the `.hasVariant` eligibility exemption right? — STILL OPEN, needs a human decision
 
 `listProperties` in `eligibility.go` exempts nodes under `.hasVariant` from all tier checks, on
 the grounds that variants are deliberately thin copies (Allbirds' carry only a `url`).
@@ -266,7 +286,9 @@ and says where the setting lives.
 
 ## P9 — Smaller items
 
-- **CLI help text is stale.** `cmd/gocrawl/crawl.go`'s `--specialized` flag still reads "AEO
+- ✅ **CLI help text is stale.** FIXED in `fdf8023`. Also found `crawlrequest.go` — the schema MCP clients and the web API read — had been omitting the WordPress probes entirely, not just the Shopify one.
+- **(remaining items below are open)**
+- **Original note:** `cmd/gocrawl/crawl.go`'s `--specialized` flag still reads "AEO
   answer-lead, GEO quotable-density, WordPress security probes" and does not mention the Shopify
   `/products.json` probe. Same omission in `interactive.go` and `crawlrequest.go`. A user running
   `--help` cannot discover it.
@@ -295,7 +317,7 @@ and says where the setting lives.
 
 ## P2b — Structural findings from the whole-branch review
 
-### F10. The two site-wide rollups collide in the report-diff key
+### ⏳ F10. The two site-wide rollups collide in the report-diff key — OPEN
 
 `internal/diff/diff.go:74` keys a finding on `[Analyzer, Code, URL]`. But `rollup.issues`
 (`rollup.go:65-84`) emits one issue **per type**, all at the same base URL with the same code, and
@@ -310,7 +332,7 @@ multi-instance findings. Minimal fix: fold the discriminator into the code, or l
 into the issue URL (`base + "#Product"`). If the contract should not change now, it at least needs
 a note in `docs/output.md`.
 
-### F11. Four guards have no test at all
+### ⏳ F11. Four guards have no test at all — OPEN
 
 Each was found by mutation and each survived the full suite. None is a defect today; all are the
 kind of guard a future refactor deletes as dead code.
@@ -326,7 +348,7 @@ kind of guard a future refactor deletes as dead code.
   `shopify-schema-client-injected`.
 - `schema.go:120` — `sort.Strings(attributed)`, a determinism sort.
 
-### F12. A relative canonical false-positives `shopify-duplicate-product-path`
+### ⏳ F12. A relative canonical false-positives `shopify-duplicate-product-path` — OPEN
 
 `internal/analyze/shopify/seo.go:79` compares `canonicalOf(p.Doc)` against an absolute `want`
 without resolving it against `p.FinalURL`. A theme emitting
@@ -338,7 +360,7 @@ omission flips `shopify-indexable-facet` (`seo.go:64`) the *other* way, into sil
 both consistent. Also `canonicalOf:37` searches the whole document, where the `seo` analyzer scopes
 to `head link[rel="canonical"]`.
 
-### F13. The package doc claims a caching property the code does not have
+### ⏳ F13. The package doc claims a caching property the code does not have — OPEN
 
 `internal/analyze/schemaorg/schemaorg.go:3-4` says "JSON-LD is parsed once per page." It is parsed
 **three** times — `templateGapIssues` (`template.go:183`), `shopify.analyzePage`
