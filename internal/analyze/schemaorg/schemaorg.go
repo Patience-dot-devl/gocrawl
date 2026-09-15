@@ -6,6 +6,7 @@ package schemaorg
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -52,7 +53,7 @@ type ParseError struct {
 	Err   string
 }
 
-// Graph is every typed node found on one page, in document order.
+// Graph is every typed node found on one page, in a stable order.
 type Graph struct {
 	Nodes []Node
 	byID  map[string]int
@@ -104,7 +105,17 @@ func (g *Graph) walk(v any, block int, prefix string) {
 			id, _ := t["@id"].(string)
 			g.Nodes = append(g.Nodes, Node{Types: types, ID: id, Props: t, Block: block, Path: path})
 		}
-		for key, val := range t {
+		// Go randomizes map iteration order, and a JSON object has no order of its own
+		// to fall back on. Without sorting, sibling typed children land in g.Nodes in a
+		// different sequence on every run, and that churn surfaces as a spurious diff
+		// on a page that never actually changed.
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			val := t[key]
 			if strings.HasPrefix(key, "@") {
 				// @graph members are siblings of the node that declared the graph, not
 				// properties of it, so they keep the current prefix. Every other @-key
@@ -136,7 +147,7 @@ func (g *Graph) index() {
 	}
 }
 
-// OfType returns every node declaring the given @type, in document order.
+// OfType returns every node declaring the given @type, in a stable order.
 func (g Graph) OfType(t string) []Node {
 	var out []Node
 	for _, n := range g.Nodes {
@@ -157,7 +168,7 @@ func (g Graph) HasType(types ...string) bool {
 	return false
 }
 
-// Types returns every @type on the page, de-duplicated, in document order.
+// Types returns every @type on the page, de-duplicated, in a stable order.
 func (g Graph) Types() []string {
 	seen := make(map[string]bool)
 	var out []string

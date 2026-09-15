@@ -104,14 +104,55 @@ func TestResolveByID(t *testing.T) {
 	}
 }
 
-func TestTypesAreDeduplicatedInDocumentOrder(t *testing.T) {
-	g, _ := parse(t, `<html><head><script type="application/ld+json">
-		[{"@type":"Product","name":"A"},{"@type":"Product","name":"B"},{"@type":"Organization","name":"C"}]
-	</script></head><body></body></html>`)
-	got := g.Types()
-	if len(got) != 2 || got[0] != "Product" || got[1] != "Organization" {
-		t.Errorf("expected [Product Organization], got %v", got)
+// TestTypesAreDeduplicatedAndStableAcrossParses guards against the map-iteration
+// determinism bug where Graph.walk ranged directly over a map[string]any: sibling
+// typed children of a JSON *object* (not array) would land in Graph.Nodes, and
+// therefore in Types(), in a different order on every run. A top-level JSON array
+// fixture doesn't exercise this — an array already has a real order — so this test
+// nests the typed siblings inside an object's properties, and parses it many times
+// to catch order flakiness that a single parse could pass by luck.
+func TestTypesAreDeduplicatedAndStableAcrossParses(t *testing.T) {
+	const html = `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee",
+		 "brand":{"@type":"Brand","name":"Acme"},
+		 "offers":{"@type":"Offer","price":"19.99"},
+		 "manufacturer":{"@type":"Organization","name":"Acme Mfg"},
+		 "additionalProperty":{"@type":"Offer","price":"9.99"}}
+	</script></head><body></body></html>`
+
+	first, _ := parse(t, html)
+	want := first.Types()
+
+	if len(want) != 4 {
+		t.Fatalf("expected 4 de-duplicated types (Product, Brand, Offer, Organization), got %v", want)
 	}
+	seen := make(map[string]bool, len(want))
+	for _, ty := range want {
+		if seen[ty] {
+			t.Fatalf("expected de-duplicated types, got a repeat of %q in %v", ty, want)
+		}
+		seen[ty] = true
+	}
+
+	for i := 0; i < 50; i++ {
+		g, _ := parse(t, html)
+		got := g.Types()
+		if !equalStrings(got, want) {
+			t.Fatalf("run %d: Types() order was not stable: got %v, want %v", i, got, want)
+		}
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestStrResolvesDottedPath(t *testing.T) {
