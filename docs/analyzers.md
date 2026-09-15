@@ -163,7 +163,7 @@ have.
 | `structured-malformed-price` | warning | page | A price string carries a symbol, separator, or range | `type`, `property`, `value` |
 | `structured-price-mismatch` | warning | page | `offers.price` differs from the single price rendered on the page | `markup`, `page` |
 | `structured-breadcrumb-candidate` | warning | page | Breadcrumb-styled nav with ≥2 links, no `BreadcrumbList` | `links` |
-| `structured-product-candidate` | warning | page | Product/price microdata, or a price plus a cart call-to-action, with no `Product`/`Offer` | `signal` |
+| `structured-product-candidate` | warning | page | Product/price microdata, or a price co-located with a cart/buy call-to-action (same `<form>`, or a bounded ancestor if none), for one or two such pairs, with no `Product`/`Offer` | `signal` |
 | `structured-article-candidate` | warning | page | A 150+ word `<article>` with an author or date signal, no article type | `words` |
 | `structured-video-candidate` | warning | page | A `<video>` or YouTube/Vimeo embed, no `VideoObject` | `src` |
 

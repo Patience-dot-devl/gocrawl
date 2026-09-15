@@ -123,9 +123,17 @@ func TestStructuredBreadcrumbCandidateSuppressedByExistingType(t *testing.T) {
 	}
 }
 
+// TestStructuredProductCandidate pins row 1 of the co-location fix: a real product page —
+// one product form, with its price inside that same form — still fires. This is a
+// regression guard, not a driver: it must pass both before and after the co-location
+// rewrite.
 func TestStructuredProductCandidate(t *testing.T) {
 	res := page(t, `<html><body>
-		<h1>Widget</h1><p>Price: $19.99</p><button>Add to cart</button>
+		<h1>Widget</h1>
+		<form action="/cart/add" method="post">
+			<p class="price">Price: $19.99</p>
+			<button type="submit">Add to cart</button>
+		</form>
 	</body></html>`)
 	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate")
 	if !ok {
@@ -140,6 +148,107 @@ func TestStructuredProductCandidateNoCartSignal(t *testing.T) {
 	res := page(t, `<html><body><p>This gadget costs $19.99 to make.</p></body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate"); ok {
 		t.Error("did not expect structured-product-candidate without a cart/buy signal")
+	}
+}
+
+// TestStructuredProductCandidateAllbirdsNoProductType pins row 2: the feature's motivating
+// example is a real Allbirds PRODUCT page that emits CollectionPage+FAQPage JSON-LD and no
+// Product. Type-based suppression (on CollectionPage or ItemList) was rejected specifically
+// because it would silence this exact page, so this guard must keep passing regardless of
+// what type-shaped changes land later.
+func TestStructuredProductCandidateAllbirdsNoProductType(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@type":["CollectionPage","FAQPage"],"name":"Men's Tree Runners"}
+	</script></head><body>
+		<h1>Men's Tree Runners</h1>
+		<form action="/cart/add" method="post">
+			<p class="price">$100.00</p>
+			<button type="submit">Add to Cart</button>
+		</form>
+	</body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate")
+	if !ok {
+		t.Fatal("expected structured-product-candidate for a product page mislabeled CollectionPage+FAQPage")
+	}
+	if is.Data["signal"] != "$100.00" {
+		t.Errorf("expected signal $100.00, got %v", is.Data["signal"])
+	}
+}
+
+// TestStructuredProductCandidateSuppressedBySitewideBoilerplate pins row 3: this is the bug.
+// A free-shipping-threshold strip near the top of the page supplies a price, and a
+// persistent mini-cart drawer supplies "Add to cart", on every page of a real store —
+// homepage, policy pages, blog articles included — even though neither is actually part of
+// a product. The strip's price and the drawer's button are both only a couple of DOM hops
+// under <body>, but they don't share a <form>, so requiring co-location silences this
+// without ever reading a schema.org type.
+func TestStructuredProductCandidateSuppressedBySitewideBoilerplate(t *testing.T) {
+	res := page(t, `<html><body>
+		<div class="announcement-bar">Free shipping over $35</div>
+		<header><nav><a href="/">Home</a></nav></header>
+		<main>
+			<h1>About Us</h1>
+			<p>We started this company in a garage. It has nothing to do with any single product.</p>
+		</main>
+		<div id="cart-drawer" class="mini-cart">
+			<form action="/cart" method="post">
+				<button type="submit">Add to cart</button>
+			</form>
+		</div>
+	</body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate"); ok {
+		t.Error("did not expect structured-product-candidate from an unrelated sitewide price and cart-drawer button")
+	}
+}
+
+// TestStructuredProductCandidateSuppressedOnListingPage pins row 4: a collection page with
+// several quick-add tiles has many genuine co-located CTA/price pairs (one per tile), unlike
+// a product page's one (or two, for a sticky buy-bar duplicating the main form). Counting
+// pairs is what tells this apart from a product page without reading @type — the page below
+// deliberately carries no CollectionPage/ItemList markup, to prove the discriminator doesn't
+// need it.
+func TestStructuredProductCandidateSuppressedOnListingPage(t *testing.T) {
+	res := page(t, `<html><body><ul class="product-grid">
+		<li><form action="/cart/add"><span class="price">$25.00</span><button>Add to cart</button></form></li>
+		<li><form action="/cart/add"><span class="price">$30.00</span><button>Add to cart</button></form></li>
+		<li><form action="/cart/add"><span class="price">$40.00</span><button>Add to cart</button></form></li>
+		<li><form action="/cart/add"><span class="price">$55.00</span><button>Add to cart</button></form></li>
+	</ul></body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate"); ok {
+		t.Error("did not expect structured-product-candidate on a listing page with many quick-add tiles")
+	}
+}
+
+// TestStructuredProductCandidateSuppressedByRealProduct pins row 5: a page that actually
+// declares Product JSON-LD stays silent even though it also carries a qualifying co-located
+// signal, unchanged from before this rewrite.
+func TestStructuredProductCandidateSuppressedByRealProduct(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"Product","name":"Widget",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD"}}
+	</script></head><body>
+		<form action="/cart/add"><p class="price">$19.99</p><button>Add to cart</button></form>
+	</body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate"); ok {
+		t.Error("did not expect structured-product-candidate when Product JSON-LD is already present")
+	}
+}
+
+// TestStructuredProductCandidateIgnoresHiddenCoLocation guards the co-location fix itself:
+// a price and an "Add to cart" button that are structurally co-located (same form) but sit
+// inside an aria-hidden="true" subtree — how Shopify marks up a mini-cart drawer before it's
+// opened — must not count. Without the hidden-subtree exclusion, an off-screen cart drawer
+// populated with real price/CTA pairs would reintroduce the exact false positive this
+// rewrite removes, just moved one level down (co-located but never actually shown).
+func TestStructuredProductCandidateIgnoresHiddenCoLocation(t *testing.T) {
+	res := page(t, `<html><body>
+		<main><h1>About Us</h1><p>Nothing product-shaped here.</p></main>
+		<div id="cart-drawer" aria-hidden="true">
+			<form action="/cart"><span class="price">$35.00</span><button>Add to cart</button></form>
+		</div>
+	</body></html>`)
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-product-candidate"); ok {
+		t.Error("did not expect structured-product-candidate from a price/CTA pair inside an aria-hidden subtree")
 	}
 }
 

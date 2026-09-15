@@ -1039,7 +1039,7 @@ var explanations = map[string]Explanation{
 		Fix:    "Add BreadcrumbList JSON-LD whose itemListElement mirrors the visible breadcrumb trail.",
 	},
 	"structured-product-candidate": {
-		What:   "The page reads like a product page (a price alongside an add-to-cart/buy action) but has no Product structured data.",
+		What:   "The page reads like a product page (a price co-located with an add-to-cart/buy control, in the same form or a small enclosing container, not just anywhere on the page) but has no Product structured data.",
 		Impact: "You miss eligibility for product rich results (price, availability, reviews) in search.",
 		Fix:    "Add Product (with a nested Offer) JSON-LD describing the item, price, and availability.",
 	},
