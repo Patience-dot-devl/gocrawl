@@ -27,11 +27,14 @@ var eligibility = map[string]fieldSpec{
 	"Product": {
 		required:    []string{"name", "image", "offers.price", "offers.priceCurrency", "offers.availability"},
 		recommended: []string{"brand", "sku", "description", "aggregateRating", "review"},
+		// priceValidUntil and hasMerchantReturnPolicy are documented by Google on offers,
+		// not on Product itself; either placement satisfies the check (integrity.go's
+		// dateProperties already accepts both spellings for the date one, at :195-196).
 		merchant: []string{
 			"gtin|gtin8|gtin12|gtin13|gtin14|mpn",
-			"priceValidUntil",
+			"priceValidUntil|offers.priceValidUntil",
 			"offers.shippingDetails",
-			"hasMerchantReturnPolicy",
+			"hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy",
 		},
 	},
 	"ProductGroup": {
@@ -42,12 +45,15 @@ var eligibility = map[string]fieldSpec{
 		// hasVariant, exactly what shopify-flat-variant-product tells owners to adopt)
 		// has no top-level Product to carry them: hasVariant children are exempt as
 		// thin copies (see listProperties below), so without this entry the merchant
-		// tier never runs on the best-structured stores.
+		// tier never runs on the best-structured stores. missingFields falls through to
+		// the variants for this type (see satisfiedOnVariants) so a store that puts these
+		// fields on each variant's Offer, rather than the group, is not told it is
+		// missing everything.
 		merchant: []string{
 			"gtin|gtin8|gtin12|gtin13|gtin14|mpn",
-			"priceValidUntil",
+			"priceValidUntil|offers.priceValidUntil",
 			"offers.shippingDetails",
-			"hasMerchantReturnPolicy",
+			"hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy",
 		},
 	},
 	"Article": {
@@ -134,7 +140,7 @@ func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.
 			if !known {
 				continue
 			}
-			if missing := missingFields(g, n, spec.required); len(missing) > 0 {
+			if missing := missingFields(g, n, spec.required, nil); len(missing) > 0 {
 				issues = append(issues, analyze.Issue{
 					Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
 					Code:    "structured-missing-required",
@@ -142,17 +148,45 @@ func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.
 					Data:    map[string]any{"type": ty, "missing": missing, "path": n.Path},
 				})
 			}
-			roll.add("structured-missing-recommended", ty, missingFields(g, n, spec.recommended), p.FinalURL)
-			roll.add("structured-missing-merchant", ty, missingFields(g, n, spec.merchant), p.FinalURL)
+			roll.add("structured-missing-recommended", ty, missingFields(g, n, spec.recommended, nil), p.FinalURL)
+			roll.add("structured-missing-merchant", ty, missingFields(g, n, spec.merchant, merchantFallback(ty, g, n)), p.FinalURL)
 		}
 	}
 	return issues
 }
 
+// merchantFallback returns the variant fallback for the merchant tier, or nil for every other
+// type. Only ProductGroup has variants to fall through to (a plain Product has none), and only
+// the merchant tier accepts the field on a variant's Offer as an alternative to the group's own
+// — required and recommended fields must still be satisfied by the node itself.
+func merchantFallback(ty string, g schemaorg.Graph, n schemaorg.Node) func(string) bool {
+	if ty != "ProductGroup" {
+		return nil
+	}
+	return func(field string) bool { return satisfiedOnVariants(g, n, field) }
+}
+
+// satisfiedOnVariants reports whether field (or, for an any-of group, any alternative in it)
+// resolves under n's hasVariant array. Google accepts the ProductGroup merchant fields on the
+// group itself or on each variant's Offer; g.HasValue's existing array-walking machinery
+// already resolves a path like "hasVariant.gtin13" or "hasVariant.offers.shippingDetails"
+// through the variant array, so this only has to prefix the path and reuse it.
+func satisfiedOnVariants(g schemaorg.Graph, n schemaorg.Node, field string) bool {
+	for _, alt := range strings.Split(field, "|") {
+		if g.HasValue(n, "hasVariant."+alt) {
+			return true
+		}
+	}
+	return false
+}
+
 // missingFields returns the entries of want that n does not satisfy. An entry containing "|"
-// is an any-of group, satisfied by any one alternative, and is reported by its full group
-// name so a reader sees the choice rather than an arbitrary member of it.
-func missingFields(g schemaorg.Graph, n schemaorg.Node, want []string) []string {
+// is an any-of group, satisfied by any one alternative, and is reported by its full group name
+// so a reader sees the choice rather than an arbitrary member of it — even when satisfaction
+// came from fallback, since widening the group string itself to include a "hasVariant.…"
+// alternative would make the printed label unreadable (see satisfiedOnVariants). fallback is
+// nil for every tier except merchant-on-ProductGroup; see merchantFallback.
+func missingFields(g schemaorg.Graph, n schemaorg.Node, want []string, fallback func(field string) bool) []string {
 	var missing []string
 	for _, field := range want {
 		satisfied := false
@@ -161,6 +195,9 @@ func missingFields(g schemaorg.Graph, n schemaorg.Node, want []string) []string 
 				satisfied = true
 				break
 			}
+		}
+		if !satisfied && fallback != nil {
+			satisfied = fallback(field)
 		}
 		if !satisfied {
 			missing = append(missing, field)

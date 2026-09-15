@@ -137,7 +137,7 @@ func TestMerchantGapUsesItsOwnCode(t *testing.T) {
 		t.Fatalf("expected 1 merchant-gap issue, got %d", len(merchant))
 	}
 	missing, _ := merchant[0].Data["missing"].(map[string]int)
-	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy"} {
+	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil|offers.priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy"} {
 		if missing[f] != 1 {
 			t.Errorf("expected %q reported missing once, got %d", f, missing[f])
 		}
@@ -148,6 +148,31 @@ func TestMerchantGapUsesItsOwnCode(t *testing.T) {
 		if _, leaked := m["hasMerchantReturnPolicy"]; leaked {
 			t.Error("merchant fields must not leak into the recommended rollup")
 		}
+	}
+}
+
+// TestMerchantGapSeverityIsWarningRecommendedStaysInfo is the F2 regression: the merchant tier
+// is the commercial point of this analyzer, so its gap must be loud enough to surface in a
+// severity=warning filter, while the recommended tier (genuinely optional polish) stays info.
+func TestMerchantGapSeverityIsWarningRecommendedStaysInfo(t *testing.T) {
+	html := `<html><head><script type="application/ld+json">` + completeProduct + `</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	issues := structured.New().Analyze(context.Background(), res)
+
+	merchant, ok := find(issues, "structured-missing-merchant")
+	if !ok {
+		t.Fatal("expected a structured-missing-merchant issue")
+	}
+	if merchant.Severity != analyze.Warning {
+		t.Errorf("expected structured-missing-merchant at warning, got %q", merchant.Severity)
+	}
+
+	recommended, ok := find(issues, "structured-missing-recommended")
+	if !ok {
+		t.Fatal("expected a structured-missing-recommended issue")
+	}
+	if recommended.Severity != analyze.Info {
+		t.Errorf("expected structured-missing-recommended to stay info, got %q", recommended.Severity)
 	}
 }
 
@@ -164,6 +189,26 @@ func TestAnyOfMerchantFieldSatisfiedByOneAlternative(t *testing.T) {
 	missing, _ := got[0].Data["missing"].(map[string]int)
 	if _, present := missing["gtin|gtin8|gtin12|gtin13|gtin14|mpn"]; present {
 		t.Error("mpn alone should satisfy the gtin-or-mpn identifier requirement")
+	}
+}
+
+// TestProductOffersPlacementSatisfiesMerchantFields is the F1 regression: Google documents
+// priceValidUntil and hasMerchantReturnPolicy on offers, not on the Product itself, and the
+// merchant tier must accept either placement. Before the fix these bare paths never resolve
+// against markup that (correctly) nests them under offers, so a store doing this right was
+// told it was missing both fields.
+func TestProductOffersPlacementSatisfiesMerchantFields(t *testing.T) {
+	html := `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg","mpn":"AC-1",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock",
+		 "priceValidUntil":"2026-12-31","hasMerchantReturnPolicy":{"@type":"MerchantReturnPolicy","returnPolicyCategory":"https://schema.org/MerchantReturnFiniteReturnWindow"},
+		 "shippingDetails":{"@type":"OfferShippingDetails"}}}
+	</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
+	got := findAll(structured.New().Analyze(context.Background(), res), "structured-missing-merchant")
+	if len(got) != 0 {
+		missing, _ := got[0].Data["missing"].(map[string]int)
+		t.Fatalf("expected no merchant gap for offers-nested priceValidUntil/hasMerchantReturnPolicy, got %v", missing)
 	}
 }
 
@@ -199,7 +244,7 @@ func TestProductGroupWithHasVariantStillRaisesMerchantGap(t *testing.T) {
 		t.Errorf("expected type ProductGroup, got %v", merchant[0].Data["type"])
 	}
 	missing, _ := merchant[0].Data["missing"].(map[string]int)
-	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy"} {
+	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil|offers.priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy"} {
 		if missing[f] != 1 {
 			t.Errorf("expected %q reported missing once, got %d (missing=%v)", f, missing[f], missing)
 		}
@@ -209,6 +254,34 @@ func TestProductGroupWithHasVariantStillRaisesMerchantGap(t *testing.T) {
 	// required-field-checking it would put a warning on every variant of every product.
 	if is, ok := find(issues, "structured-missing-required"); ok {
 		t.Errorf("expected no structured-missing-required issue (variant Product must stay exempt), got %+v", is)
+	}
+}
+
+// wellStructuredProductGroup is the shape F1b targets: every hasVariant child carries the full
+// merchant field set on its own Offer, which is exactly what Google's "fields on the variant"
+// allowance describes and exactly what shopify-flat-variant-product tells owners to adopt.
+const wellStructuredProductGroup = `{"@type":"ProductGroup","name":"Wool Runners",
+	"image":"https://shop.test/wool-runners.jpg",
+	"brand":{"@type":"Brand","name":"Allbirds"},
+	"productGroupID":"WR-001",
+	"variesBy":["size","color"],
+	"hasVariant":[
+		{"@type":"Product","url":"https://shop.test/products/wool-runners?variant=1","gtin13":"0012345678905",
+		 "offers":{"@type":"Offer","price":"98.00","priceCurrency":"USD","availability":"https://schema.org/InStock",
+		 "priceValidUntil":"2026-12-31","hasMerchantReturnPolicy":{"@type":"MerchantReturnPolicy"},
+		 "shippingDetails":{"@type":"OfferShippingDetails"}}}
+	]}`
+
+func TestProductGroupSatisfiedByVariantOffersRaisesNoMerchantGap(t *testing.T) {
+	// F1b regression: when every hasVariant child carries the merchant fields on its own
+	// Offer, the ProductGroup-level check must fall through to the variants rather than
+	// reporting the group itself as missing everything.
+	html := `<html><head><script type="application/ld+json">` + wellStructuredProductGroup + `</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/wool-runners": html})
+	got := findAll(structured.New().Analyze(context.Background(), res), "structured-missing-merchant")
+	if len(got) != 0 {
+		missing, _ := got[0].Data["missing"].(map[string]int)
+		t.Fatalf("expected no merchant gap when every variant carries the full field set, got %v", missing)
 	}
 }
 

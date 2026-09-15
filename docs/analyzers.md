@@ -154,7 +154,7 @@ have.
 | `structured-data` | info | page | JSON-LD found; lists the de-duplicated `@type`s, including nested ones | `types` |
 | `structured-missing-required` | warning | page | A typed object omits a field its rich result requires | `type`, `missing`, `path` |
 | `structured-missing-recommended` | info | **site** | A type omits recommended fields, aggregated across the crawl | `type`, `missing`, `fields`, `pages`, `examples` |
-| `structured-missing-merchant` | info | **site** | `Product`/`ProductGroup` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-missing-merchant` | warning | **site** | `Product`/`ProductGroup` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
 | `structured-duplicate-type` | warning | page | A page-level type is declared in two or more JSON-LD blocks | `type`, `blocks` |
 | `structured-conflicting-value` | error | page | Duplicate blocks disagree on `name`, `sku`, or an `offers` field | `type`, `field`, `values` |
 | `structured-unresolved-id` | warning | page | An `@id` reference has no matching node on the page | `id`, `property`, `type` |

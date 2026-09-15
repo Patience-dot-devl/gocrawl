@@ -69,7 +69,7 @@ func (r *rollup) issues(base string) []analyze.Issue {
 		out = append(out, analyze.Issue{
 			Analyzer: "structured",
 			URL:      base,
-			Severity: analyze.Info,
+			Severity: rollupSeverity(key.code),
 			Code:     key.code,
 			Message:  rollupMessage(key.code, key.typ),
 			Data: map[string]any{
@@ -82,6 +82,16 @@ func (r *rollup) issues(base string) []analyze.Issue {
 		})
 	}
 	return out
+}
+
+// rollupSeverity distinguishes the two rolled-up codes: the merchant tier is the commercial
+// point of this analyzer (Google Shopping / free-listing eligibility), so it warrants warning,
+// while the recommended tier is genuinely optional polish and stays info.
+func rollupSeverity(code string) analyze.Severity {
+	if code == "structured-missing-merchant" {
+		return analyze.Warning
+	}
+	return analyze.Info
 }
 
 // rollupMessage phrases the finding for a reader who will not see the code.
