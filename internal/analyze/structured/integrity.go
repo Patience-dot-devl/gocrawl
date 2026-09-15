@@ -266,7 +266,9 @@ func valueIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
 				if !isString || bareDecimalRe.MatchString(strings.TrimSpace(s)) {
 					continue
 				}
-				add(analyze.Warning, "structured-malformed-price",
+				// error, not warning: a malformed price invalidates the Offer and is a
+				// Merchant Center disapproval reason.
+				add(analyze.Error, "structured-malformed-price",
 					"A structured-data price is not a bare decimal number",
 					map[string]any{"type": firstType(n), "property": prop, "value": s})
 			}
@@ -292,8 +294,11 @@ func priceMismatchIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
 		if !ok || marked == shown {
 			continue
 		}
+		// error, not warning: this finding's own explanation says it risks a manual action
+		// suppressing every rich result on the site, so it belongs in the set users filter
+		// on for what needs fixing now.
 		issues = append(issues, analyze.Issue{
-			Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
+			Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Error,
 			Code:    "structured-price-mismatch",
 			Message: "The price in Product structured data differs from the price shown on the page",
 			Data: map[string]any{

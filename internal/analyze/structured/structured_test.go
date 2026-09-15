@@ -51,6 +51,20 @@ func TestStructuredInvalidJSON(t *testing.T) {
 	}
 }
 
+// TestStructuredInvalidJSONIsError is the severity-calibration fix: a block that fails to
+// parse is discarded whole with zero judgement and zero false-positive risk, so it belongs in
+// the severity=error set users filter on, not warning.
+func TestStructuredInvalidJSONIsError(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">{ not json }</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-invalid-jsonld")
+	if !ok {
+		t.Fatal("expected invalid-jsonld issue")
+	}
+	if is.Severity != analyze.Error {
+		t.Errorf("expected structured-invalid-jsonld at error, got %q", is.Severity)
+	}
+}
+
 func TestStructuredGraph(t *testing.T) {
 	res := page(t, `<html><head><script type="application/ld+json">
 		{"@context":"https://schema.org","@graph":[{"@type":"WebSite"},{"@type":"BreadcrumbList"}]}
@@ -79,8 +93,10 @@ func TestStructuredMissingRequired(t *testing.T) {
 }
 
 func TestStructuredValidProductNoViolation(t *testing.T) {
-	// Deliberate change 3: Product's required tier is now name, image, offers.price,
-	// offers.priceCurrency and offers.availability, so a complete Product needs all five.
+	// Deliberate change 3: Product's required tier is name, image, offers.price and
+	// offers.priceCurrency; offers.availability is recommended (Google documents it as
+	// non-blocking), so a complete Product needs the four required fields and availability
+	// beside them is just extra completeness, not a requirement.
 	res := page(t, `<html><head><script type="application/ld+json">
 		{"@context":"https://schema.org","@type":"Product","name":"Widget","image":"https://x.test/w.jpg",
 		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}

@@ -182,6 +182,11 @@ func TestMalformedPrice(t *testing.T) {
 	if is.Data["value"] != "$1,299.00" {
 		t.Errorf("expected the offending value in data, got %v", is.Data["value"])
 	}
+	// Severity calibration: a malformed price invalidates the Offer and is a Merchant
+	// Center disapproval reason, so it belongs at error, not warning.
+	if is.Severity != analyze.Error {
+		t.Errorf("expected structured-malformed-price at error, got %q", is.Severity)
+	}
 }
 
 func TestNumericAndPlainStringPricesAccepted(t *testing.T) {
@@ -207,6 +212,11 @@ func TestPriceMismatchWithPage(t *testing.T) {
 	}
 	if is.Data["markup"] != "19.99" || is.Data["page"] != "24.99" {
 		t.Errorf("expected markup 19.99 vs page 24.99, got %v / %v", is.Data["markup"], is.Data["page"])
+	}
+	// Severity calibration: this finding's own explanation says it risks a manual action
+	// suppressing every rich result on the site, so it belongs at error, not warning.
+	if is.Severity != analyze.Error {
+		t.Errorf("expected structured-price-mismatch at error, got %q", is.Severity)
 	}
 }
 

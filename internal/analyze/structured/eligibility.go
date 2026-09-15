@@ -25,8 +25,10 @@ type fieldSpec struct {
 // not a full vocabulary. Adding a type here is the whole cost of covering a new rich result.
 var eligibility = map[string]fieldSpec{
 	"Product": {
-		required:    []string{"name", "image", "offers.price", "offers.priceCurrency", "offers.availability"},
-		recommended: []string{"brand", "sku", "description", "aggregateRating", "review"},
+		required: []string{"name", "image", "offers.price", "offers.priceCurrency"},
+		// offers.availability is Google-documented as recommended, not blocking: an Offer
+		// missing it is still eligible for the product rich result, just a weaker listing.
+		recommended: []string{"offers.availability", "brand", "sku", "description", "aggregateRating", "review"},
 		// priceValidUntil and hasMerchantReturnPolicy are documented by Google on offers,
 		// not on Product itself; either placement satisfies the check (integrity.go's
 		// dateProperties already accepts both spellings for the date one, at :195-196).
@@ -35,11 +37,17 @@ var eligibility = map[string]fieldSpec{
 			"priceValidUntil|offers.priceValidUntil",
 			"offers.shippingDetails",
 			"hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy",
+			"offers.itemCondition",
 		},
 	},
 	"ProductGroup": {
-		required:    []string{"name"},
-		recommended: []string{"hasVariant", "productGroupID", "variesBy", "image", "brand"},
+		// hasVariant and productGroupID are both required by Google's product-variants
+		// documentation: productGroupID is what joins the variants into one group, and a
+		// ProductGroup with no hasVariant array has nothing to group. hasVariant children
+		// remain exempt from their own required-field check as thin copies (see
+		// listProperties below), so this only checks that the group node names them.
+		required:    []string{"name", "hasVariant", "productGroupID"},
+		recommended: []string{"variesBy", "image", "brand"},
 		// Google accepts these merchant fields on the ProductGroup itself or on each
 		// variant's Offer. A store that models variants correctly (ProductGroup +
 		// hasVariant, exactly what shopify-flat-variant-product tells owners to adopt)
@@ -54,6 +62,7 @@ var eligibility = map[string]fieldSpec{
 			"priceValidUntil|offers.priceValidUntil",
 			"offers.shippingDetails",
 			"hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy",
+			"offers.itemCondition",
 		},
 	},
 	"Article": {
@@ -69,20 +78,25 @@ var eligibility = map[string]fieldSpec{
 		recommended: []string{"image", "datePublished", "dateModified", "author.name", "publisher.name"},
 	},
 	"Recipe": {
-		required:    []string{"name"},
-		recommended: []string{"image", "recipeIngredient", "recipeInstructions", "author.name", "totalTime"},
+		// image is required; recipeIngredient/recipeInstructions are genuinely only
+		// recommended per Google's recipe documentation, despite how central they feel.
+		required:    []string{"name", "image"},
+		recommended: []string{"recipeIngredient", "recipeInstructions", "author.name", "totalTime"},
 	},
 	"Event": {
-		required:    []string{"name", "startDate"},
-		recommended: []string{"location", "image", "endDate", "eventStatus", "offers.url"},
+		// location is required for every Event, including online ones: a VirtualLocation
+		// node with a url satisfies it.
+		required:    []string{"name", "startDate", "location"},
+		recommended: []string{"image", "endDate", "eventStatus", "offers.url"},
 	},
 	"Organization": {
-		required:    []string{"name"},
-		recommended: []string{"url", "logo", "sameAs"},
+		// url and logo are both required by Google's logo guidance, not merely recommended.
+		required:    []string{"name", "logo", "url"},
+		recommended: []string{"sameAs"},
 	},
 	"LocalBusiness": {
-		required:    []string{"name"},
-		recommended: []string{"address", "telephone", "openingHours|openingHoursSpecification", "geo", "priceRange"},
+		required:    []string{"name", "address"},
+		recommended: []string{"telephone", "openingHours|openingHoursSpecification", "geo", "priceRange"},
 	},
 	"Person": {
 		required:    []string{"name"},
@@ -98,12 +112,19 @@ var eligibility = map[string]fieldSpec{
 		required: []string{"itemListElement"},
 	},
 	"VideoObject": {
-		required:    []string{"name", "thumbnailUrl"},
-		recommended: []string{"description", "uploadDate", "duration", "contentUrl|embedUrl"},
+		// Google's required set for the video rich result is name + description +
+		// thumbnailUrl + uploadDate; without any one of the four there is no video result
+		// at all, so all four belong here, not split across tiers.
+		required:    []string{"name", "thumbnailUrl", "description", "uploadDate"},
+		recommended: []string{"duration", "contentUrl|embedUrl"},
 	},
 	"WebSite": {
-		required:    []string{"name"},
-		recommended: []string{"url", "potentialAction"},
+		// potentialAction (Sitelinks Search Box markup) is deliberately absent: Google
+		// deprecated the Sitelinks Search Box feature in November 2023, so recommending it
+		// is stale advice that would send readers to build markup for a feature that no
+		// longer renders. Do not re-add it without checking whether Google has reversed
+		// that deprecation.
+		required: []string{"name", "url"},
 	},
 }
 

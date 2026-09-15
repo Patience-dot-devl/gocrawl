@@ -1069,9 +1069,9 @@ var explanations = map[string]Explanation{
 		Fix:    "Add the listed properties to the template that emits this type. Because the gap repeats site-wide, one template edit fixes every affected page.",
 	},
 	"structured-missing-merchant": {
-		What:   "Product or ProductGroup markup omits the fields Google Shopping and free product listings read: a product identifier, price validity, shipping, and return policy. For a ProductGroup, these are also satisfied if every variant's Offer carries them.",
-		Impact: "Products are ineligible for, or downranked in, Shopping and free listing surfaces, and shoppers see no shipping or returns detail before clicking.",
-		Fix:    "Emit gtin (or mpn), priceValidUntil, shippingDetails and hasMerchantReturnPolicy on the offer. Most of this can be templated once from store-level shipping and return settings.",
+		What:   "Product or ProductGroup markup omits the fields Google Shopping and free product listings read: a product identifier, price validity, shipping, return policy, and item condition. For a ProductGroup, these are also satisfied if every variant's Offer carries them.",
+		Impact: "Products are ineligible for, or downranked in, Shopping and free listing surfaces, and shoppers see no shipping, returns, or condition detail before clicking.",
+		Fix:    "Emit gtin (or mpn), priceValidUntil, shippingDetails, hasMerchantReturnPolicy and itemCondition on the offer. Most of this can be templated once from store-level shipping and return settings.",
 	},
 	"structured-duplicate-type": {
 		What:   "A page-level type (Product, Organization, WebSite, ...) is declared in more than one JSON-LD block, usually because a theme and an SEO/marketing app each emit their own copy.",

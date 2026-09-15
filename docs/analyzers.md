@@ -149,7 +149,7 @@ have.
 
 | Code | Severity | Scope | Triggered when | `data` |
 | --- | --- | --- | --- | --- |
-| `structured-invalid-jsonld` | warning | page | A JSON-LD block is not valid JSON | `error` |
+| `structured-invalid-jsonld` | error | page | A JSON-LD block is not valid JSON | `error` |
 | `structured-none` | info | page | The parsed graph has zero typed nodes and zero parse errors | — |
 | `structured-data` | info | page | JSON-LD found; lists the de-duplicated `@type`s, including nested ones | `types` |
 | `structured-missing-required` | warning | page | A typed object omits a field its rich result requires | `type`, `missing`, `path` |
@@ -160,8 +160,8 @@ have.
 | `structured-unresolved-id` | warning | page | An `@id` reference has no matching node on the page | `id`, `property`, `type` |
 | `structured-relative-url` | warning | page | A URL property holds a relative path | `type`, `property`, `value` |
 | `structured-invalid-date` | warning | page | A date property is not ISO 8601 | `type`, `property`, `value` |
-| `structured-malformed-price` | warning | page | A price string carries a symbol, separator, or range | `type`, `property`, `value` |
-| `structured-price-mismatch` | warning | page | `offers.price` differs from the single price rendered on the page | `markup`, `page` |
+| `structured-malformed-price` | error | page | A price string carries a symbol, separator, or range | `type`, `property`, `value` |
+| `structured-price-mismatch` | error | page | `offers.price` differs from the single price rendered on the page | `markup`, `page` |
 | `structured-breadcrumb-candidate` | warning | page | Breadcrumb-styled nav with ≥2 links, no `BreadcrumbList` | `links` |
 | `structured-product-candidate` | warning | page | Product/price microdata, or a price co-located with a cart/buy call-to-action (same `<form>`, or a bounded ancestor if none), for one or two such pairs, with no `Product`/`Offer` | `signal` |
 | `structured-article-candidate` | warning | page | A 150+ word `<article>` with an author or date signal, no article type | `words` |

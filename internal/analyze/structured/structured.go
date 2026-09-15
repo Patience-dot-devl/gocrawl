@@ -39,8 +39,10 @@ func (a Analyzer) analyzePage(p *crawler.Page, roll *rollup) []analyze.Issue {
 
 	var issues []analyze.Issue
 	for _, e := range parseErrs {
+		// error, not warning: the block is discarded whole. There is no judgement call
+		// here — it either parses or it does not — so this carries no false-positive risk.
 		issues = append(issues, analyze.Issue{
-			Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Warning,
+			Analyzer: "structured", URL: p.FinalURL, Severity: analyze.Error,
 			Code: "structured-invalid-jsonld", Message: "JSON-LD block is not valid JSON",
 			Data: map[string]any{"error": e.Err},
 		})

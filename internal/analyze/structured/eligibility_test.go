@@ -52,10 +52,13 @@ func TestProductMissingRequiredFieldIsPerPage(t *testing.T) {
 	if !ok {
 		t.Fatal("expected structured-missing-required for a Product with no offers")
 	}
+	// offers.availability is Google-documented as recommended, not required (see the tier
+	// correction in eligibility.go), so a Product missing only price/priceCurrency/availability
+	// is missing two required fields, not three.
 	missing, _ := is.Data["missing"].([]string)
-	want := map[string]bool{"offers.price": true, "offers.priceCurrency": true, "offers.availability": true}
-	if len(missing) != 3 {
-		t.Fatalf("expected 3 missing offer fields, got %v", missing)
+	want := map[string]bool{"offers.price": true, "offers.priceCurrency": true}
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing offer fields, got %v", missing)
 	}
 	for _, m := range missing {
 		if !want[m] {
@@ -70,7 +73,20 @@ func TestProductMissingRequiredFieldIsPerPage(t *testing.T) {
 func TestCompleteProductRaisesNoRequiredGap(t *testing.T) {
 	res := page(t, `<html><head><script type="application/ld+json">`+completeProduct+`</script></head><body></body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); ok {
-		t.Error("a Product with all five required fields should raise no required gap")
+		t.Error("a Product with all four required fields should raise no required gap")
+	}
+}
+
+// TestProductMissingOnlyAvailabilityRaisesNoRequiredGap proves the tier correction: Google
+// documents offers.availability as recommended, not required, so an Offer missing only
+// availability must not trigger structured-missing-required.
+func TestProductMissingOnlyAvailabilityRaisesNoRequiredGap(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD"}}
+	</script></head><body></body></html>`)
+	if is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); ok {
+		t.Errorf("a Product missing only offers.availability must not raise structured-missing-required, got %+v", is.Data)
 	}
 }
 
@@ -137,7 +153,7 @@ func TestMerchantGapUsesItsOwnCode(t *testing.T) {
 		t.Fatalf("expected 1 merchant-gap issue, got %d", len(merchant))
 	}
 	missing, _ := merchant[0].Data["missing"].(map[string]int)
-	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil|offers.priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy"} {
+	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil|offers.priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy", "offers.itemCondition"} {
 		if missing[f] != 1 {
 			t.Errorf("expected %q reported missing once, got %d", f, missing[f])
 		}
@@ -202,7 +218,7 @@ func TestProductOffersPlacementSatisfiesMerchantFields(t *testing.T) {
 		{"@type":"Product","name":"Tee","image":"https://shop.test/t.jpg","mpn":"AC-1",
 		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock",
 		 "priceValidUntil":"2026-12-31","hasMerchantReturnPolicy":{"@type":"MerchantReturnPolicy","returnPolicyCategory":"https://schema.org/MerchantReturnFiniteReturnWindow"},
-		 "shippingDetails":{"@type":"OfferShippingDetails"}}}
+		 "shippingDetails":{"@type":"OfferShippingDetails"},"itemCondition":"https://schema.org/NewCondition"}}
 	</script></head><body></body></html>`
 	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/a": html})
 	got := findAll(structured.New().Analyze(context.Background(), res), "structured-missing-merchant")
@@ -244,7 +260,7 @@ func TestProductGroupWithHasVariantStillRaisesMerchantGap(t *testing.T) {
 		t.Errorf("expected type ProductGroup, got %v", merchant[0].Data["type"])
 	}
 	missing, _ := merchant[0].Data["missing"].(map[string]int)
-	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil|offers.priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy"} {
+	for _, f := range []string{"gtin|gtin8|gtin12|gtin13|gtin14|mpn", "priceValidUntil|offers.priceValidUntil", "offers.shippingDetails", "hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy", "offers.itemCondition"} {
 		if missing[f] != 1 {
 			t.Errorf("expected %q reported missing once, got %d (missing=%v)", f, missing[f], missing)
 		}
@@ -269,7 +285,7 @@ const wellStructuredProductGroup = `{"@type":"ProductGroup","name":"Wool Runners
 		{"@type":"Product","url":"https://shop.test/products/wool-runners?variant=1","gtin13":"0012345678905",
 		 "offers":{"@type":"Offer","price":"98.00","priceCurrency":"USD","availability":"https://schema.org/InStock",
 		 "priceValidUntil":"2026-12-31","hasMerchantReturnPolicy":{"@type":"MerchantReturnPolicy"},
-		 "shippingDetails":{"@type":"OfferShippingDetails"}}}
+		 "shippingDetails":{"@type":"OfferShippingDetails"},"itemCondition":"https://schema.org/NewCondition"}}
 	]}`
 
 func TestProductGroupSatisfiedByVariantOffersRaisesNoMerchantGap(t *testing.T) {
@@ -295,5 +311,159 @@ func TestNestedListProductsAreExemptFromEligibility(t *testing.T) {
 	</script></head><body></body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); ok {
 		t.Error("products nested in an ItemList must be exempt from eligibility checks")
+	}
+}
+
+// The tests below each pin one row of the domain-reviewed tier corrections: a field that moved
+// from recommended into required must now raise structured-missing-required when absent, on a
+// node that otherwise carries every other required field for its type (so the assertion isolates
+// the moved field rather than riding on some other gap).
+
+func TestEventMissingLocationIsRequired(t *testing.T) {
+	// Google requires location for every Event, including online ones (a VirtualLocation with
+	// a url satisfies it) — it was wrongly filed as recommended.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Event","name":"Launch Party","startDate":"2026-10-01T18:00:00-07:00"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
+	if !ok {
+		t.Fatal("expected structured-missing-required for an Event with no location")
+	}
+	missing, _ := is.Data["missing"].([]string)
+	if len(missing) != 1 || missing[0] != "location" {
+		t.Errorf("expected exactly [location] missing, got %v", missing)
+	}
+}
+
+func TestVideoObjectMissingDescriptionOrUploadDateIsRequired(t *testing.T) {
+	// Google's required set for the video rich result is name + description + thumbnailUrl +
+	// uploadDate; the table previously required only two of the four.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"VideoObject","name":"How it's made","thumbnailUrl":"https://shop.test/thumb.jpg"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
+	if !ok {
+		t.Fatal("expected structured-missing-required for a VideoObject with no description or uploadDate")
+	}
+	missing, _ := is.Data["missing"].([]string)
+	want := map[string]bool{"description": true, "uploadDate": true}
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing fields, got %v", missing)
+	}
+	for _, m := range missing {
+		if !want[m] {
+			t.Errorf("unexpected missing field %q", m)
+		}
+	}
+}
+
+func TestRecipeMissingImageIsRequired(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Recipe","name":"Soup"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
+	if !ok {
+		t.Fatal("expected structured-missing-required for a Recipe with no image")
+	}
+	missing, _ := is.Data["missing"].([]string)
+	if len(missing) != 1 || missing[0] != "image" {
+		t.Errorf("expected exactly [image] missing, got %v", missing)
+	}
+}
+
+func TestRecipeIngredientsAndInstructionsStayRecommended(t *testing.T) {
+	// Counterpart to TestRecipeMissingImageIsRequired: recipeIngredient/recipeInstructions were
+	// deliberately NOT moved, despite feeling central to a recipe, per Google's documentation.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Recipe","name":"Soup","image":"https://shop.test/soup.jpg"}
+	</script></head><body></body></html>`)
+	if is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required"); ok {
+		t.Errorf("a Recipe missing only recipeIngredient/recipeInstructions must not raise structured-missing-required, got %+v", is.Data)
+	}
+}
+
+func TestLocalBusinessMissingAddressIsRequired(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"LocalBusiness","name":"Corner Shop"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
+	if !ok {
+		t.Fatal("expected structured-missing-required for a LocalBusiness with no address")
+	}
+	missing, _ := is.Data["missing"].([]string)
+	if len(missing) != 1 || missing[0] != "address" {
+		t.Errorf("expected exactly [address] missing, got %v", missing)
+	}
+}
+
+func TestOrganizationMissingLogoOrURLIsRequired(t *testing.T) {
+	// Both required by Google's logo guidance.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Organization","name":"Acme"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
+	if !ok {
+		t.Fatal("expected structured-missing-required for an Organization with no logo/url")
+	}
+	missing, _ := is.Data["missing"].([]string)
+	want := map[string]bool{"logo": true, "url": true}
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing fields, got %v", missing)
+	}
+	for _, m := range missing {
+		if !want[m] {
+			t.Errorf("unexpected missing field %q", m)
+		}
+	}
+}
+
+func TestProductGroupMissingHasVariantOrProductGroupIDIsRequired(t *testing.T) {
+	// A ProductGroup without hasVariant/productGroupID is inert: productGroupID is what joins
+	// the variants into one group, and there is nothing to group without hasVariant.
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"ProductGroup","name":"Wool Runners"}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
+	if !ok {
+		t.Fatal("expected structured-missing-required for a ProductGroup with no hasVariant/productGroupID")
+	}
+	missing, _ := is.Data["missing"].([]string)
+	want := map[string]bool{"hasVariant": true, "productGroupID": true}
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing fields, got %v", missing)
+	}
+	for _, m := range missing {
+		if !want[m] {
+			t.Errorf("unexpected missing field %q", m)
+		}
+	}
+}
+
+// TestWebSitePotentialActionNeverAppears covers the removal, not a move: potentialAction
+// (Sitelinks Search Box markup) was deleted from the table outright, since Google deprecated
+// the feature in November 2023. A WebSite carrying every remaining WebSite field (name, url)
+// and no potentialAction must raise no finding at all for the type, and in particular no
+// finding may ever mention "potentialAction" in its data, from any code this analyzer emits.
+func TestWebSitePotentialActionNeverAppears(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"WebSite","name":"Shop","url":"https://shop.test/"}
+	</script></head><body></body></html>`)
+	issues := structured.New().Analyze(context.Background(), res)
+	for _, is := range issues {
+		for _, v := range is.Data {
+			if s, ok := v.(string); ok && strings.Contains(s, "potentialAction") {
+				t.Errorf("potentialAction must not appear anywhere in issue data, found in %+v", is)
+			}
+			if fields, ok := v.([]string); ok {
+				for _, f := range fields {
+					if f == "potentialAction" {
+						t.Errorf("potentialAction must not appear as a missing field, found in %+v", is)
+					}
+				}
+			}
+		}
+	}
+	if is, ok := find(issues, "structured-missing-required"); ok {
+		t.Errorf("a WebSite with name and url should raise no required gap, got %+v", is.Data)
 	}
 }
