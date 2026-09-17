@@ -219,6 +219,9 @@ func templateGapIssues(result *crawler.Result, base string) []analyze.Issue {
 				"expected": e.anyOf,
 				"pages":    e.pages,
 				"examples": e.examples,
+				// One issue per template and label shares code and URL with its siblings;
+				// this keeps each one distinct when two crawls are compared.
+				analyze.InstanceKey: string(key.template) + "/" + key.label,
 			},
 		})
 	}

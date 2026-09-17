@@ -97,6 +97,11 @@ Each entry in `issues` is an [`Issue`](../internal/analyze/analyze.go):
 | `message` | string | Human-readable description. |
 | `data` | object | Optional analyzer-specific details; omitted when empty. |
 
+When an analyzer emits several findings with the same `analyzer`, `code` and `url` — the
+`structured` rollups (one per schema.org type) and `shopify-template-schema-gap` (one per
+template and missing type) — each carries `data.instance`, a string that tells them apart.
+[`gocrawl compare`](storage.md#what-it-reports) uses it as part of a finding's identity.
+
 ### Coverage
 
 `coverage` reports whether the crawl actually fetched every in-scope URL it discovered, so

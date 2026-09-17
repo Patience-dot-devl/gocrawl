@@ -75,6 +75,52 @@ func TestCompareSeverityChangeIsNewAndResolved(t *testing.T) {
 	}
 }
 
+func TestCompareInstanceKeySeparatesSameKeyFindings(t *testing.T) {
+	// Two site-wide rollups share analyzer, code and url and differ only by instance. Without
+	// the instance in the identity, Product being fixed while VideoObject appears would read
+	// as one persisting finding instead of one resolved and one new.
+	rollup := func(typ string) analyze.Issue {
+		is := issue("structured", "structured-missing-recommended", "https://x.test/", analyze.Info)
+		is.Data = map[string]any{analyze.InstanceKey: typ}
+		return is
+	}
+	base := reportWith("https://x.test", []analyze.Issue{rollup("Product"), rollup("Organization")})
+	current := reportWith("https://x.test", []analyze.Issue{rollup("Organization"), rollup("VideoObject")})
+
+	d := Compare(base, current)
+
+	if len(d.Issues.Resolved) != 1 || d.Issues.Resolved[0].Data[analyze.InstanceKey] != "Product" {
+		t.Errorf("Resolved = %+v, want only the Product rollup", d.Issues.Resolved)
+	}
+	if len(d.Issues.New) != 1 || d.Issues.New[0].Data[analyze.InstanceKey] != "VideoObject" {
+		t.Errorf("New = %+v, want only the VideoObject rollup", d.Issues.New)
+	}
+	if len(d.Issues.Persisting) != 1 || d.Issues.Persisting[0].Data[analyze.InstanceKey] != "Organization" {
+		t.Errorf("Persisting = %+v, want only the Organization rollup", d.Issues.Persisting)
+	}
+}
+
+func TestCompareCountsDuplicateKeysAsMultiset(t *testing.T) {
+	// Three identically keyed findings before and two after: one was fixed. Set-based pairing
+	// reported all of them persisting and nothing resolved.
+	broken := issue("links", "link-broken", "https://x.test/a", analyze.Error)
+	base := reportWith("https://x.test", []analyze.Issue{broken, broken, broken})
+	current := reportWith("https://x.test", []analyze.Issue{broken, broken})
+
+	d := Compare(base, current)
+
+	if len(d.Issues.Persisting) != 2 || len(d.Issues.Resolved) != 1 || len(d.Issues.New) != 0 {
+		t.Errorf("got new=%d resolved=%d persisting=%d, want 0/1/2",
+			len(d.Issues.New), len(d.Issues.Resolved), len(d.Issues.Persisting))
+	}
+
+	d = Compare(current, base)
+	if len(d.Issues.Persisting) != 2 || len(d.Issues.New) != 1 || len(d.Issues.Resolved) != 0 {
+		t.Errorf("reversed: got new=%d resolved=%d persisting=%d, want 1/0/2",
+			len(d.Issues.New), len(d.Issues.Resolved), len(d.Issues.Persisting))
+	}
+}
+
 func TestComparePagesAndSummaryDeltas(t *testing.T) {
 	base := reportWith("https://x.test",
 		[]analyze.Issue{issue("seo", "x", "https://x.test/a", analyze.Error)},

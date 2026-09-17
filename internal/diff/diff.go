@@ -42,7 +42,7 @@ type Diff struct {
 }
 
 // IssueDiff buckets issues by how they changed between the two crawls. Issue identity is
-// (analyzer, code, url); message, severity, and data may shift without changing identity, so
+// (analyzer, code, url, Data[analyze.InstanceKey]); message, severity, and data may shift without changing identity, so
 // the current-crawl copy is kept for New and Persisting and the base copy for Resolved.
 type IssueDiff struct {
 	New        []analyze.Issue `json:"new"`        // present now, absent before (regressions / freshly found)
@@ -71,8 +71,9 @@ type PageDiff struct {
 }
 
 // issueKey is the stable identity of a finding across crawls.
-func issueKey(is analyze.Issue) [3]string {
-	return [3]string{is.Analyzer, is.Code, is.URL}
+func issueKey(is analyze.Issue) [4]string {
+	instance, _ := is.Data[analyze.InstanceKey].(string)
+	return [4]string{is.Analyzer, is.Code, is.URL, instance}
 }
 
 // Compare diffs base (the earlier crawl) against current (the later one).
@@ -88,24 +89,33 @@ func Compare(base, current *report.Report) *Diff {
 }
 
 func compareIssues(baseIssues, currentIssues []analyze.Issue) IssueDiff {
-	baseByKey := make(map[[3]string]analyze.Issue, len(baseIssues))
+	// Identity is a multiset, not a set: an analyzer may still emit two findings with the
+	// same key (two broken links from one page to targets that differ only in Data). Pairing
+	// occurrences by count keeps "3 before, 2 now" reporting one resolved rather than none.
+	baseCount := make(map[[4]string]int, len(baseIssues))
 	for _, is := range baseIssues {
-		baseByKey[issueKey(is)] = is
+		baseCount[issueKey(is)]++
 	}
-	currentKeys := make(map[[3]string]bool, len(currentIssues))
+	currentCount := make(map[[4]string]int, len(currentIssues))
+	for _, is := range currentIssues {
+		currentCount[issueKey(is)]++
+	}
 
 	var d IssueDiff
 	for _, is := range currentIssues {
 		k := issueKey(is)
-		currentKeys[k] = true
-		if _, ok := baseByKey[k]; ok {
+		if baseCount[k] > 0 {
+			baseCount[k]--
 			d.Persisting = append(d.Persisting, is)
 		} else {
 			d.New = append(d.New, is)
 		}
 	}
 	for _, is := range baseIssues {
-		if !currentKeys[issueKey(is)] {
+		k := issueKey(is)
+		if currentCount[k] > 0 {
+			currentCount[k]--
+		} else {
 			d.Resolved = append(d.Resolved, is)
 		}
 	}

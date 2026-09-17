@@ -111,6 +111,11 @@ func TestRecommendedGapRollsUpAcrossPages(t *testing.T) {
 	if is.Data["type"] != "Product" {
 		t.Errorf("expected type Product, got %v", is.Data["type"])
 	}
+	// The rollup emits one issue per type at the same code and URL; the instance is what keeps
+	// them apart in gocrawl compare.
+	if is.Data[analyze.InstanceKey] != "Product" {
+		t.Errorf("expected instance Product, got %v", is.Data[analyze.InstanceKey])
+	}
 	if is.Data["pages"] != 3 {
 		t.Errorf("expected pages=3, got %v", is.Data["pages"])
 	}

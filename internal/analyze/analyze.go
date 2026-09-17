@@ -30,6 +30,13 @@ type Issue struct {
 	Data     map[string]any `json:"data,omitempty"`
 }
 
+// InstanceKey is the Data key an analyzer sets when it emits several findings that share one
+// (Analyzer, Code, URL) — a site-wide rollup raised once per schema.org type, say. Its string
+// value joins the finding's identity when two crawls are compared, so those findings stay
+// distinct instead of collapsing into one. Findings without it keep the three-part identity,
+// which is why adding it to an existing code re-keys that code against saved reports.
+const InstanceKey = "instance"
+
 // Analyzer is a single check. Implementations must be safe for sequential reuse.
 type Analyzer interface {
 	Name() string

@@ -141,6 +141,16 @@ func TestTemplateSchemaGapRollsUpPerTemplate(t *testing.T) {
 			t.Errorf("expected 3 examples, got %v", d["examples"])
 		}
 	}
+	// Every gap shares code and URL, so each needs its own instance or gocrawl compare collapses
+	// them into one finding.
+	instances := map[any]bool{}
+	for _, is := range gaps {
+		inst, _ := is.Data[analyze.InstanceKey].(string)
+		if inst == "" || instances[inst] {
+			t.Errorf("expected a distinct non-empty instance per gap, got %q", inst)
+		}
+		instances[inst] = true
+	}
 	for _, is := range gaps {
 		if is.Data["template"] == "product" && !strings.Contains(is.Message, "3 Shopify product pages have no") {
 			t.Errorf("expected the message to carry the affected-page count, got %q", is.Message)

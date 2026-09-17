@@ -78,6 +78,9 @@ func (r *rollup) issues(base string) []analyze.Issue {
 				"fields":   sortedFields(e.missing),
 				"pages":    e.pages,
 				"examples": e.examples,
+				// One issue per type shares code and URL with its siblings; the type keeps
+				// each one distinct when two crawls are compared.
+				analyze.InstanceKey: key.typ,
 			},
 		})
 	}
