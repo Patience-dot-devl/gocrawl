@@ -14,6 +14,10 @@ const maxExamples = 5
 // links, the largest breadcrumb link count seen on a counted page.
 const breadcrumbCandidateCode = "structured-breadcrumb-candidate"
 
+// emptyURLCode carries empty beyond the shared shape: the largest number of blank entries seen
+// in one URL property on a counted page.
+const emptyURLCode = "structured-empty-url"
+
 // rollupKey identifies one aggregated finding: an issue code and the schema.org type it was
 // raised against.
 type rollupKey struct {
@@ -27,6 +31,7 @@ type rollupEntry struct {
 	pages    int
 	examples []string
 	links    int // largest breadcrumb link count seen; rendered only for breadcrumbCandidateCode
+	empty    int // largest number of blank entries in one URL property; rendered only for emptyURLCode
 	// owner maps a canonical URL key (analyze.URLKey) to the FinalURL of the page that claimed
 	// it, and counted to the fields already tallied for it. Together they make every count
 	// here a count of distinct canonical pages: a product reached at /products/<h> and again
@@ -104,6 +109,16 @@ func (r *rollup) addBreadcrumb(pageURL, canonical string, links int) {
 	}
 }
 
+// addEmptyURL records a page whose typ markup holds empty URL values in props, with at most
+// empty blank entries in any one of them. Blank URLs come from theme settings left unfilled,
+// so they roll up like a field gap: missing maps each property to the pages it was blank on.
+// empty keeps the maximum across counted pages, which does not depend on page order.
+func (r *rollup) addEmptyURL(typ string, props []string, pageURL, canonical string, empty int) {
+	if e := r.add(emptyURLCode, typ, props, pageURL, canonical); e != nil && empty > e.empty {
+		e.empty = empty
+	}
+}
+
 // issues renders the accumulated gaps as one issue per code-and-type, attached to the site
 // base URL.
 func (r *rollup) issues(base string) []analyze.Issue {
@@ -122,6 +137,9 @@ func (r *rollup) issues(base string) []analyze.Issue {
 		}
 		if key.code == breadcrumbCandidateCode {
 			data["links"] = e.links
+		}
+		if key.code == emptyURLCode {
+			data["empty"] = e.empty
 		}
 		out = append(out, analyze.Issue{
 			Analyzer: "structured",
@@ -142,8 +160,12 @@ func (r *rollup) issues(base string) []analyze.Issue {
 // identifier found only on Offer is warning because it is the merchant identifier gap, reworded
 // so the store moves data it has rather than looks for data it lacks. The breadcrumb candidate
 // keeps the warning it had as a per-page finding: the rich result is one JSON-LD block away.
+// Empty URLs are info, stated rather than left to the default: no rich-result eligibility
+// impact is documented for them, and the Rich Results Test only warns.
 func rollupSeverity(code string) analyze.Severity {
 	switch code {
+	case emptyURLCode:
+		return analyze.Info
 	case "structured-missing-merchant", "structured-variant-incomplete", "structured-identifier-on-offer", breadcrumbCandidateCode:
 		return analyze.Warning
 	}
@@ -159,6 +181,8 @@ func rollupMessage(code, typ string) string {
 		return typ + " variants are missing fields Google requires on each variant"
 	case "structured-identifier-on-offer":
 		return typ + " markup declares GTIN/MPN on Offer, where Google's merchant listings do not document reading it"
+	case emptyURLCode:
+		return typ + " markup has empty URL values"
 	case breadcrumbCandidateCode:
 		return "Pages render breadcrumb navigation but carry no BreadcrumbList structured data"
 	default:

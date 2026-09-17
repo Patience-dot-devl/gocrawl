@@ -425,6 +425,21 @@ Spec: [`../specs/2026-09-17-dermalogica-functional-fixes-design.md`](../specs/20
   the largest trail seen), counted once per canonical URL. Moving it from page to site scope
   re-keys it once in `gocrawl compare` against saved reports. The product, article and video
   candidates stay per page.
+- ✅ **Fix 5 — empty strings in URL properties went unreported.** Fixed in
+  `fix(structured): report empty URL values once per site`. `Graph.Strs` drops blanks, so the
+  six empty `Organization.sameAs` entries never reached the relative-URL check. The raw values
+  of each `urlProperties` entry are now read, and an empty or whitespace-only string (absent
+  properties and non-strings do not count) feeds the new site rollup `structured-empty-url`
+  (info, instance the type, `missing` property → pages, plus `empty`, the largest number of
+  blanks in one property of one node on a page). Counting per node keeps a nested `Brand` from
+  being counted again through its `Product`, and a repeated `@id` declaration from doubling the
+  count. The Fix text points Shopify stores at the theme's social-link settings.
+- **Open — `botwall-captcha-widget` fires on every page from a newsletter reCAPTCHA.** A
+  sitewide newsletter signup form embedding reCAPTCHA reads as a bot challenge on each page.
+  Pre-existing `botwall` analyzer, unrelated to this branch.
+- **Open — Cloudflare returned 429 at 2 req/s.** dermalogica.nl rate-limited the crawl at
+  2 req/s. Pre-existing; see the P9 note on stores that 429 gocrawl
+  while `curl` succeeds.
 
 ---
 

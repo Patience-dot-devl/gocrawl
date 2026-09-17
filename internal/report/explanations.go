@@ -1103,6 +1103,11 @@ var explanations = map[string]Explanation{
 		Impact: "Structured data is consumed outside the page's context, so a relative path resolves against nothing and the image or link is discarded.",
 		Fix:    "Emit absolute URLs (including scheme and host) for url, image, logo, thumbnailUrl, contentUrl, embedUrl and sameAs.",
 	},
+	"structured-empty-url": {
+		What:   "Structured data declares a URL property (url, image, logo, thumbnailUrl, contentUrl, embedUrl or sameAs) with an empty or whitespace-only string. The blanks usually come from the theme and repeat on every page, so this is reported once per type for the site, with the properties affected, the number of pages, up to five examples, and the largest number of empty entries seen in one property on one page.",
+		Impact: "An empty string is not a URL: the entry tells search engines nothing, and Google's Rich Results Test flags it as an invalid URL. No rich-result eligibility impact is documented, so this is housekeeping rather than a blocker.",
+		Fix:    "Fill in the missing values or stop emitting blank ones. On Shopify, empty sameAs entries come from the theme's social-link settings (Online Store → Themes → Customize → Theme settings → Social media): fill them in, or change the snippet that builds the JSON-LD to skip blanks, e.g. wrap each entry in {% if settings.social_x_link != blank %}.",
+	},
 	"structured-invalid-date": {
 		What:   "A structured-data date property is not in ISO 8601 format.",
 		Impact: "An unparseable date is ignored, costing whatever it signalled — article freshness, event timing, or an offer's expiry.",

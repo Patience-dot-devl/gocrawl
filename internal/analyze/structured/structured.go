@@ -48,7 +48,7 @@ func (a Analyzer) analyzePage(p *crawler.Page, roll *rollup) []analyze.Issue {
 		})
 	}
 	issues = append(issues, requiredIssues(p, g, roll)...)
-	issues = append(issues, integrityIssues(p, g)...)
+	issues = append(issues, integrityIssues(p, g, roll)...)
 	issues = append(issues, candidateIssues(p, g, roll)...)
 
 	// A page with no parsed nodes and no failed blocks has no JSON-LD at all. Checking the

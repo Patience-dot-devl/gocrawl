@@ -25,8 +25,10 @@ var conflictFields = []string{"name", "sku", "offers.price", "offers.priceCurren
 
 // integrityIssues reports structured data that contradicts itself: the same page-level type
 // declared by two sources, duplicate declarations that disagree on a key value, and @id
-// references pointing at nodes that are not on the page.
-func integrityIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
+// references pointing at nodes that are not on the page. Blank URL values are theme settings left
+// unfilled, repeated on every page, so they feed roll and surface as one site-wide finding.
+func integrityIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.Issue {
+	emptyURLs(p, g, roll)
 	var issues []analyze.Issue
 	issues = append(issues, duplicateIssues(p, g)...)
 	issues = append(issues, unresolvedIDIssues(p, g)...)
@@ -186,6 +188,61 @@ func firstType(n schemaorg.Node) string {
 // urlProperties hold values that must resolve on their own. A search engine reads structured
 // data out of the page's context, so a relative path in markup resolves against nothing.
 var urlProperties = []string{"url", "image", "logo", "thumbnailUrl", "contentUrl", "embedUrl", "sameAs"}
+
+// emptyURLs feeds roll with the URL properties that hold an empty or whitespace-only string,
+// per type. Only strings count: an absent property or a null is not a blank URL. Strs drops
+// empty values, so this reads the raw values.
+//
+// Every urlProperties entry is a single segment, so a node's values are its own (or, for a
+// node repeating an @id without the property, the declaring node's): a Brand nested in a
+// Product is counted as a Brand and never again through the Product. The per-page count is
+// the largest number of blanks in one property of one node, not a sum over nodes, so a second
+// declaration of the same @id resolving to the first does not double it.
+func emptyURLs(p *crawler.Page, g schemaorg.Graph, roll *rollup) {
+	type found struct {
+		props map[string]bool
+		max   int
+	}
+	byType := make(map[string]*found)
+	var order []string
+	for _, n := range g.Nodes {
+		typ := firstType(n)
+		for _, prop := range urlProperties {
+			count := 0
+			for _, raw := range g.Values(n, prop) {
+				if s, ok := raw.(string); ok && strings.TrimSpace(s) == "" {
+					count++
+				}
+			}
+			if count == 0 {
+				continue
+			}
+			f, ok := byType[typ]
+			if !ok {
+				f = &found{props: make(map[string]bool)}
+				byType[typ] = f
+				order = append(order, typ)
+			}
+			f.props[prop] = true
+			if count > f.max {
+				f.max = count
+			}
+		}
+	}
+	if len(order) == 0 {
+		return
+	}
+	canonical := analyze.CanonicalURL(p)
+	for _, typ := range order {
+		f := byType[typ]
+		props := make([]string, 0, len(f.props))
+		for prop := range f.props {
+			props = append(props, prop)
+		}
+		sort.Strings(props)
+		roll.addEmptyURL(typ, props, p.FinalURL, canonical, f.max)
+	}
+}
 
 // dateProperties must carry ISO 8601. A locale-formatted date is silently unparseable, which
 // costs the page whatever the date was signalling — article freshness, event timing, an offer

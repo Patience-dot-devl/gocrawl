@@ -161,6 +161,7 @@ have.
 | `structured-conflicting-value` | error | page | Duplicate blocks disagree on `name`, `sku`, or an `offers` field | `type`, `field`, `values` |
 | `structured-unresolved-id` | warning | page | An `@id` reference has no matching node on the page | `id`, `property`, `type` |
 | `structured-relative-url` | warning | page | A URL property holds a relative path | `type`, `property`, `value` |
+| `structured-empty-url` | info | **site** | A URL property (`url`, `image`, `logo`, `thumbnailUrl`, `contentUrl`, `embedUrl`, `sameAs`) holds an empty or whitespace-only string (an absent property does not count); aggregated per type (`missing` maps property to page count, `empty` the largest number of blank entries in one property of one node on a page) | `type`, `missing`, `fields`, `pages`, `examples`, `empty` |
 | `structured-invalid-date` | warning | page | A date property is not ISO 8601 | `type`, `property`, `value` |
 | `structured-malformed-price` | error | page | A price string carries a symbol, separator, or range | `type`, `property`, `value` |
 | `structured-price-mismatch` | error | page | `offers.price` differs from the single price rendered on the page | `markup`, `page` |
@@ -179,9 +180,10 @@ have.
 > it, since Google documents `gtin`/`mpn` on the `Product`; such pages are reported as
 > `structured-identifier-on-offer` rather than as missing an identifier.
 
-> **Why five of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
+> **Why six of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
 > so a recommended-field gap repeats identically on every page of a template. The same holds
-> for a breadcrumb trail rendered without `BreadcrumbList`. Those five codes
+> for a breadcrumb trail rendered without `BreadcrumbList`, and for blank URLs left by theme
+> settings never filled in. Those six codes
 > aggregate into one issue per type, carrying the affected page count and up to five example
 > URLs, instead of one issue per page.
 > Pages are counted once per **canonical URL** (the `<head>` `link[rel="canonical"]`,

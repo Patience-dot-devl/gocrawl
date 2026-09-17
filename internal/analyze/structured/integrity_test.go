@@ -2,10 +2,13 @@ package structured_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/structured"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/PuerkitoBio/goquery"
 )
 
 func TestDuplicateProductAcrossBlocks(t *testing.T) {
@@ -419,5 +422,168 @@ func TestAmbiguousPagePriceSuppressesCheckEvenAmongMultiplePrices(t *testing.T) 
 	</script></head><body><p class="price">$19.99</p><s>$1,299</s><button>Add to cart</button></body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-price-mismatch"); ok {
 		t.Error("an ambiguous price anywhere on the page must suppress the mismatch check, even when a different, unambiguous price on the page would otherwise disagree with markup")
+	}
+}
+
+// dermalogicaOrg mirrors the Organization block every dermalogica.nl page carries: three real
+// profile URLs and six empty strings left by social-link theme settings never filled in.
+const dermalogicaOrg = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization",
+ "@id":"https://shop.test/#organization","name":"Shop","url":"https://shop.test","logo":"https://shop.test/logo.png",
+ "sameAs":["https://www.facebook.com/shop","","https://www.instagram.com/shop","","","https://www.youtube.com/shop","","",""]}</script>`
+
+// TestEmptyURLValuesRollUp pins Fix 5: blank sameAs entries on every page yield one info
+// finding for the site, with the page count and the largest number of blanks seen.
+func TestEmptyURLValuesRollUp(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/":             `<html><head>` + dermalogicaOrg + `</head><body></body></html>`,
+		"https://shop.test/products/tee": `<html><head>` + dermalogicaOrg + `</head><body></body></html>`,
+	})
+	got := findAll(structured.New().Analyze(context.Background(), res), "structured-empty-url")
+	if len(got) != 1 {
+		t.Fatalf("expected exactly one structured-empty-url, got %d: %+v", len(got), got)
+	}
+	is := got[0]
+	if is.URL != "https://shop.test" {
+		t.Errorf("expected the site base URL, got %q", is.URL)
+	}
+	if is.Severity != analyze.Info {
+		t.Errorf("expected info, got %v", is.Severity)
+	}
+	if is.Message != "Organization markup has empty URL values" {
+		t.Errorf("unexpected message %q", is.Message)
+	}
+	if is.Data[analyze.InstanceKey] != "Organization" {
+		t.Errorf("expected instance Organization, got %v", is.Data[analyze.InstanceKey])
+	}
+	if is.Data["pages"] != 2 {
+		t.Errorf("expected pages 2, got %v", is.Data["pages"])
+	}
+	if is.Data["empty"] != 6 {
+		t.Errorf("expected empty 6, got %v", is.Data["empty"])
+	}
+	if missing, _ := is.Data["missing"].(map[string]int); missing["sameAs"] != 2 || len(missing) != 1 {
+		t.Errorf("expected missing {sameAs: 2}, got %v", is.Data["missing"])
+	}
+	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-relative-url"); ok {
+		t.Error("an empty URL must not also be reported as relative")
+	}
+}
+
+// TestWhitespaceURLIsEmpty pins that a whitespace-only string counts as an empty URL.
+func TestWhitespaceURLIsEmpty(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Organization","name":"Shop","url":"  "}
+	</script></head><body></body></html>`)
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-empty-url")
+	if !ok {
+		t.Fatal("expected structured-empty-url for a whitespace-only url")
+	}
+	if missing, _ := is.Data["missing"].(map[string]int); missing["url"] != 1 || len(missing) != 1 {
+		t.Errorf("expected missing {url: 1}, got %v", is.Data["missing"])
+	}
+	if is.Data["empty"] != 1 {
+		t.Errorf("expected empty 1, got %v", is.Data["empty"])
+	}
+}
+
+// TestAbsentURLPropertyIsNotEmpty pins that a missing property, or a non-string value (a null,
+// a number, a nested object), is not an empty URL: only a declared blank string is.
+func TestAbsentURLPropertyIsNotEmpty(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Organization","name":"Shop","logo":null,"url":"https://shop.test",
+		 "image":{"@type":"ImageObject","url":"https://shop.test/i.png"},"sameAs":[null,5,"https://www.facebook.com/shop"]}
+	</script></head><body></body></html>`)
+	if is, ok := find(structured.New().Analyze(context.Background(), res), "structured-empty-url"); ok {
+		t.Errorf("a node with no blank URL string must not fire, got %+v", is)
+	}
+}
+
+// TestRelativeURLIsNotEmpty pins that a non-empty relative URL raises only
+// structured-relative-url.
+func TestRelativeURLIsNotEmpty(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"Organization","name":"Shop","url":"/pages/about"}
+	</script></head><body></body></html>`)
+	issues := structured.New().Analyze(context.Background(), res)
+	if _, ok := find(issues, "structured-relative-url"); !ok {
+		t.Error("expected structured-relative-url")
+	}
+	if is, ok := find(issues, "structured-empty-url"); ok {
+		t.Errorf("a relative URL is not empty, got %+v", is)
+	}
+}
+
+// TestEmptyURLCountsAreNotInflatedByNesting pins how blanks are counted: each typed node
+// reports its own properties, so a Brand nested in a Product is counted under Brand and not
+// again through the Product, and a second declaration of the same @id (which resolves the
+// property through the first) does not double the count. empty is the largest number of
+// blanks in one property of one node.
+func TestEmptyURLCountsAreNotInflatedByNesting(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/tee": `<html><head>` + dermalogicaOrg + `
+			<script type="application/ld+json">{"@type":"Organization","@id":"https://shop.test/#organization"}</script>
+			<script type="application/ld+json">{"@type":"Product","name":"Tee","url":"",
+			 "brand":{"@type":"Brand","name":"Shop","url":"","sameAs":["",""]}}</script>
+		</head><body></body></html>`,
+	})
+	issues := structured.New().Analyze(context.Background(), res)
+	byType := map[string]analyze.Issue{}
+	for _, is := range findAll(issues, "structured-empty-url") {
+		byType[is.Data["type"].(string)] = is
+	}
+	if len(byType) != 3 {
+		t.Fatalf("expected one finding each for Organization, Product and Brand, got %v", byType)
+	}
+	want := map[string]struct {
+		empty   int
+		missing map[string]int
+	}{
+		"Organization": {6, map[string]int{"sameAs": 1}},
+		"Product":      {1, map[string]int{"url": 1}},
+		"Brand":        {2, map[string]int{"url": 1, "sameAs": 1}},
+	}
+	for typ, w := range want {
+		is := byType[typ]
+		if is.Data["empty"] != w.empty {
+			t.Errorf("%s: expected empty %d, got %v", typ, w.empty, is.Data["empty"])
+		}
+		missing, _ := is.Data["missing"].(map[string]int)
+		if len(missing) != len(w.missing) {
+			t.Errorf("%s: expected missing %v, got %v", typ, w.missing, missing)
+		}
+		for k, v := range w.missing {
+			if missing[k] != v {
+				t.Errorf("%s: expected missing %v, got %v", typ, w.missing, missing)
+			}
+		}
+	}
+}
+
+// TestEmptyURLKeepsLargestCountAndCountsCanonicalOnce pins, in a fixed crawl order, that
+// empty is the maximum over counted pages rather than the last page seen, and that the rollup
+// inherits the canonical dedupe: the /collections copy of a product is not a second page.
+func TestEmptyURLKeepsLargestCountAndCountsCanonicalOnce(t *testing.T) {
+	twoBlanks := `<script type="application/ld+json">{"@type":"Organization","name":"Shop","sameAs":["https://www.facebook.com/shop","",""]}</script>`
+	res := &crawler.Result{Seed: "https://shop.test"}
+	for _, pg := range []struct{ url, head string }{
+		{"https://shop.test/products/tee", dermalogicaOrg},
+		{"https://shop.test/collections/all/products/tee", `<link rel="canonical" href="/products/tee">` + dermalogicaOrg},
+		{"https://shop.test/products/cap", twoBlanks},
+	} {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head>` + pg.head + `</head><body></body></html>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Pages = append(res.Pages, &crawler.Page{FinalURL: pg.url, StatusCode: 200, ContentType: "text/html", Doc: doc})
+	}
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-empty-url")
+	if !ok {
+		t.Fatal("expected structured-empty-url")
+	}
+	if is.Data["pages"] != 2 {
+		t.Errorf("expected pages 2 (the /collections copy is the same canonical page), got %v", is.Data["pages"])
+	}
+	if is.Data["empty"] != 6 {
+		t.Errorf("expected empty 6, the largest count seen, got %v", is.Data["empty"])
 	}
 }
