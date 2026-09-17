@@ -419,6 +419,12 @@ Spec: [`../specs/2026-09-17-dermalogica-functional-fixes-design.md`](../specs/20
   properties found, e.g. `offers.gtin12`. Numeric JSON identifiers count as present (pinned by
   a `schemaorg` test). The `structured-missing-merchant` Fix text no longer tells stores to put
   gtin on the offer.
+- ✅ **Fix 4 — `structured-breadcrumb-candidate` repeated one theme fact on every page.** Fixed in
+  `fix(structured): report the breadcrumb candidate once per site`. The code is now a site
+  rollup (warning, instance `BreadcrumbList`, `missing` `{"BreadcrumbList": pages}`, plus `links`,
+  the largest trail seen), counted once per canonical URL. Moving it from page to site scope
+  re-keys it once in `gocrawl compare` against saved reports. The product, article and video
+  candidates stay per page.
 
 ---
 

@@ -10,6 +10,10 @@ import (
 // finding, few enough that a 500-page crawl does not put 500 URLs in one issue's data.
 const maxExamples = 5
 
+// breadcrumbCandidateCode is the one rollup code that carries a datum beyond the shared shape:
+// links, the largest breadcrumb link count seen on a counted page.
+const breadcrumbCandidateCode = "structured-breadcrumb-candidate"
+
 // rollupKey identifies one aggregated finding: an issue code and the schema.org type it was
 // raised against.
 type rollupKey struct {
@@ -22,6 +26,7 @@ type rollupEntry struct {
 	missing  map[string]int // field (or any-of group) -> number of pages missing it
 	pages    int
 	examples []string
+	links    int // largest breadcrumb link count seen; rendered only for breadcrumbCandidateCode
 	// owner maps a canonical URL key (analyze.URLKey) to the FinalURL of the page that claimed
 	// it, and counted to the fields already tallied for it. Together they make every count
 	// here a count of distinct canonical pages: a product reached at /products/<h> and again
@@ -50,10 +55,11 @@ func newRollup() *rollup {
 // same canonical adds nothing, whichever of the two was crawled first, and the example is the
 // canonical URL so it does not depend on crawl order either. A second node of the type on the
 // same page does not count the page again; it only adds fields that page was not yet counted
-// as missing.
-func (r *rollup) add(code, typ string, missing []string, pageURL, canonical string) {
+// as missing. It returns the entry the page was counted in, or nil when the page added nothing
+// (no missing fields, or its canonical URL already belongs to a different page).
+func (r *rollup) add(code, typ string, missing []string, pageURL, canonical string) *rollupEntry {
 	if len(missing) == 0 {
-		return
+		return nil
 	}
 	key := rollupKey{code: code, typ: typ}
 	e, ok := r.entries[key]
@@ -69,7 +75,7 @@ func (r *rollup) add(code, typ string, missing []string, pageURL, canonical stri
 	ck := analyze.URLKey(canonical)
 	owner, seen := e.owner[ck]
 	if seen && owner != pageURL {
-		return
+		return nil
 	}
 	if !seen {
 		e.owner[ck] = pageURL
@@ -85,6 +91,17 @@ func (r *rollup) add(code, typ string, missing []string, pageURL, canonical stri
 			e.missing[f]++
 		}
 	}
+	return e
+}
+
+// addBreadcrumb records a page that renders breadcrumb navigation with the given number of
+// links but carries no BreadcrumbList. The breadcrumb trail is template chrome, so it rolls up
+// like a field gap: one finding per crawl, with missing keyed by the absent type. links keeps
+// the maximum across counted pages, which does not depend on the order pages arrive in.
+func (r *rollup) addBreadcrumb(pageURL, canonical string, links int) {
+	if e := r.add(breadcrumbCandidateCode, "BreadcrumbList", []string{"BreadcrumbList"}, pageURL, canonical); e != nil && links > e.links {
+		e.links = links
+	}
 }
 
 // issues renders the accumulated gaps as one issue per code-and-type, attached to the site
@@ -93,22 +110,26 @@ func (r *rollup) issues(base string) []analyze.Issue {
 	var out []analyze.Issue
 	for _, key := range r.order {
 		e := r.entries[key]
+		data := map[string]any{
+			"type":     key.typ,
+			"missing":  e.missing,
+			"fields":   sortedFields(e.missing),
+			"pages":    e.pages,
+			"examples": e.examples,
+			// One issue per type shares code and URL with its siblings; the type keeps
+			// each one distinct when two crawls are compared.
+			analyze.InstanceKey: key.typ,
+		}
+		if key.code == breadcrumbCandidateCode {
+			data["links"] = e.links
+		}
 		out = append(out, analyze.Issue{
 			Analyzer: "structured",
 			URL:      base,
 			Severity: rollupSeverity(key.code),
 			Code:     key.code,
 			Message:  rollupMessage(key.code, key.typ),
-			Data: map[string]any{
-				"type":     key.typ,
-				"missing":  e.missing,
-				"fields":   sortedFields(e.missing),
-				"pages":    e.pages,
-				"examples": e.examples,
-				// One issue per type shares code and URL with its siblings; the type keeps
-				// each one distinct when two crawls are compared.
-				analyze.InstanceKey: key.typ,
-			},
+			Data:     data,
 		})
 	}
 	return out
@@ -119,10 +140,11 @@ func (r *rollup) issues(base string) []analyze.Issue {
 // while the recommended tier is genuinely optional polish and stays info. Incomplete variants
 // are warning for the same reason: Google requires those fields on each inline variant. An
 // identifier found only on Offer is warning because it is the merchant identifier gap, reworded
-// so the store moves data it has rather than looks for data it lacks.
+// so the store moves data it has rather than looks for data it lacks. The breadcrumb candidate
+// keeps the warning it had as a per-page finding: the rich result is one JSON-LD block away.
 func rollupSeverity(code string) analyze.Severity {
 	switch code {
-	case "structured-missing-merchant", "structured-variant-incomplete", "structured-identifier-on-offer":
+	case "structured-missing-merchant", "structured-variant-incomplete", "structured-identifier-on-offer", breadcrumbCandidateCode:
 		return analyze.Warning
 	}
 	return analyze.Info
@@ -137,6 +159,8 @@ func rollupMessage(code, typ string) string {
 		return typ + " variants are missing fields Google requires on each variant"
 	case "structured-identifier-on-offer":
 		return typ + " markup declares GTIN/MPN on Offer, where Google's merchant listings do not document reading it"
+	case breadcrumbCandidateCode:
+		return "Pages render breadcrumb navigation but carry no BreadcrumbList structured data"
 	default:
 		return typ + " markup is missing recommended schema.org fields"
 	}

@@ -164,7 +164,7 @@ have.
 | `structured-invalid-date` | warning | page | A date property is not ISO 8601 | `type`, `property`, `value` |
 | `structured-malformed-price` | error | page | A price string carries a symbol, separator, or range | `type`, `property`, `value` |
 | `structured-price-mismatch` | error | page | `offers.price` differs from the single price rendered on the page | `markup`, `page` |
-| `structured-breadcrumb-candidate` | warning | page | Breadcrumb-styled nav with ≥2 links, no `BreadcrumbList` | `links` |
+| `structured-breadcrumb-candidate` | warning | **site** | Breadcrumb-styled nav with ≥2 links, no `BreadcrumbList`; aggregated (`missing` is `{"BreadcrumbList": pages}`, `links` the largest link count seen). Was page-scoped before, so `gocrawl compare` against a report saved earlier re-keys it once | `type`, `missing`, `fields`, `pages`, `examples`, `links` |
 | `structured-product-candidate` | warning | page | Product/price microdata, or a price co-located with a cart/buy call-to-action (same `<form>`, or a bounded ancestor if none), for one or two such pairs, with no `Product`/`Offer` | `signal` |
 | `structured-article-candidate` | warning | page | A 150+ word `<article>` with an author or date signal, no article type | `words` |
 | `structured-video-candidate` | warning | page | A `<video>` or YouTube/Vimeo embed, no `VideoObject` | `src` |
@@ -179,8 +179,9 @@ have.
 > it, since Google documents `gtin`/`mpn` on the `Product`; such pages are reported as
 > `structured-identifier-on-offer` rather than as missing an identifier.
 
-> **Why four of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
-> so a recommended-field gap repeats identically on every page of a template. Those four codes
+> **Why five of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
+> so a recommended-field gap repeats identically on every page of a template. The same holds
+> for a breadcrumb trail rendered without `BreadcrumbList`. Those five codes
 > aggregate into one issue per type, carrying the affected page count and up to five example
 > URLs, instead of one issue per page.
 > Pages are counted once per **canonical URL** (the `<head>` `link[rel="canonical"]`,

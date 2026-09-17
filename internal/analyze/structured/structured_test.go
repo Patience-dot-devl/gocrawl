@@ -126,6 +126,9 @@ func TestStructuredBreadcrumbCandidate(t *testing.T) {
 	if is.Data["links"] != 2 {
 		t.Errorf("expected 2 links, got %v", is.Data["links"])
 	}
+	if is.Data["pages"] != 1 {
+		t.Errorf("expected pages 1, got %v", is.Data["pages"])
+	}
 }
 
 func TestStructuredBreadcrumbCandidateSuppressedByExistingType(t *testing.T) {
@@ -136,6 +139,86 @@ func TestStructuredBreadcrumbCandidateSuppressedByExistingType(t *testing.T) {
 	</body></html>`)
 	if _, ok := find(structured.New().Analyze(context.Background(), res), "structured-breadcrumb-candidate"); ok {
 		t.Error("did not expect structured-breadcrumb-candidate when BreadcrumbList is already present")
+	}
+}
+
+// breadcrumbPage mirrors dermalogica.nl's collection and product pages: a visible breadcrumb
+// trail with the given crumbs and no BreadcrumbList, plus whatever extraHead carries (a
+// canonical link, or a JSON-LD block).
+func breadcrumbPage(extraHead string, crumbs ...string) string {
+	var li strings.Builder
+	for _, c := range crumbs {
+		li.WriteString(`<li><a href="/` + c + `">` + c + `</a></li>`)
+	}
+	return `<html><head>` + extraHead + `</head><body>
+		<nav class="breadcrumbs" aria-label="breadcrumbs"><ol>` + li.String() + `</ol></nav>
+	</body></html>`
+}
+
+// TestBreadcrumbCandidateIsSiteScoped pins Fix 4: a theme without BreadcrumbList lacks it on
+// every page, so three such pages yield exactly one warning at the site base, not three.
+// The page with BreadcrumbList is not counted.
+func TestBreadcrumbCandidateIsSiteScoped(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/collections/all":  breadcrumbPage("", "home", "all"),
+		"https://shop.test/products/tee":     breadcrumbPage("", "home", "all", "tee"),
+		"https://shop.test/products/cap":     breadcrumbPage("", "home", "cap"),
+		"https://shop.test/collections/sale": breadcrumbPage(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[]}</script>`, "home", "sale"),
+	})
+	got := findAll(structured.New().Analyze(context.Background(), res), "structured-breadcrumb-candidate")
+	if len(got) != 1 {
+		t.Fatalf("expected exactly one site-wide breadcrumb candidate, got %d: %+v", len(got), got)
+	}
+	is := got[0]
+	if is.URL != "https://shop.test" {
+		t.Errorf("expected the site base URL, got %q", is.URL)
+	}
+	if is.Severity != analyze.Warning {
+		t.Errorf("expected warning, got %v", is.Severity)
+	}
+	if is.Message != "Pages render breadcrumb navigation but carry no BreadcrumbList structured data" {
+		t.Errorf("unexpected message %q", is.Message)
+	}
+	if is.Data["pages"] != 3 {
+		t.Errorf("expected pages 3 (the BreadcrumbList page not counted), got %v", is.Data["pages"])
+	}
+	if is.Data["links"] != 3 {
+		t.Errorf("expected links 3, the largest trail seen, got %v", is.Data["links"])
+	}
+	if is.Data[analyze.InstanceKey] != "BreadcrumbList" {
+		t.Errorf("expected instance BreadcrumbList, got %v", is.Data[analyze.InstanceKey])
+	}
+	if missing, _ := is.Data["missing"].(map[string]int); missing["BreadcrumbList"] != 3 || len(missing) != 1 {
+		t.Errorf("expected missing {BreadcrumbList: 3}, got %v", is.Data["missing"])
+	}
+	examples, _ := is.Data["examples"].([]string)
+	for _, ex := range examples {
+		if ex == "https://shop.test/collections/sale" {
+			t.Errorf("the BreadcrumbList page must not be an example, got %v", examples)
+		}
+	}
+	if len(examples) != 3 {
+		t.Errorf("expected 3 examples, got %v", examples)
+	}
+}
+
+// TestBreadcrumbCandidateCountsCanonicalOnce pins that the breadcrumb rollup inherits Fix 1's
+// dedupe: a product reached at /collections/<c>/products/<h> with a canonical to
+// /products/<h> is one page.
+func TestBreadcrumbCandidateCountsCanonicalOnce(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/tee":                 breadcrumbPage("", "home", "tee"),
+		"https://shop.test/collections/all/products/tee": breadcrumbPage(`<link rel="canonical" href="https://shop.test/products/tee">`, "home", "all", "tee"),
+	})
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-breadcrumb-candidate")
+	if !ok {
+		t.Fatal("expected structured-breadcrumb-candidate")
+	}
+	if is.Data["pages"] != 1 {
+		t.Errorf("expected pages 1 for two URLs of one canonical page, got %v", is.Data["pages"])
+	}
+	if examples, _ := is.Data["examples"].([]string); len(examples) != 1 || examples[0] != "https://shop.test/products/tee" {
+		t.Errorf("expected the canonical URL as the only example, got %v", is.Data["examples"])
 	}
 }
 

@@ -62,7 +62,12 @@ var videoHostRe = regexp.MustCompile(`(?i)youtube(-nocookie)?\.com|vimeo\.com`)
 // type (breadcrumbs, a product, an article, an embedded video) whose matching JSON-LD is
 // absent from types. Each check requires a reasonably specific on-page signal so the
 // suggestion stays actionable rather than firing on every page.
-func candidateIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
+//
+// The breadcrumb check is the exception to per-page reporting: a breadcrumb trail is template
+// chrome, so a theme without BreadcrumbList lacks it on every page. It feeds roll and surfaces
+// as one site-wide finding. The product, article and video checks depend on page content and
+// stay per page.
+func candidateIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.Issue {
 	doc := p.Doc
 	var issues []analyze.Issue
 	add := func(code, msg string, data map[string]any) {
@@ -73,8 +78,7 @@ func candidateIssues(p *crawler.Page, g schemaorg.Graph) []analyze.Issue {
 
 	if !g.HasType("BreadcrumbList") {
 		if links, ok := hasBreadcrumbMarkup(doc); ok {
-			add("structured-breadcrumb-candidate", "Page has breadcrumb navigation but no BreadcrumbList structured data",
-				map[string]any{"links": links})
+			roll.addBreadcrumb(p.FinalURL, analyze.CanonicalURL(p), links)
 		}
 	}
 

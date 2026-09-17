@@ -1034,7 +1034,7 @@ var explanations = map[string]Explanation{
 
 	// --- structured: JSON-LD ---
 	"structured-breadcrumb-candidate": {
-		What:   "The page has breadcrumb navigation but no BreadcrumbList structured data.",
+		What:   "Pages render breadcrumb navigation but carry no BreadcrumbList structured data. The trail is theme chrome, so this is reported once for the site, with the number of affected pages, up to five examples, and the largest number of breadcrumb links seen.",
 		Impact: "You miss eligibility for the breadcrumb rich result in search, which improves click-through and clarifies page hierarchy.",
 		Fix:    "Add BreadcrumbList JSON-LD whose itemListElement mirrors the visible breadcrumb trail.",
 	},
