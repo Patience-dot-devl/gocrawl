@@ -194,3 +194,41 @@ func TestCanonicalProductPathIsNotFlagged(t *testing.T) {
 		t.Error("the canonical product path is not a duplicate of itself")
 	}
 }
+
+// TestRelativeCanonicalResolvesBeforeComparing pins canonicalOf's resolution. A custom theme
+// emitting a root-relative canonical is correctly pointing the nested copy at /products/tee;
+// compared unresolved against the absolute recommendation it would be flagged anyway.
+func TestRelativeCanonicalResolvesBeforeComparing(t *testing.T) {
+	nested := `<html><head>` + shopifyShell +
+		`<link rel="canonical" href="/products/tee"></head><body><h1>Tee</h1></body></html>`
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":                             shopifyHome,
+		"https://shop.test/collections/all/products/tee": nested,
+	})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected, otherwise this test passes vacuously")
+	}
+	if is, ok := find(issues, "shopify-duplicate-product-path"); ok {
+		t.Errorf("a relative canonical to /products/tee is correct, got %+v", is)
+	}
+}
+
+// TestRelativeSelfCanonicalFacetStillFlagged is the other direction of the same bug: an
+// unresolved relative self-canonical never equals the absolute page URL, which silenced the
+// facet check on exactly the page it exists for.
+func TestRelativeSelfCanonicalFacetStillFlagged(t *testing.T) {
+	faceted := `<html><head>` + shopifyShell +
+		`<link rel="canonical" href="/collections/all?sort_by=price-asc"></head><body>Grid</body></html>`
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/": shopifyHome,
+		"https://shop.test/collections/all?sort_by=price-asc": faceted,
+	})
+	is, ok := find(run(t, res), "shopify-indexable-facet")
+	if !ok {
+		t.Fatal("expected shopify-indexable-facet for a relative self-canonical sorted collection")
+	}
+	if is.Data["canonical"] != "https://shop.test/collections/all?sort_by=price-asc" {
+		t.Errorf("expected the resolved canonical in data, got %v", is.Data["canonical"])
+	}
+}

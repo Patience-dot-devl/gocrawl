@@ -6,7 +6,6 @@ import (
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
-	"github.com/PuerkitoBio/goquery"
 )
 
 // facetParams are the query parameters Shopify's own collection filtering and sorting use.
@@ -29,13 +28,30 @@ func indexable(p *crawler.Page) bool {
 	return !strings.Contains(strings.ToLower(robots), "noindex")
 }
 
-// canonicalOf returns the page's declared canonical URL, or "" when it has none.
-func canonicalOf(doc *goquery.Document) string {
-	if doc == nil {
+// canonicalOf returns the page's declared canonical URL resolved against the page's own URL,
+// or "" when it has none. Resolution matters in both directions: a theme emitting a relative
+// href="/products/tee" would otherwise never equal the absolute URL it is compared with,
+// false-positiving shopify-duplicate-product-path and silencing shopify-indexable-facet. Only
+// <head> is searched, matching the seo analyzer, because search engines ignore a canonical in
+// <body>.
+func canonicalOf(p *crawler.Page) string {
+	if p.Doc == nil {
 		return ""
 	}
-	href, _ := doc.Find(`link[rel="canonical"]`).First().Attr("href")
-	return strings.TrimSpace(href)
+	href, _ := p.Doc.Find(`head link[rel="canonical"]`).First().Attr("href")
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return ""
+	}
+	base, err := url.Parse(p.FinalURL)
+	if err != nil {
+		return href
+	}
+	ref, err := url.Parse(href)
+	if err != nil {
+		return href
+	}
+	return base.ResolveReference(ref).String()
 }
 
 // seoIssues reports the crawlable URLs Shopify generates by default that a store rarely wants
@@ -60,7 +76,7 @@ func seoIssues(p *crawler.Page, tmpl Template) []analyze.Issue {
 	// self-canonical, each permutation competes with the collection it came from.
 	if tmpl == TemplateCollection {
 		if param, ok := facetParam(p.FinalURL); ok {
-			canonical := canonicalOf(p.Doc)
+			canonical := canonicalOf(p)
 			if canonical == "" || sameURL(canonical, p.FinalURL) {
 				issues = append(issues, analyze.Issue{
 					Analyzer: "shopify", URL: p.FinalURL, Severity: analyze.Warning,
@@ -76,7 +92,7 @@ func seoIssues(p *crawler.Page, tmpl Template) []analyze.Issue {
 	// belongs to. The nested copies are the same page; without a canonical pointing at the
 	// short path, a product with ten collections is ten competing URLs.
 	if want, ok := canonicalProductURL(p.FinalURL); ok {
-		if canonical := canonicalOf(p.Doc); canonical == "" || !sameURL(canonical, want) {
+		if canonical := canonicalOf(p); canonical == "" || !sameURL(canonical, want) {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "shopify", URL: p.FinalURL, Severity: analyze.Warning,
 				Code:    "shopify-duplicate-product-path",
