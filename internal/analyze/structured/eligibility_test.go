@@ -422,25 +422,105 @@ func TestOrganizationMissingLogoOrURLIsRequired(t *testing.T) {
 	}
 }
 
-func TestProductGroupMissingHasVariantOrProductGroupIDIsRequired(t *testing.T) {
-	// A ProductGroup without hasVariant/productGroupID is inert: productGroupID is what joins
-	// the variants into one group, and there is nothing to group without hasVariant.
-	res := page(t, `<html><head><script type="application/ld+json">
+func TestProductGroupNeedsOnlyNameButRecommendsGrouping(t *testing.T) {
+	// Google's product-variants documentation requires only name on a ProductGroup;
+	// hasVariant and productGroupID are recommended, because variants may instead point up
+	// at the group with isVariantOf. A bare named group is eligible, just weakly modelled.
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/wool-runners": `<html><head><script type="application/ld+json">
 		{"@type":"ProductGroup","name":"Wool Runners"}
-	</script></head><body></body></html>`)
-	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-required")
-	if !ok {
-		t.Fatal("expected structured-missing-required for a ProductGroup with no hasVariant/productGroupID")
+	</script></head><body></body></html>`})
+	issues := structured.New().Analyze(context.Background(), res)
+	if is, ok := find(issues, "structured-missing-required"); ok {
+		t.Errorf("a named ProductGroup has every required field, got %+v", is)
 	}
-	missing, _ := is.Data["missing"].([]string)
-	want := map[string]bool{"hasVariant": true, "productGroupID": true}
-	if len(missing) != 2 {
-		t.Fatalf("expected 2 missing fields, got %v", missing)
-	}
-	for _, m := range missing {
-		if !want[m] {
-			t.Errorf("unexpected missing field %q", m)
+	var missing map[string]int
+	for _, is := range findAll(issues, "structured-missing-recommended") {
+		if is.Data["type"] == "ProductGroup" {
+			missing, _ = is.Data["missing"].(map[string]int)
 		}
+	}
+	if missing["hasVariant"] != 1 || missing["productGroupID"] != 1 {
+		t.Errorf("expected hasVariant and productGroupID in the recommended rollup, got %v", missing)
+	}
+}
+
+// inlineVariantGroup declares its variants inline (Google's single-page shape) but leaves each
+// one short: no image, no identifier, and no size despite variesBy naming it. Two variants
+// share those gaps, so the page must still count once per field; the third is a url-only stub,
+// which must add nothing.
+const inlineVariantGroup = `{"@type":"ProductGroup","name":"Wool Runners","productGroupID":"WR-001",
+	"variesBy":["https://schema.org/size","color","https://schema.org/flavour"],
+	"hasVariant":[
+		{"@type":"Product","name":"Wool Runners — Red 9","color":"Red",
+		 "offers":{"@type":"Offer","price":"98.00","priceCurrency":"USD"}},
+		{"@type":"Product","name":"Wool Runners — Blue 9","color":"Blue",
+		 "offers":{"@type":"Offer","price":"98.00","priceCurrency":"USD"}},
+		{"@type":"Product","url":"https://shop.test/products/wool-runners?variant=3"}
+	]}`
+
+func TestInlineVariantGapsRollUpPerGroupType(t *testing.T) {
+	html := `<html><head><script type="application/ld+json">` + inlineVariantGroup + `</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/a": html,
+		"https://shop.test/products/b": html,
+	})
+	issues := structured.New().Analyze(context.Background(), res)
+
+	got := findAll(issues, "structured-variant-incomplete")
+	if len(got) != 1 {
+		t.Fatalf("expected 1 rolled-up variant issue for 2 pages, got %d: %+v", len(got), got)
+	}
+	is := got[0]
+	if is.Severity != analyze.Warning {
+		t.Errorf("expected warning, got %q", is.Severity)
+	}
+	if is.Data["pages"] != 2 || is.Data[analyze.InstanceKey] != "ProductGroup" {
+		t.Errorf("expected pages=2 instance=ProductGroup, got %v / %v", is.Data["pages"], is.Data[analyze.InstanceKey])
+	}
+	fields, _ := is.Data["fields"].([]string)
+	want := []string{"image", "size", "sku|gtin|gtin8|gtin12|gtin13|gtin14"}
+	if strings.Join(fields, ",") != strings.Join(want, ",") {
+		t.Errorf("fields = %v, want %v (color is present; flavour is not a supported dimension)", fields, want)
+	}
+	missing, _ := is.Data["missing"].(map[string]int)
+	for _, f := range want {
+		if missing[f] != 2 {
+			t.Errorf("missing[%q] = %d, want 2 (one per page, not one per variant)", f, missing[f])
+		}
+	}
+	// Variants stay out of the per-page required check: that is what the rollup replaces.
+	if is, ok := find(issues, "structured-missing-required"); ok {
+		t.Errorf("inline variants must not raise per-page required findings, got %+v", is)
+	}
+}
+
+func TestURLOnlyVariantStubsAreNotChecked(t *testing.T) {
+	// Allbirds' shape, and Google's own multi-page example: variants served on other pages
+	// are listed by url, with their markup on those pages.
+	html := `<html><head><script type="application/ld+json">` + allbirdsProductGroup + `</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/wool-runners": html})
+	issues := structured.New().Analyze(context.Background(), res)
+	if _, ok := find(issues, "structured-missing-merchant"); !ok {
+		t.Fatal("expected the merchant gap, otherwise this test passes vacuously")
+	}
+	if is, ok := find(issues, "structured-variant-incomplete"); ok {
+		t.Errorf("url-only variant references are not incomplete variants, got %+v", is)
+	}
+}
+
+func TestCompleteInlineVariantsAreSilent(t *testing.T) {
+	html := `<html><head><script type="application/ld+json">
+		{"@type":"ProductGroup","name":"Coat","variesBy":["https://schema.org/size"],"hasVariant":[
+			{"@type":"Product","name":"Small coat","image":"https://shop.test/s.jpg","size":"small",
+			 "gtin14":"98766051104214","offers":{"@type":"Offer","price":"39.99","priceCurrency":"USD"}}]}
+	</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/coat": html})
+	issues := structured.New().Analyze(context.Background(), res)
+	if _, ok := find(issues, "structured-missing-recommended"); !ok {
+		t.Fatal("expected some ProductGroup rollup, otherwise this test passes vacuously")
+	}
+	if is, ok := find(issues, "structured-variant-incomplete"); ok {
+		t.Errorf("a variant carrying every required field is complete, got %+v", is)
 	}
 }
 

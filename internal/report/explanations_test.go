@@ -203,7 +203,7 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 // structurally cannot see: the structured analyzer's rollup builds its Code from a variable
 // rather than a string literal, so the static scan walks straight past it.
 func TestDynamicallyCodedIssuesHaveExplanations(t *testing.T) {
-	for _, code := range []string{"structured-missing-recommended", "structured-missing-merchant"} {
+	for _, code := range []string{"structured-missing-recommended", "structured-missing-merchant", "structured-variant-incomplete"} {
 		e, ok := explanations[code]
 		if !ok {
 			t.Errorf("%s has no explanation", code)

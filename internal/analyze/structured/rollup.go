@@ -89,9 +89,10 @@ func (r *rollup) issues(base string) []analyze.Issue {
 
 // rollupSeverity distinguishes the two rolled-up codes: the merchant tier is the commercial
 // point of this analyzer (Google Shopping / free-listing eligibility), so it warrants warning,
-// while the recommended tier is genuinely optional polish and stays info.
+// while the recommended tier is genuinely optional polish and stays info. Incomplete variants
+// are warning for the same reason: Google requires those fields on each inline variant.
 func rollupSeverity(code string) analyze.Severity {
-	if code == "structured-missing-merchant" {
+	if code == "structured-missing-merchant" || code == "structured-variant-incomplete" {
 		return analyze.Warning
 	}
 	return analyze.Info
@@ -102,6 +103,8 @@ func rollupMessage(code, typ string) string {
 	switch code {
 	case "structured-missing-merchant":
 		return typ + " markup is missing Google Merchant listing fields"
+	case "structured-variant-incomplete":
+		return typ + " variants are missing fields Google requires on each variant"
 	default:
 		return typ + " markup is missing recommended schema.org fields"
 	}

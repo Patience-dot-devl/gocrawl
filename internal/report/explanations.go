@@ -1073,6 +1073,11 @@ var explanations = map[string]Explanation{
 		Impact: "Products are ineligible for, or downranked in, Shopping and free listing surfaces, and shoppers see no shipping, returns, or condition detail before clicking.",
 		Fix:    "Emit gtin (or mpn), priceValidUntil, shippingDetails, hasMerchantReturnPolicy and itemCondition on the offer. Most of this can be templated once from store-level shipping and return settings.",
 	},
+	"structured-variant-incomplete": {
+		What:   "A ProductGroup declares variants inline under hasVariant, but those variants omit fields Google requires on each one: name, image, price and currency, a sku or GTIN, and the attribute the group varies by (size, color, ...). Variants listed only by url are references to other pages and are not checked.",
+		Impact: "Google cannot match the incomplete variants to a distinct purchasable item, so they are dropped from variant-aware Shopping and product results, and the group shows fewer options than the store sells.",
+		Fix:    "Emit every listed field on each hasVariant entry. On Shopify these come from variant data the theme already has: variant.title, variant.featured_image, variant.price, variant.sku or variant.barcode, and the option values. Brand, description and ratings may stay on the ProductGroup.",
+	},
 	"structured-duplicate-type": {
 		What:   "A page-level type (Product, Organization, WebSite, ...) is declared in more than one JSON-LD block, usually because a theme and an SEO/marketing app each emit their own copy.",
 		Impact: "Search engines pick one declaration and ignore the rest; which one is not up to the site, and the ignored copy's fields are wasted.",

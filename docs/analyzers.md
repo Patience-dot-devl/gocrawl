@@ -155,6 +155,7 @@ have.
 | `structured-missing-required` | warning | page | A typed object omits a field its rich result requires | `type`, `missing`, `path` |
 | `structured-missing-recommended` | info | **site** | A type omits recommended fields, aggregated across the crawl | `type`, `missing`, `fields`, `pages`, `examples` |
 | `structured-missing-merchant` | warning | **site** | `Product`/`ProductGroup` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-variant-incomplete` | warning | **site** | A `ProductGroup`'s inline `hasVariant` entries omit `name`, `image`, `offers.price`, `offers.priceCurrency`, `sku`/GTIN, or a `variesBy` dimension; url-only variant references are skipped; aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
 | `structured-duplicate-type` | warning | page | A page-level type is declared in two or more JSON-LD blocks | `type`, `blocks` |
 | `structured-conflicting-value` | error | page | Duplicate blocks disagree on `name`, `sku`, or an `offers` field | `type`, `field`, `values` |
 | `structured-unresolved-id` | warning | page | An `@id` reference has no matching node on the page | `id`, `property`, `type` |
@@ -175,15 +176,18 @@ have.
 > A field written with `|` separators is an any-of group: `gtin|gtin8|gtin12|gtin13|gtin14|mpn`
 > is satisfied by any one identifier.
 
-> **Why two of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
-> so a recommended-field gap repeats identically on every page of a template. Those two codes
+> **Why three of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
+> so a recommended-field gap repeats identically on every page of a template. Those three codes
 > aggregate into one issue per type, carrying the affected page count and up to five example
 > URLs, instead of one issue per page.
 
 > **Thin copies are exempt.** Objects nested under `itemListElement`, `hasVariant`,
 > `isVariantOf`, `isSimilarTo`, `isRelatedTo` or `isAccessoryOrSparePartFor` are deliberately
 > minimal — a collection page's product tiles carry a name and a URL and nothing else — so
-> eligibility and duplicate checks skip them.
+> eligibility and duplicate checks skip them. The one exception is a `ProductGroup`'s inline
+> variants: Google requires real fields on each, so `structured-variant-incomplete` checks them
+> against variant rules and rolls the gaps up. A variant carrying nothing but `url` is Google's
+> documented reference to a variant served on another page, and stays exempt.
 
 > The `*-candidate` checks are low-noise heuristics: they only fire on a fairly specific
 > on-page signal and never fire when a matching `@type` is already present anywhere on the page.

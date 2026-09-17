@@ -41,13 +41,12 @@ var eligibility = map[string]fieldSpec{
 		},
 	},
 	"ProductGroup": {
-		// hasVariant and productGroupID are both required by Google's product-variants
-		// documentation: productGroupID is what joins the variants into one group, and a
-		// ProductGroup with no hasVariant array has nothing to group. hasVariant children
-		// remain exempt from their own required-field check as thin copies (see
-		// listProperties below), so this only checks that the group node names them.
-		required:    []string{"name", "hasVariant", "productGroupID"},
-		recommended: []string{"variesBy", "image", "brand"},
+		// Google's product-variants documentation requires only name on the group;
+		// hasVariant and productGroupID are recommended (a group may instead be joined by
+		// each variant's isVariantOf/inProductGroupWithID). image is not a documented group
+		// property at all — variant images belong on each variant (see variantIssues).
+		required:    []string{"name"},
+		recommended: []string{"hasVariant", "productGroupID", "variesBy", "brand", "description", "aggregateRating", "review"},
 		// Google accepts these merchant fields on the ProductGroup itself or on each
 		// variant's Offer. A store that models variants correctly (ProductGroup +
 		// hasVariant, exactly what shopify-flat-variant-product tells owners to adopt)
@@ -131,7 +130,9 @@ var eligibility = map[string]fieldSpec{
 // listProperties name the places schema.org puts thin, deliberately incomplete copies of an
 // entity: a collection page's product tiles, a ProductGroup's variants, a "customers also
 // bought" rail. Those copies are supposed to be minimal, so eligibility checking them would
-// put a warning on every tile of every listing page and say nothing true.
+// put a warning on every tile of every listing page and say nothing true. A ProductGroup's
+// variants are the one exception that is still checked, against their own variant rules and
+// rolled up rather than per node — see variantIssues.
 var listProperties = []string{
 	".itemListElement", ".hasVariant", ".isVariantOf",
 	".isSimilarTo", ".isRelatedTo", ".isAccessoryOrSparePartFor",
@@ -171,6 +172,9 @@ func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.
 			}
 			roll.add("structured-missing-recommended", ty, missingFields(g, n, spec.recommended, nil), p.FinalURL)
 			roll.add("structured-missing-merchant", ty, missingFields(g, n, spec.merchant, merchantFallback(ty, g, n)), p.FinalURL)
+			if ty == "ProductGroup" {
+				roll.add("structured-variant-incomplete", ty, variantGaps(g, n), p.FinalURL)
+			}
 		}
 	}
 	return issues
@@ -225,4 +229,73 @@ func missingFields(g schemaorg.Graph, n schemaorg.Node, want []string, fallback 
 		}
 	}
 	return missing
+}
+
+// variantRequired is what Google requires on each variant declared inline under a
+// ProductGroup's hasVariant: the standard Product fields plus a unique identifier. The group
+// can carry brand, description and ratings once for all variants, but not these.
+var variantRequired = []string{
+	"name", "image", "offers.price", "offers.priceCurrency",
+	"sku|gtin|gtin8|gtin12|gtin13|gtin14",
+}
+
+// variesByProperties maps the variesBy values Google supports to the property each variant
+// must then carry. Anything else in variesBy is not a documented variant dimension and is
+// ignored rather than guessed at.
+var variesByProperties = map[string]bool{
+	"color": true, "size": true, "suggestedAge": true,
+	"suggestedGender": true, "material": true, "pattern": true,
+}
+
+// stubKeys are the keys a variant reference may carry and still be a reference. Google's own
+// multi-page example lists the variants served on other pages as {"url": ...}; their full
+// markup lives on those pages, so checking the stub here would report every variant of every
+// multi-page store as incomplete.
+var stubKeys = map[string]bool{"@type": true, "@id": true, "@context": true, "url": true}
+
+// variantGaps returns the union of fields missing across n's inline variants, each listed once
+// however many variants lack it. The rollup counts pages, not variants: a product with forty
+// sizes missing gtin is one template fact, not forty findings.
+func variantGaps(g schemaorg.Graph, n schemaorg.Node) []string {
+	want := append(append([]string(nil), variantRequired...), variesBy(g, n)...)
+	seen := make(map[string]bool)
+	var out []string
+	for _, v := range g.NodesAt(n, "hasVariant") {
+		if isStub(v) {
+			continue
+		}
+		for _, f := range missingFields(g, v, want, nil) {
+			if !seen[f] {
+				seen[f] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
+// variesBy returns the supported variant dimensions a ProductGroup declares, accepting both
+// the full "https://schema.org/color" form Google documents and a bare "color".
+func variesBy(g schemaorg.Graph, n schemaorg.Node) []string {
+	var out []string
+	for _, raw := range g.Strs(n, "variesBy") {
+		name := raw
+		if i := strings.LastIndexByte(name, '/'); i >= 0 {
+			name = name[i+1:]
+		}
+		if variesByProperties[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// isStub reports whether a variant is a bare reference to markup served elsewhere.
+func isStub(v schemaorg.Node) bool {
+	for k := range v.Props {
+		if !stubKeys[k] {
+			return false
+		}
+	}
+	return true
 }
