@@ -1,7 +1,7 @@
 # Fixes from the dermalogica.nl functional test
 
 Date: 2026-09-17
-Status: approved, implementation in progress
+Status: implemented (`d088a8f..c9dda14`), accepted against a live re-crawl on 2026-09-17
 Branch: `shopify-structured-data-analyzer` (PR #62)
 Parent spec: [`2026-09-14-structured-data-shopify-design.md`](2026-09-14-structured-data-shopify-design.md)
 
