@@ -1,7 +1,8 @@
 // Package schemaorg parses the JSON-LD embedded in an HTML page into a flat, addressable
 // graph of typed nodes. It is a shared helper, not an analyzer: it emits no findings and is
-// never registered. Both the structured and shopify analyzers read a page through it, so
-// JSON-LD is parsed once per page and @id references resolve against the same graph.
+// never registered. Both the structured and shopify analyzers read a page through it, so both
+// see the same nodes and resolve @id references the same way. Nothing is cached: each caller
+// parses the page again (three times per page today: once in structured, twice in shopify).
 package schemaorg
 
 import (
