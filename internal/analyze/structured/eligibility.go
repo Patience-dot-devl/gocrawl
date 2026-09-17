@@ -1,6 +1,7 @@
 package structured
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -33,7 +34,7 @@ var eligibility = map[string]fieldSpec{
 		// not on Product itself; either placement satisfies the check (integrity.go's
 		// dateProperties already accepts both spellings for the date one, at :195-196).
 		merchant: []string{
-			"gtin|gtin8|gtin12|gtin13|gtin14|mpn",
+			identifierGroup,
 			"priceValidUntil|offers.priceValidUntil",
 			"offers.shippingDetails",
 			"hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy",
@@ -57,7 +58,7 @@ var eligibility = map[string]fieldSpec{
 		// fields on each variant's Offer, rather than the group, is not told it is
 		// missing everything.
 		merchant: []string{
-			"gtin|gtin8|gtin12|gtin13|gtin14|mpn",
+			identifierGroup,
 			"priceValidUntil|offers.priceValidUntil",
 			"offers.shippingDetails",
 			"hasMerchantReturnPolicy|offers.hasMerchantReturnPolicy",
@@ -172,13 +173,61 @@ func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.
 				})
 			}
 			roll.add("structured-missing-recommended", ty, missingFields(g, n, spec.recommended, nil), p.FinalURL, canonical)
-			roll.add("structured-missing-merchant", ty, missingFields(g, n, spec.merchant, merchantFallback(ty, g, n)), p.FinalURL, canonical)
+			merchant := missingFields(g, n, spec.merchant, merchantFallback(ty, g, n))
+			if found := identifiersOnOffers(g, n, ty, merchant); len(found) > 0 {
+				merchant = without(merchant, identifierGroup)
+				roll.add("structured-identifier-on-offer", ty, found, p.FinalURL, canonical)
+			}
+			roll.add("structured-missing-merchant", ty, merchant, p.FinalURL, canonical)
 			if ty == "ProductGroup" {
 				roll.add("structured-variant-incomplete", ty, variantGaps(g, n), p.FinalURL, canonical)
 			}
 		}
 	}
 	return issues
+}
+
+// identifierGroup is the merchant tier's product-identifier requirement, shared by Product and
+// ProductGroup and singled out by identifiersOnOffers.
+const identifierGroup = "gtin|gtin8|gtin12|gtin13|gtin14|mpn"
+
+// identifiersOnOffers returns the identifier properties n declares on its offers, but only when
+// the merchant check already found the identifier group missing (merchant is missingFields'
+// result for the node). Google's merchant-listing documentation places gtin and mpn on the
+// Product and does not document reading them from an Offer, so the gap stays a gap; but a store
+// told "no GTIN" while every Offer carries one goes hunting for data it already has. Returning
+// the paths found lets the caller report the misplacement instead of the absence. A ProductGroup
+// is also checked through its variants' offers, the shape a Shopify theme produces when it
+// models variants but keeps the barcode on the Offer. The result follows the group's
+// alternative order, then offers before hasVariant.offers, so it never depends on map order.
+func identifiersOnOffers(g schemaorg.Graph, n schemaorg.Node, ty string, merchant []string) []string {
+	if !slices.Contains(merchant, identifierGroup) {
+		return nil
+	}
+	prefixes := []string{"offers."}
+	if ty == "ProductGroup" {
+		prefixes = append(prefixes, "hasVariant.offers.")
+	}
+	var found []string
+	for _, prefix := range prefixes {
+		for _, alt := range strings.Split(identifierGroup, "|") {
+			if g.HasValue(n, prefix+alt) {
+				found = append(found, prefix+alt)
+			}
+		}
+	}
+	return found
+}
+
+// without returns fields with every occurrence of field removed, leaving the input untouched.
+func without(fields []string, field string) []string {
+	var out []string
+	for _, f := range fields {
+		if f != field {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // merchantFallback returns the variant fallback for the merchant tier, or nil for every other

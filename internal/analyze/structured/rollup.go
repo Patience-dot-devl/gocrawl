@@ -117,9 +117,12 @@ func (r *rollup) issues(base string) []analyze.Issue {
 // rollupSeverity distinguishes the two rolled-up codes: the merchant tier is the commercial
 // point of this analyzer (Google Shopping / free-listing eligibility), so it warrants warning,
 // while the recommended tier is genuinely optional polish and stays info. Incomplete variants
-// are warning for the same reason: Google requires those fields on each inline variant.
+// are warning for the same reason: Google requires those fields on each inline variant. An
+// identifier found only on Offer is warning because it is the merchant identifier gap, reworded
+// so the store moves data it has rather than looks for data it lacks.
 func rollupSeverity(code string) analyze.Severity {
-	if code == "structured-missing-merchant" || code == "structured-variant-incomplete" {
+	switch code {
+	case "structured-missing-merchant", "structured-variant-incomplete", "structured-identifier-on-offer":
 		return analyze.Warning
 	}
 	return analyze.Info
@@ -132,6 +135,8 @@ func rollupMessage(code, typ string) string {
 		return typ + " markup is missing Google Merchant listing fields"
 	case "structured-variant-incomplete":
 		return typ + " variants are missing fields Google requires on each variant"
+	case "structured-identifier-on-offer":
+		return typ + " markup declares GTIN/MPN on Offer, where Google's merchant listings do not document reading it"
 	default:
 		return typ + " markup is missing recommended schema.org fields"
 	}

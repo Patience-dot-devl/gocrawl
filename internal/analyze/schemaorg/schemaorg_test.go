@@ -227,3 +227,19 @@ func TestNodesAtReturnsTypedChildren(t *testing.T) {
 		t.Errorf("expected 2 variant nodes, got %d", len(got))
 	}
 }
+
+// TestHasValueCountsNumericValuesThroughArrays pins what the structured analyzer's identifier
+// checks rely on: themes emit gtin12 as a bare JSON number, usually on each Offer of an offers
+// array, and a number is a value like any non-empty string.
+func TestHasValueCountsNumericValuesThroughArrays(t *testing.T) {
+	g, _ := parse(t, `<html><head><script type="application/ld+json">
+		{"@type":"Product","name":"Tee","offers":[{"@type":"Offer","gtin12":666151020788},{"@type":"Offer","price":"20.00"}]}
+	</script></head><body></body></html>`)
+	p := g.OfType("Product")[0]
+	if !g.HasValue(p, "offers.gtin12") {
+		t.Error("expected a numeric gtin12 on one offer of the array to count as present")
+	}
+	if g.HasValue(p, "offers.gtin13") {
+		t.Error("expected an identifier no offer carries to count as absent")
+	}
+}

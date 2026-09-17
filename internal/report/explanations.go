@@ -1071,7 +1071,12 @@ var explanations = map[string]Explanation{
 	"structured-missing-merchant": {
 		What:   "Product or ProductGroup markup omits the fields Google Shopping and free product listings read: a product identifier, price validity, shipping, return policy, and item condition. For a ProductGroup, these are also satisfied if every variant's Offer carries them.",
 		Impact: "Products are ineligible for, or downranked in, Shopping and free listing surfaces, and shoppers see no shipping, returns, or condition detail before clicking.",
-		Fix:    "Emit gtin (or mpn), priceValidUntil, shippingDetails, hasMerchantReturnPolicy and itemCondition on the offer. Most of this can be templated once from store-level shipping and return settings.",
+		Fix:    "Emit gtin (or mpn) on the Product (for a ProductGroup, on each variant), and priceValidUntil, shippingDetails, hasMerchantReturnPolicy and itemCondition on the offer. Most of the offer fields can be templated once from store-level shipping and return settings. When the identifiers already sit on the Offer, structured-identifier-on-offer is reported instead of the identifier gap.",
+	},
+	"structured-identifier-on-offer": {
+		What:   "Product or ProductGroup markup carries no gtin or mpn of its own, but its offers do (for a ProductGroup, also its variants' offers). The fields listed are the identifier properties found on offers, such as offers.gtin12. These pages are not also reported as missing an identifier under structured-missing-merchant.",
+		Impact: "Google's merchant-listing documentation places gtin and mpn on the Product and does not document reading them from an Offer, so the identifiers the store already has may not be matched to the product in Shopping and free listings.",
+		Fix:    "Move the identifiers onto the Product, one per variant. On Shopify that means modelling variants as a ProductGroup with hasVariant, each variant a Product carrying its own gtin taken from the variant's Barcode field in the Shopify admin (variant.barcode in Liquid), with its Offer beneath it.",
 	},
 	"structured-variant-incomplete": {
 		What:   "A ProductGroup declares variants inline under hasVariant, but those variants omit fields Google requires on each one: name, image, price and currency, a sku or GTIN, and the attribute the group varies by (size, color, ...). Variants listed only by url are references to other pages and are not checked.",

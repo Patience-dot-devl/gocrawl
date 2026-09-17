@@ -155,6 +155,7 @@ have.
 | `structured-missing-required` | warning | page | A typed object omits a field its rich result requires | `type`, `missing`, `path` |
 | `structured-missing-recommended` | info | **site** | A type omits recommended fields, aggregated across the crawl | `type`, `missing`, `fields`, `pages`, `examples` |
 | `structured-missing-merchant` | warning | **site** | `Product`/`ProductGroup` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-identifier-on-offer` | warning | **site** | `Product`/`ProductGroup` has no `gtin*`/`mpn` of its own (nor, for a group, on its variants) but its offers do (`offers.<id>`, or `hasVariant.offers.<id>` for a group); `missing` names the properties found; those pages drop the identifier group from `structured-missing-merchant`; aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
 | `structured-variant-incomplete` | warning | **site** | A `ProductGroup`'s inline `hasVariant` entries omit `name`, `image`, `offers.price`, `offers.priceCurrency`, `sku`/GTIN, or a `variesBy` dimension; url-only variant references are skipped; aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
 | `structured-duplicate-type` | warning | page | A page-level type is declared in two or more JSON-LD blocks | `type`, `blocks` |
 | `structured-conflicting-value` | error | page | Duplicate blocks disagree on `name`, `sku`, or an `offers` field | `type`, `field`, `values` |
@@ -174,10 +175,12 @@ have.
 > either the group or each variant's `Offer`, so `ProductGroup` carries its own merchant tier
 > rather than relying on a top-level `Product` that a properly variant-modeled page never has.
 > A field written with `|` separators is an any-of group: `gtin|gtin8|gtin12|gtin13|gtin14|mpn`
-> is satisfied by any one identifier.
+> is satisfied by any one identifier. An identifier placed only on the `Offer` does not satisfy
+> it, since Google documents `gtin`/`mpn` on the `Product`; such pages are reported as
+> `structured-identifier-on-offer` rather than as missing an identifier.
 
-> **Why three of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
-> so a recommended-field gap repeats identically on every page of a template. Those three codes
+> **Why four of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
+> so a recommended-field gap repeats identically on every page of a template. Those four codes
 > aggregate into one issue per type, carrying the affected page count and up to five example
 > URLs, instead of one issue per page.
 > Pages are counted once per **canonical URL** (the `<head>` `link[rel="canonical"]`,

@@ -410,6 +410,15 @@ Spec: [`../specs/2026-09-17-dermalogica-functional-fixes-design.md`](../specs/20
   `[data-variant-id]` overcount). A second source counts distinct `?variant=` ids in the offer
   URLs of page-level `Product`s; the page takes the larger count, and the finding gains
   `data.source` (`dom`, `offers`, `dom+offers`). `shopify-single-offer-range` uses the same count.
+- ✅ **Fix 3 — "no GTIN" reported when every offer carries one.** Fixed in
+  `fix(structured): report identifiers placed on Offer instead of missing`. When the merchant
+  identifier group is unsatisfied on the `Product`/`ProductGroup` (and its variants) but
+  `offers.<gtin*|mpn>` (or, for a group, `hasVariant.offers.<…>`) is present, the page drops
+  the group from `structured-missing-merchant` and joins the new site rollup
+  `structured-identifier-on-offer` (warning, instance the type), whose `missing` names the
+  properties found, e.g. `offers.gtin12`. Numeric JSON identifiers count as present (pinned by
+  a `schemaorg` test). The `structured-missing-merchant` Fix text no longer tells stores to put
+  gtin on the offer.
 
 ---
 

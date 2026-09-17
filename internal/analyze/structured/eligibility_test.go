@@ -692,3 +692,140 @@ func TestRollupDedupeIgnoresTrailingSlashAndFragment(t *testing.T) {
 		}
 	}
 }
+
+// dermalogicaProduct mirrors the dermalogica.nl product markup: a Product with no identifier of
+// its own, whose offers array holds one Offer per size, each carrying a numeric gtin12.
+const dermalogicaProduct = `{"@context":"https://schema.org","@type":"Product","name":"Daily Microfoliant",
+	"url":"https://shop.test/products/daily-microfoliant",
+	"image":"https://shop.test/microfoliant.jpg",
+	"description":"A gentle rice-based exfoliant.",
+	"sku":"111104",
+	"brand":{"@type":"Brand","name":"Dermalogica"},
+	"aggregateRating":{"@type":"AggregateRating","ratingValue":"4.8","reviewCount":"212"},
+	"offers":[
+		{"@type":"Offer","sku":"111104","gtin12":666151020788,"price":"69.00","priceCurrency":"EUR","availability":"https://schema.org/InStock","url":"https://shop.test/products/daily-microfoliant?variant=4011"},
+		{"@type":"Offer","sku":"111105","gtin12":666151111103,"price":"19.00","priceCurrency":"EUR","availability":"https://schema.org/InStock","url":"https://shop.test/products/daily-microfoliant?variant=4012"},
+		{"@type":"Offer","sku":"111106","gtin12":666151111561,"price":"99.00","priceCurrency":"EUR","availability":"https://schema.org/InStock","url":"https://shop.test/products/daily-microfoliant?variant=4013"}
+	]}`
+
+// identifierIssues runs the analyzer over one product page and returns the merchant rollup's
+// missing map (nil when the code did not fire) and every structured-identifier-on-offer issue.
+func identifierIssues(t *testing.T, jsonld string) (map[string]int, []analyze.Issue) {
+	t.Helper()
+	html := `<html><head><script type="application/ld+json">` + jsonld + `</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/daily-microfoliant": html})
+	issues := structured.New().Analyze(context.Background(), res)
+	var merchant map[string]int
+	if is, ok := find(issues, "structured-missing-merchant"); ok {
+		merchant, _ = is.Data["missing"].(map[string]int)
+	}
+	return merchant, findAll(issues, "structured-identifier-on-offer")
+}
+
+const identifierGroup = "gtin|gtin8|gtin12|gtin13|gtin14|mpn"
+
+// TestIdentifierOnOfferReplacesNoGTINGap reproduces the dermalogica.nl finding: every Offer
+// carries a gtin12, so telling the store "no GTIN" is wrong. The merchant rollup must drop the
+// identifier group and structured-identifier-on-offer must name where the identifiers are.
+func TestIdentifierOnOfferReplacesNoGTINGap(t *testing.T) {
+	merchant, got := identifierIssues(t, dermalogicaProduct)
+	if merchant == nil {
+		t.Fatal("expected structured-missing-merchant for the other merchant fields, otherwise this test passes vacuously")
+	}
+	if _, listed := merchant[identifierGroup]; listed {
+		t.Errorf("merchant rollup must not list the identifier group when offers carry gtin12, got %v", merchant)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 structured-identifier-on-offer issue, got %d", len(got))
+	}
+	is := got[0]
+	if is.Severity != analyze.Warning {
+		t.Errorf("severity = %q, want warning", is.Severity)
+	}
+	if is.URL != "https://shop.test" {
+		t.Errorf("URL = %q, want the site base", is.URL)
+	}
+	if is.Data["pages"] != 1 {
+		t.Errorf("pages = %v, want 1", is.Data["pages"])
+	}
+	if is.Data["type"] != "Product" || is.Data[analyze.InstanceKey] != "Product" {
+		t.Errorf("type/instance = %v/%v, want Product", is.Data["type"], is.Data[analyze.InstanceKey])
+	}
+	missing, _ := is.Data["missing"].(map[string]int)
+	if len(missing) != 1 || missing["offers.gtin12"] != 1 {
+		t.Errorf("missing = %v, want exactly offers.gtin12: 1", missing)
+	}
+	if want := "Product markup declares GTIN/MPN on Offer, where Google's merchant listings do not document reading it"; is.Message != want {
+		t.Errorf("message = %q, want %q", is.Message, want)
+	}
+}
+
+// TestIdentifierOnOfferListsEachPropertyFound pins that data.fields names every identifier found
+// on offers, in a stable order, not just the first.
+func TestIdentifierOnOfferListsEachPropertyFound(t *testing.T) {
+	withMPN := strings.Replace(dermalogicaProduct, `"sku":"111105",`, `"sku":"111105","mpn":"MF-74",`, 1)
+	_, got := identifierIssues(t, withMPN)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 structured-identifier-on-offer issue, got %d", len(got))
+	}
+	fields, _ := got[0].Data["fields"].([]string)
+	if strings.Join(fields, " ") != "offers.gtin12 offers.mpn" {
+		t.Errorf("fields = %v, want [offers.gtin12 offers.mpn]", fields)
+	}
+}
+
+// TestRootIdentifierSilencesBothIdentifierCodes covers a Product doing it right: a gtin13 on the
+// Product satisfies the group, so neither code mentions identifiers, even though its offers
+// also carry gtin12 (the new code only speaks when the group is otherwise unsatisfied).
+func TestRootIdentifierSilencesBothIdentifierCodes(t *testing.T) {
+	rooted := strings.Replace(dermalogicaProduct, `"sku":"111104",`, `"sku":"111104","gtin13":"0666151020788",`, 1)
+	merchant, got := identifierIssues(t, rooted)
+	if _, listed := merchant[identifierGroup]; listed {
+		t.Errorf("a root gtin13 must satisfy the identifier group, got %v", merchant)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected no structured-identifier-on-offer when the Product carries gtin13, got %+v", got[0].Data)
+	}
+}
+
+// TestNoIdentifierAnywhereKeepsMerchantGap guards the other direction: with no identifier on
+// the Product or its offers the gap is a real absence and stays under the merchant code.
+func TestNoIdentifierAnywhereKeepsMerchantGap(t *testing.T) {
+	merchant, got := identifierIssues(t, completeProduct)
+	if merchant[identifierGroup] != 1 {
+		t.Errorf("expected the identifier group in the merchant rollup, got %v", merchant)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected no structured-identifier-on-offer without identifiers on offers, got %+v", got[0].Data)
+	}
+}
+
+// TestProductGroupVariantOfferIdentifierIsReported covers a ProductGroup whose variants keep
+// the GTIN on their Offer rather than on the variant Product: the variant fallback does not
+// satisfy the group, so the misplacement is reported with its hasVariant path.
+func TestProductGroupVariantOfferIdentifierIsReported(t *testing.T) {
+	group := `{"@type":"ProductGroup","name":"Daily Microfoliant","productGroupID":"DM",
+		"hasVariant":[
+			{"@type":"Product","name":"74 g","image":"https://shop.test/74.jpg",
+			 "offers":{"@type":"Offer","price":"69.00","priceCurrency":"EUR","gtin13":"0666151020788"}},
+			{"@type":"Product","name":"13 g","image":"https://shop.test/13.jpg",
+			 "offers":{"@type":"Offer","price":"19.00","priceCurrency":"EUR","gtin13":"0666151111103"}}
+		]}`
+	merchant, got := identifierIssues(t, group)
+	if merchant == nil {
+		t.Fatal("expected structured-missing-merchant for the other merchant fields, otherwise this test passes vacuously")
+	}
+	if _, listed := merchant[identifierGroup]; listed {
+		t.Errorf("merchant rollup must not list the identifier group, got %v", merchant)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 structured-identifier-on-offer issue, got %d", len(got))
+	}
+	if got[0].Data["type"] != "ProductGroup" {
+		t.Errorf("type = %v, want ProductGroup", got[0].Data["type"])
+	}
+	missing, _ := got[0].Data["missing"].(map[string]int)
+	if len(missing) != 1 || missing["hasVariant.offers.gtin13"] != 1 {
+		t.Errorf("missing = %v, want exactly hasVariant.offers.gtin13: 1", missing)
+	}
+}
