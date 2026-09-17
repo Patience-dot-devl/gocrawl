@@ -603,7 +603,7 @@ per canonical URL, so a product's `/collections/<c>/products/<h>` copy canonical
 | `shopify-template-schema-gap` | warning | **site** | One or more crawled, `200`-status HTML pages of a template lack a schema.org type that template should carry | `template`, `expected`, `pages`, `examples` |
 | `shopify-schema-app-conflict` | error | page | The page's `Product` JSON-LD is attributed to two or more different script sources (typically the theme and an SEO app) | `sources` |
 | `shopify-schema-client-injected` | info | page | The page's raw HTML has zero JSON-LD nodes, its template is not `utility`/`unknown`, and a recognized structured-data app's script is present | `app`, `apps`, `template` |
-| `shopify-flat-variant-product` | warning | page | A `product`-template page exposes 2+ variants in the DOM, declares one or more `Product` nodes, none of which carries `hasVariant`/`isVariantOf`, and the page declares no `ProductGroup` type either | `variants` |
+| `shopify-flat-variant-product` | warning | page | A `product`-template page exposes 2+ variants — distinct variant ids in the DOM, or distinct `?variant=` ids in the offer URLs of its page-level `Product` — declares one or more `Product` nodes, none of which carries `hasVariant`/`isVariantOf`, and the page declares no `ProductGroup` type either | `variants`, `source` (`dom`, `offers`, or `dom+offers` when both agree) |
 | `shopify-single-offer-range` | info | page | The page's embedded variant JSON has 2+ distinct prices, a `Product` node declares exactly one `Offer`, and no `AggregateOffer` is present | `prices`, `variants` |
 | `shopify-indexable-utility` | warning | page | A `utility`-template page (`/search`, `/cart`, `/account/*`, `/challenge`, `/checkouts`, `/orders`, `/password`) is indexable — no `noindex` in meta robots or `X-Robots-Tag` | `path` |
 | `shopify-indexable-facet` | warning | page | A `collection` URL carries a faceting query parameter (`sort_by`, `filter.*`, `constraint`, `pf_*`, `grid_list`) and its canonical is empty or points at itself rather than the unfiltered collection | `parameter`, `canonical` |
@@ -650,15 +650,17 @@ per canonical URL, so a product's `/collections/<c>/products/<h>` copy canonical
 > and the raw HTML has none, `shopify-schema-client-injected` says so rather than reporting the
 > page as bare. Re-run with `--render headless` to see what the app emits.
 
-> **Variant counts take the maximum across DOM selectors, not the sum.** A theme commonly
-> renders its variant picker more than once — a `<select>` for narrow viewports, radio inputs
-> for wide — and summing every selector would double-count, letting a single-variant product
-> trip the two-variant gate on nothing more than a duplicated control. `<option>` elements with
-> no value or an empty one (a placeholder such as "Choose an option") are filtered out of the
-> two option-based selectors so a placeholder is never counted as a variant either. This remains
-> an undercount in one direction: `[data-variant-id]` attached to several swatch or thumbnail
-> elements per variant, or a duplicated `input[name="id"]` for the same variant, can still
-> overcount.
+> **Variant counts are distinct values, and the maximum across sources, not the sum.** Each DOM
+> selector counts distinct non-empty variant ids — the `value` attribute, or the attribute itself
+> for `[data-variant-id]` — so a buy form rendered twice (main plus sticky add-to-cart) or a
+> swatch grid that repeats an id per thumbnail counts each variant once, and a placeholder
+> `<option>` with no value ("Choose an option") is never counted. A theme commonly renders its
+> variant picker more than once — a `<select>` for narrow viewports, radio inputs for wide — so
+> the page takes the maximum across selectors rather than summing them. Many themes use picker
+> markup no selector recognizes, so a second source counts the distinct `variant` query
+> parameters in the `url` of every `Offer` on a page-level `Product` (one not nested under a list
+> property such as `isRelatedTo`). The page's count is the larger of the two, and `source` says
+> which supplied it.
 
 ---
 

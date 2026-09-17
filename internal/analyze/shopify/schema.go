@@ -2,6 +2,7 @@ package shopify
 
 import (
 	"encoding/json"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -149,7 +150,7 @@ func variantIssues(p *crawler.Page, g schemaorg.Graph, tmpl Template) []analyze.
 	if tmpl != TemplateProduct {
 		return nil
 	}
-	variants := variantCount(p.Doc)
+	variants, source := pageVariants(p.Doc, g)
 	if variants < 2 {
 		return nil
 	}
@@ -167,7 +168,7 @@ func variantIssues(p *crawler.Page, g schemaorg.Graph, tmpl Template) []analyze.
 			Analyzer: "shopify", URL: p.FinalURL, Severity: analyze.Warning,
 			Code:    "shopify-flat-variant-product",
 			Message: "Product markup describes one item but the page sells several variants",
-			Data:    map[string]any{"variants": variants},
+			Data:    map[string]any{"variants": variants, "source": source},
 		})
 	}
 
@@ -202,38 +203,90 @@ var variantSelectors = []string{
 	`[data-variant-id]`,
 }
 
-// optionSelectors are the variantSelectors entries that select <option> elements, where a
-// theme's leading placeholder ("Choose an option", "Select size") carries no value or an
-// empty value and must not be counted as a variant.
-var optionSelectors = map[string]bool{
-	`select[name="id"] option`: true,
-	`variant-selects option`:   true,
-}
-
-// variantCount returns the largest number of variants any selector on the page exposes. It
-// takes the maximum across selector shapes, not the sum: themes routinely render the same
-// variant set twice — a <select> for narrow viewports, radio inputs for wide — and summing
-// would double-count, letting a single-variant product trip the >= 2 gate on nothing more than
-// a duplicated control. A placeholder <option> with no value (or an empty one) is filtered out
-// of the two option-based selectors so it is not counted as a variant either. This remains an
-// approximation in one direction: [data-variant-id] attached to several swatch or thumbnail
-// elements per variant, or an input[name="id"] rendered more than once for the same variant,
-// would still overcount.
+// variantCount returns the largest number of distinct variants any selector on the page
+// exposes. It counts distinct non-empty values, not elements: a theme that renders the buy
+// form twice (main plus sticky add-to-cart) repeats the same hidden input[name="id"], and a
+// swatch grid can attach the same [data-variant-id] to several elements per variant. Neither
+// is a second variant. The value read is the value attribute, except for [data-variant-id],
+// whose own attribute carries the id. It takes the maximum across selector shapes, not the
+// sum: themes routinely render the same variant set twice — a <select> for narrow viewports,
+// radio inputs for wide — and summing would double-count, letting a single-variant product
+// trip the >= 2 gate on nothing more than a duplicated control. A placeholder <option> with
+// no value (or an empty one) carries no variant and is not counted.
 func variantCount(doc *goquery.Document) int {
 	most := 0
 	for _, sel := range variantSelectors {
-		found := doc.Find(sel)
-		if optionSelectors[sel] {
-			found = found.FilterFunction(func(_ int, s *goquery.Selection) bool {
-				v, ok := s.Attr("value")
-				return ok && strings.TrimSpace(v) != ""
-			})
+		attr := "value"
+		if sel == `[data-variant-id]` {
+			attr = "data-variant-id"
 		}
-		if n := found.Length(); n > most {
+		distinct := make(map[string]bool)
+		doc.Find(sel).Each(func(_ int, s *goquery.Selection) {
+			if v := strings.TrimSpace(s.AttrOr(attr, "")); v != "" {
+				distinct[v] = true
+			}
+		})
+		if n := len(distinct); n > most {
 			most = n
 		}
 	}
 	return most
+}
+
+// listProperties name the places schema.org nests thin copies of an entity — a listing's
+// tiles, a group's variants, a related-products rail. A Product under one of them describes
+// some other item, so its offers say nothing about the variants this page sells. This mirrors
+// the structured analyzer's eligibility exemption.
+var listProperties = []string{
+	".itemListElement", ".hasVariant", ".isVariantOf",
+	".isSimilarTo", ".isRelatedTo", ".isAccessoryOrSparePartFor",
+}
+
+// offerVariantCount returns the number of distinct variant ids named by the ?variant= query
+// parameter of the offer URLs on the page's own Products. Shopify themes emit one Offer per
+// variant, each linking to its variant URL, so this sees variant pickers the DOM selectors
+// do not recognize.
+func offerVariantCount(g schemaorg.Graph) int {
+	distinct := make(map[string]bool)
+	for _, n := range g.OfType("Product") {
+		if inListProperty(n.Path) {
+			continue
+		}
+		for _, raw := range g.Strs(n, "offers.url") {
+			u, err := url.Parse(raw)
+			if err != nil {
+				continue
+			}
+			if id := strings.TrimSpace(u.Query().Get("variant")); id != "" {
+				distinct[id] = true
+			}
+		}
+	}
+	return len(distinct)
+}
+
+// inListProperty reports whether a node's path puts it inside one of listProperties.
+func inListProperty(path string) bool {
+	for _, prop := range listProperties {
+		if strings.Contains(path, prop) {
+			return true
+		}
+	}
+	return false
+}
+
+// pageVariants returns the page's variant count, the larger of what the DOM and the offer
+// URLs expose, and which source supplied it: "dom", "offers", or "dom+offers" when both agree.
+func pageVariants(doc *goquery.Document, g schemaorg.Graph) (int, string) {
+	dom, offers := variantCount(doc), offerVariantCount(g)
+	switch {
+	case dom == offers:
+		return dom, "dom+offers"
+	case dom > offers:
+		return dom, "dom"
+	default:
+		return offers, "offers"
+	}
 }
 
 // variantPrices returns the distinct variant prices from the product JSON Shopify themes

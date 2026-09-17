@@ -272,8 +272,10 @@ Ranked by commercial value to a store.
   template fact.
 - **`shopify-schema-client-injected`** fires on `/pages/*` and policy pages because apps load
   sitewide. It is `info`, so tolerable; scoping to product/collection/article would tidy it.
-- **`[data-variant-id]`** in `variantSelectors` overcounts on swatch/thumbnail grids.
+- ✅ **`[data-variant-id]`** in `variantSelectors` overcounts on swatch/thumbnail grids.
   `select[name="id"] option` and `input[name="id"]` alone are sufficient and safe.
+  *Resolved in P10 Fix 2:* `variantCount` counts distinct non-empty values per selector, so a
+  repeated id no longer overcounts; the selector stays.
 
 ---
 
@@ -401,6 +403,13 @@ Spec: [`../specs/2026-09-17-dermalogica-functional-fixes-design.md`](../specs/20
   `analyze.CanonicalURL`, with `shopify.canonicalOf` built on the same resolution), so
   `/collections/<c>/products/<h>` no longer doubles `/products/<h>`. Examples are canonical
   URLs.
+- ✅ **Fix 2 — `shopify-flat-variant-product` counted one variant twice and missed the real
+  ones.** Fixed in `fix(shopify): count distinct variants from the DOM and offer URLs`.
+  `variantCount` counts distinct non-empty variant ids rather than elements, so a main plus
+  sticky cart form no longer reads as two variants (this also resolves the P7
+  `[data-variant-id]` overcount). A second source counts distinct `?variant=` ids in the offer
+  URLs of page-level `Product`s; the page takes the larger count, and the finding gains
+  `data.source` (`dom`, `offers`, `dom+offers`). `shopify-single-offer-range` uses the same count.
 
 ---
 
