@@ -17,10 +17,11 @@ The current baseline. Everything here works today.
 - **Scope & politeness controls** — `robots.txt` compliance, rate limiting,
   include/exclude URL regexes, subdomain and external-link toggles, custom User-Agent.
 - **Redirect capture** — full redirect chains recorded per page, with loop detection.
-- **Twenty-one analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
+- **Twenty-five analyzers** — the SEO/technical set `seo`, `redirects`, `links`, `robots`,
   `sitemap`, `structured`, `perf`, the content & technical breadth set `images`, `urls`,
-  `security`, `pagination`, `hreflang`, `amp`, `duplicates`, `content`, the CMS-specific
-  `wordpress`, the SEA set `utm`, `tracking`, `landing`, and the AI-search set `aeo`, `geo`.
+  `security`, `pagination`, `hreflang`, `amp`, `duplicates`, `content`, `botwall`, the
+  CMS-specific `wordpress` and `shopify`, the SEA set `utm`, `tracking`, `datalayer`,
+  `landing`, `consent`, and the AI-search set `aeo`, `geo`.
   See the [Analyzer reference](analyzers.md).
 - **Screaming Frog parity — tier 1** — image alt/dimension checks (`images`), URL hygiene
   (`urls`), security headers and insecure forms (`security`), `rel=next/prev` pagination
@@ -29,6 +30,13 @@ The current baseline. Everything here works today.
   (`content`) — plus extensions to existing analyzers: `X-Robots-Tag`/meta-refresh directives
   (`seo`), schema.org required-field validation (`structured`), and inbound link counts
   (`links`). All added on the analyzer seam with no engine changes.
+- **Structured-data depth & Shopify** — `structured` reads JSON-LD through a shared
+  schema.org graph parser (`schemaorg`), tiers fields by rich-result requirement
+  (required / recommended / Google Merchant), rolls template-wide gaps up per site, and checks
+  markup integrity (duplicate and conflicting types, dangling `@id`, URL/date/price formats,
+  price-vs-page agreement). The `shopify` analyzer classifies store URLs by template and
+  reports per-template schema gaps, theme/app schema conflicts, flattened variants, and
+  Shopify crawl-hygiene issues.
 - **Headless rendering (chromedp)** — `--render headless` (or `render: headless` in YAML)
   renders pages in a real Chromium tab via [chromedp][chromedp], capturing the post-JS DOM
   for downstream analyzers. It also captures the raw pre-JS HTML alongside the rendered DOM so

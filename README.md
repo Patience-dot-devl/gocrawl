@@ -209,7 +209,7 @@ Key crawl options:
 | Output | `--out` / `--format` | File path and `json` / `csv` / `html` |
 | Site map | `--sitemap` | Write a `sitemap.xml`; the HTML report also has a Site map tab that draws the crawl as a visual node-link diagram with issues per page |
 | Analyzers | `--analyzers` | Comma-separated allow-list |
-| Specialized checks | `--specialized` | Enable opt-in checks: AI-search heuristics + WordPress security probes (off by default) |
+| Specialized checks | `--specialized` | Enable opt-in checks: AI-search heuristics, WordPress security probes, Shopify `/products.json` probe (off by default) |
 | Security audit | `--security-audit` | Enable the opt-in TLS/certificate, cookie, and response-header audit (off by default) |
 | Ignore external tagging | `--ignore-external-tagging` | Suppress the `utm` analyzer's tagging-quality warnings for links leaving the domain (on by default) |
 

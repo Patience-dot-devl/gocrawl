@@ -6,6 +6,73 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-17
+
+### Added
+
+- **`shopify` analyzer.** Detects Shopify storefronts and stays silent everywhere else.
+  Detection is tiered: the `Shopify.theme` bootstrap object, the `shopify-features` script, or
+  the `X-ShopId`/`X-Shopify-Stage` headers identify a store, while weak markers
+  (`cdn.shopify.com`, `.myshopify.com`) alone never do, so sites embedding a Buy Button widget
+  are not misread as stores. Once detected, every URL is classified into its platform-fixed
+  template (home, product, collection, article, blog, page, policy, utility; Markets locale
+  prefixes are understood) and checked:
+  - `shopify-template-schema-gap` rolls up, per template, the schema.org types its pages are
+    missing, with a page count and example URLs.
+  - `shopify-schema-app-conflict` flags `Product` markup emitted by both the theme and an SEO
+    app; `shopify-schema-client-injected` flags pages whose SEO app likely injects JSON-LD
+    client-side, invisible in raw HTML.
+  - `shopify-flat-variant-product` and `shopify-single-offer-range` flag product markup that
+    flattens away variants or a price range.
+  - `shopify-indexable-utility`, `shopify-indexable-facet` and
+    `shopify-duplicate-product-path` cover the crawl-hygiene problems Shopify creates by
+    default: indexable `/search`/`/cart`/`/account` pages, self-canonical sorted or filtered
+    collections, and collection-nested product URLs without a canonical to `/products/<handle>`.
+  - `shopify-products-json-exposed` (opt-in via `--specialized`) makes one request to
+    `/products.json?limit=1` to check whether the full catalogue is served unauthenticated.
+- **Deeper `structured` analyzer.** JSON-LD is now read through a new shared `schemaorg`
+  parser that flattens `@graph`, nested objects and arrays into an addressable node graph with
+  `@id` resolution. On top of it:
+  - Fields are tiered by rich-result requirement, checked against Google's published
+    requirements. Required gaps stay per page (`structured-missing-required`, now with a
+    `path`); recommended and Google Merchant gaps roll up site-wide into one issue per type
+    (`structured-missing-recommended`, `structured-missing-merchant`). `ProductGroup` has its
+    own merchant tier, and merchant fields are accepted on variant offers.
+  - New integrity checks: `structured-duplicate-type`, `structured-conflicting-value`,
+    `structured-unresolved-id`, `structured-relative-url`, `structured-empty-url`,
+    `structured-invalid-date`, `structured-malformed-price` and `structured-price-mismatch`
+    (price comparison understands European decimal commas and stays silent when the page
+    shows more than one price).
+  - `structured-variant-incomplete` checks a `ProductGroup`'s inline `hasVariant` entries, and
+    `structured-identifier-on-offer` reports `gtin`/`mpn` placed on the `Offer` instead of the
+    `Product`.
+  - Site-wide rollups count each page once per canonical URL, so a product reached through
+    several collection paths is one page.
+
+### Changed
+
+- **Severities.** `structured-invalid-jsonld`, `structured-malformed-price` and
+  `structured-price-mismatch` are now `error` (were `warning`); `structured-missing-merchant`
+  is `warning`.
+- **`structured-breadcrumb-candidate` is site-scoped.** It now aggregates into one issue with
+  a page count instead of repeating per page, so `gocrawl compare` against a report saved
+  with an earlier version re-keys it once.
+- **`structured-product-candidate` is stricter.** A price must sit next to an actual
+  cart/buy control (same `<form>` or a bounded ancestor), so a sitewide free-shipping banner
+  plus a mini-cart button no longer fires it on every page of a store.
+- **`structured-data` and `structured-none`** now account for nested types, and a bare
+  top-level `Offer` is no longer required-field checked.
+- `--specialized` help text names the Shopify probe alongside the WordPress probes.
+
+### Fixed
+
+- **`gocrawl compare` merged distinct findings.** Rollups that emit several issues for the
+  same analyzer, code and URL (one per type or template) were paired as one; issues can now
+  carry `data.instance`, and pairing is count-based.
+- **Nondeterministic structured-data output.** JSON-LD node order and unresolved-`@id` issue
+  order depended on Go map iteration, producing spurious diffs between crawls of an unchanged
+  page.
+
 ## [0.7.0] - 2026-09-07
 
 ### Added
@@ -242,7 +309,8 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.4.0...v0.5.0

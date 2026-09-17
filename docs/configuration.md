@@ -177,7 +177,7 @@ to another domain or travel in cleartext. Concretely:
 - Credential scope is deliberately *narrower* than crawl scope: `--external` widens what
   gocrawl will crawl, but never what it will authenticate to. A crawl with `--external
   --basic-auth` does not send the seed's credentials to the third-party hosts it follows.
-- The analyzers that fetch a few extra resources (`sitemap`, `geo`, `wordpress`) use the same
+- The analyzers that fetch a few extra resources (`sitemap`, `geo`, `wordpress`, `shopify`) use the same
   credential scope. So a `Sitemap:` directive in `robots.txt` pointing at another host — a CDN
   or a separate subdomain without `--subdomains` — is fetched **anonymously**, and on a site
   whose Basic Auth realm also covers that host the sitemap will come back `401` and be
@@ -208,7 +208,7 @@ that host (for Shopify, `_shopify_essential`; the exact name can vary by site/pl
 
 **Scoping.** Identical to `--basic-auth` above: the `Cookie` header is sent only to the seed
 host (plus subdomains under `--subdomains`), never survives a scheme downgrade, is re-checked on
-every redirect hop, and is restricted the same way for the `sitemap`/`geo`/`wordpress`
+every redirect hop, and is restricted the same way for the `sitemap`/`geo`/`wordpress`/`shopify`
 analyzers' extra fetches. Not supported with `--render headless`, for the same per-host-scoping
 reason as `--basic-auth`.
 
@@ -222,8 +222,9 @@ Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (se
 
 The `--analyzers` CLI flag sets `enabled`. Analyzer names: `seo`, `redirects`, `links`,
 `robots`, `sitemap`, `structured`, `perf`, `images`, `urls`, `security`, `pagination`,
-`hreflang`, `amp`, `duplicates`, `content`, the CMS-specific `wordpress`, the SEA analyzers
-`utm`, `tracking`, `landing`, and the AI-search analyzers `aeo`, `geo`. See the
+`hreflang`, `amp`, `duplicates`, `content`, `botwall`, the CMS-specific `wordpress` and
+`shopify`, the SEA analyzers `utm`, `tracking`, `datalayer`, `landing`, `consent`, and the
+AI-search analyzers `aeo`, `geo`. See the
 [Analyzer reference](analyzers.md).
 
 ```sh
@@ -270,7 +271,8 @@ responses. Pair it with `--verbose` to see each rate change logged as it happens
 It turns on opt-in checks that are off by default: two lower-confidence AI-search heuristics
 (`aeo-no-answer-lead` and `geo-low-quotable-density`) and the `wordpress` analyzer's active
 security-endpoint probes (`wp-xmlrpc-enabled`, `wp-user-enumeration-rest`,
-`wp-user-enumeration-author`, `wp-directory-listing`, `wp-readme-exposed`). The affected
+`wp-user-enumeration-author`, `wp-directory-listing`, `wp-readme-exposed`), plus the `shopify`
+analyzer's `/products.json` catalogue-exposure probe (`shopify-products-json-exposed`). The affected
 analyzers always run their other checks; this toggle only adds these. See the
 [Specialized AI-search checks](analyzers.md#specialized-ai-search-checks) note for details.
 
@@ -430,7 +432,7 @@ analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those
   # listed in "disabled". Names: seo, redirects, links, robots, sitemap, structured, perf,
   # images, urls, security, pagination, hreflang, amp, duplicates, content, botwall,
-  # wordpress, the SEA analyzers utm, tracking, datalayer, landing, consent, and the
+  # wordpress, shopify, the SEA analyzers utm, tracking, datalayer, landing, consent, and the
   # AI-search analyzers aeo, geo.
   enabled: []
   disabled: []
