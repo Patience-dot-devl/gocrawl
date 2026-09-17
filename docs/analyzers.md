@@ -4,12 +4,12 @@ An **analyzer** is a single, self-contained check. Each one consumes the crawl r
 emits zero or more [`Issue`](output.md#issue) values. An issue has a `severity`
 (`error`, `warning`, or `info`), a stable `code`, a `message`, and an optional `data` map.
 
-gocrawl ships twenty-four analyzers, run in this registration order
+gocrawl ships twenty-five analyzers, run in this registration order
 ([`runner.BuildRegistry`](../internal/runner/runner.go)):
 the technical/on-page set `seo`, `redirects`, `links`, `robots`, `sitemap`, `structured`,
 `perf`, `images`, `urls`, `security`, `pagination`, `hreflang`, `amp`, `duplicates`,
-`content`, `botwall`, the CMS-specific `wordpress`, the SEA analyzers `utm`, `tracking`,
-`datalayer`, `landing`, `consent`, and the AI-search analyzers `aeo`, `geo`.
+`content`, `botwall`, the CMS-specific `wordpress` and `shopify`, the SEA analyzers `utm`,
+`tracking`, `datalayer`, `landing`, `consent`, and the AI-search analyzers `aeo`, `geo`.
 
 List them at any time:
 
@@ -140,28 +140,71 @@ The coverage `data` lets you spot pages that are crawlable but missing from the 
 
 ## `structured` — JSON-LD structured data
 
-Source: [`internal/analyze/structured/structured.go`](../internal/analyze/structured/structured.go).
-Runs on every HTML page that returned `200`. Extracts `<script type="application/ld+json">`
-blocks and reports their schema.org `@type` values (descending into `@graph` and arrays).
+Runs on every HTML page that returned `200`. Reads the page's `<script
+type="application/ld+json">` blocks through the shared schema.org graph parser (which flattens
+nested objects, `@graph`, and arrays into an addressable node list), then checks what a page
+declares against what its rich results actually require, whether declarations contradict each
+other or the page they sit on, and which pages look like they are missing markup they should
+have.
 
-| Code | Severity | Triggered when | `data` |
-| --- | --- | --- | --- |
-| `structured-invalid-jsonld` | warning | A JSON-LD block is not valid JSON | `error` |
-| `structured-none` | info | The page has no JSON-LD blocks | — |
-| `structured-data` | info | JSON-LD found; lists the de-duplicated `@type`s | `types` |
-| `structured-missing-required` | warning | A typed object of a recognized schema.org type omits a required field | `type`, `missing` |
-| `structured-breadcrumb-candidate` | warning | Breadcrumb-styled nav (aria-label/class containing "breadcrumb") with ≥2 links, no `BreadcrumbList` | `links` |
-| `structured-product-candidate` | warning | Leftover Product/price microdata, or an on-page price plus a cart/buy call-to-action, with no `Product`/`Offer` | `signal` |
-| `structured-article-candidate` | warning | A substantial `<article>` (150+ words) with an author or publish-date signal, no `Article`/`NewsArticle`/`BlogPosting`/`TechArticle`/`Report` | `words` |
-| `structured-video-candidate` | warning | A native `<video>` or YouTube/Vimeo iframe embed, no `VideoObject` | `src` |
+| Code | Severity | Scope | Triggered when | `data` |
+| --- | --- | --- | --- | --- |
+| `structured-invalid-jsonld` | error | page | A JSON-LD block is not valid JSON | `error` |
+| `structured-none` | info | page | The parsed graph has zero typed nodes and zero parse errors | — |
+| `structured-data` | info | page | JSON-LD found; lists the de-duplicated `@type`s, including nested ones | `types` |
+| `structured-missing-required` | warning | page | A typed object omits a field its rich result requires | `type`, `missing`, `path` |
+| `structured-missing-recommended` | info | **site** | A type omits recommended fields, aggregated across the crawl | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-missing-merchant` | warning | **site** | `Product`/`ProductGroup` omits Google Merchant listing fields, aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-identifier-on-offer` | warning | **site** | `Product`/`ProductGroup` has no `gtin*`/`mpn` of its own (nor, for a group, on its variants) but its offers do (`offers.<id>`, or `hasVariant.offers.<id>` for a group); `missing` names the properties found; those pages drop the identifier group from `structured-missing-merchant`; aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-variant-incomplete` | warning | **site** | A `ProductGroup`'s inline `hasVariant` entries omit `name`, `image`, `offers.price`, `offers.priceCurrency`, `sku`/GTIN, or a `variesBy` dimension; url-only variant references are skipped; aggregated | `type`, `missing`, `fields`, `pages`, `examples` |
+| `structured-duplicate-type` | warning | page | A page-level type is declared in two or more JSON-LD blocks | `type`, `blocks` |
+| `structured-conflicting-value` | error | page | Duplicate blocks disagree on `name`, `sku`, or an `offers` field | `type`, `field`, `values` |
+| `structured-unresolved-id` | warning | page | An `@id` reference has no matching node on the page | `id`, `property`, `type` |
+| `structured-relative-url` | warning | page | A URL property holds a relative path | `type`, `property`, `value` |
+| `structured-empty-url` | info | **site** | A URL property (`url`, `image`, `logo`, `thumbnailUrl`, `contentUrl`, `embedUrl`, `sameAs`) holds an empty or whitespace-only string (an absent property does not count); aggregated per type (`missing` maps property to page count, `empty` the largest number of blank entries in one property of one node on a page) | `type`, `missing`, `fields`, `pages`, `examples`, `empty` |
+| `structured-invalid-date` | warning | page | A date property is not ISO 8601 | `type`, `property`, `value` |
+| `structured-malformed-price` | error | page | A price string carries a symbol, separator, or range | `type`, `property`, `value` |
+| `structured-price-mismatch` | error | page | `offers.price` differs from the single price rendered on the page | `markup`, `page` |
+| `structured-breadcrumb-candidate` | warning | **site** | Breadcrumb-styled nav with ≥2 links, no `BreadcrumbList`; aggregated (`missing` is `{"BreadcrumbList": pages}`, `links` the largest link count seen). Was page-scoped before, so `gocrawl compare` against a report saved earlier re-keys it once | `type`, `missing`, `fields`, `pages`, `examples`, `links` |
+| `structured-product-candidate` | warning | page | Product/price microdata, or a price co-located with a cart/buy call-to-action (same `<form>`, or a bounded ancestor if none), for one or two such pairs, with no `Product`/`Offer` | `signal` |
+| `structured-article-candidate` | warning | page | A 150+ word `<article>` with an author or date signal, no article type | `words` |
+| `structured-video-candidate` | warning | page | A `<video>` or YouTube/Vimeo embed, no `VideoObject` | `src` |
 
-> Required-field validation covers a pragmatic subset of common types (`Product`, `Article`,
-> `Event`, `Organization`, `BreadcrumbList`, `FAQPage`, `Recipe`, …), not the full schema.org
-> vocabulary. It descends into `@graph` the same way type extraction does.
+> **Field tiers.** Each recognized type carries a *required* set (absence blocks the rich
+> result), a *recommended* set (absence degrades it), and — for `Product` and `ProductGroup`
+> — a *merchant* set feeding Shopping and free listings. Google accepts these fields on
+> either the group or each variant's `Offer`, so `ProductGroup` carries its own merchant tier
+> rather than relying on a top-level `Product` that a properly variant-modeled page never has.
+> A field written with `|` separators is an any-of group: `gtin|gtin8|gtin12|gtin13|gtin14|mpn`
+> is satisfied by any one identifier. An identifier placed only on the `Offer` does not satisfy
+> it, since Google documents `gtin`/`mpn` on the `Product`; such pages are reported as
+> `structured-identifier-on-offer` rather than as missing an identifier.
 
-> The `*-candidate` checks are low-noise heuristics (the same pattern as `aeo`'s
-> `aeo-faq-candidate`): they only fire when the page shows a fairly specific on-page signal for
-> the type, and never fire if a matching `@type` is already present anywhere on the page.
+> **Why six of them are site-scoped.** A theme either emits `aggregateRating` or it does not,
+> so a recommended-field gap repeats identically on every page of a template. The same holds
+> for a breadcrumb trail rendered without `BreadcrumbList`, and for blank URLs left by theme
+> settings never filled in. Those six codes
+> aggregate into one issue per type, carrying the affected page count and up to five example
+> URLs, instead of one issue per page.
+> Pages are counted once per **canonical URL** (the `<head>` `link[rel="canonical"]`,
+> resolved against the page URL; the page URL itself when none is declared), compared without
+> fragment or trailing slash. A product reached at `/products/<h>` and again at
+> `/collections/<c>/products/<h>` with a canonical to the first is one page, and the examples
+> list canonical URLs.
+
+> **Thin copies are exempt.** Objects nested under `itemListElement`, `hasVariant`,
+> `isVariantOf`, `isSimilarTo`, `isRelatedTo` or `isAccessoryOrSparePartFor` are deliberately
+> minimal — a collection page's product tiles carry a name and a URL and nothing else — so
+> eligibility and duplicate checks skip them. The one exception is a `ProductGroup`'s inline
+> variants: Google requires real fields on each, so `structured-variant-incomplete` checks them
+> against variant rules and rolls the gaps up. A variant carrying nothing but `url` is Google's
+> documented reference to a variant served on another page, and stays exempt.
+
+> The `*-candidate` checks are low-noise heuristics: they only fire on a fairly specific
+> on-page signal and never fire when a matching `@type` is already present anywhere on the page.
+
+Source: [`internal/analyze/structured/`](../internal/analyze/structured/), reading pages
+through the shared [`internal/analyze/schemaorg`](../internal/analyze/schemaorg/) parser.
 
 ---
 
@@ -526,6 +569,104 @@ permalink check is per page.
 > `textarea` blocks excluded, so ACF tutorials are not flagged) for field tags or shortcodes that
 > were printed instead of executed. ACF field *values*, once rendered, are ordinary HTML and are
 > not distinguishable from hand-written content, so the analyzer only catches this leak failure.
+
+---
+
+## `shopify` — Shopify detection and store-specific structured-data checks (CMS)
+
+Source: [`internal/analyze/shopify/`](../internal/analyze/shopify/). Like `wordpress`, it stays
+completely silent on a site it does not recognize, so enabling it costs nothing on the rest of
+the web.
+
+**Detection is tiered, not one flat list of fingerprints.** *Strong* fingerprints — the inline
+`Shopify.theme` bootstrap object a theme's layout sets and the `shopify-features` storefront
+runtime script — appear only in a Shopify theme's own layout, so either one alone means the
+crawled site *is* a Shopify storefront; the `X-ShopId` and `X-Shopify-Stage` response headers
+identify a store on their own too. *Weak* fingerprints — `cdn.shopify.com` asset URLs, a
+`.myshopify.com` reference, `/cdn/shop/` paths — are recorded in `shopify-detected`'s `signals`
+data but never flip detection by themselves. The reason: a site that is not itself hosted on
+Shopify but embeds a Shopify Buy Button widget (a single product's checkout dropped into a
+WordPress, Squarespace, or hand-rolled page) serves exactly those weak markers and nothing
+else, and treating them as sufficient would make the analyzer invent per-template
+structured-data findings against a site that has no Shopify templates to check. The deliberate
+cost of that caution: a headless Shopify storefront (Hydrogen) that strips both strong markers
+from its rendered output goes undetected, and the analyzer stays silent on it rather than
+guess — one silently-skipped site costs less than a confidently wrong report.
+
+Once a store is detected, every crawled URL is classified into a **template** by its path
+shape — Shopify's URL structure is fixed by the platform rather than chosen per store, which is
+what makes classifying by path reliable here in a way it would not be on an arbitrary site —
+and checked against the schema.org types that template should carry. A gap is a property of
+the template, not of one page: `shopify-template-schema-gap` fires per (template, missing type)
+pair, carrying the count of pages found missing it and up to five example URLs, rather than
+repeating the same fact once per page. As with the `structured` rollups, pages are counted once
+per canonical URL, so a product's `/collections/<c>/products/<h>` copy canonicalised to
+`/products/<h>` does not count twice, and the examples are canonical URLs.
+
+| Code | Severity | Scope | Triggered when | `data` |
+| --- | --- | --- | --- | --- |
+| `shopify-detected` | info | **site** | A strong fingerprint (`Shopify.theme`, `shopify-features`) is found on any crawled page, or a response carries `X-ShopId`/`X-Shopify-Stage`; weak fingerprints alone never trigger this | `signals`, `theme`, `theme_id` |
+| `shopify-template-schema-gap` | warning | **site** | One or more crawled, `200`-status HTML pages of a template lack a schema.org type that template should carry | `template`, `expected`, `pages`, `examples` |
+| `shopify-schema-app-conflict` | error | page | The page's `Product` JSON-LD is attributed to two or more different script sources (typically the theme and an SEO app) | `sources` |
+| `shopify-schema-client-injected` | info | page | The page's raw HTML has zero JSON-LD nodes, its template is not `utility`/`unknown`, and a recognized structured-data app's script is present | `app`, `apps`, `template` |
+| `shopify-flat-variant-product` | warning | page | A `product`-template page exposes 2+ variants — distinct variant ids in the DOM, or distinct `?variant=` ids in the offer URLs of its page-level `Product` — declares one or more `Product` nodes, none of which carries `hasVariant`/`isVariantOf`, and the page declares no `ProductGroup` type either | `variants`, `source` (`dom`, `offers`, or `dom+offers` when both agree) |
+| `shopify-single-offer-range` | info | page | The page's embedded variant JSON has 2+ distinct prices, a `Product` node declares exactly one `Offer`, and no `AggregateOffer` is present | `prices`, `variants` |
+| `shopify-indexable-utility` | warning | page | A `utility`-template page (`/search`, `/cart`, `/account/*`, `/challenge`, `/checkouts`, `/orders`, `/password`) is indexable — no `noindex` in meta robots or `X-Robots-Tag` | `path` |
+| `shopify-indexable-facet` | warning | page | A `collection` URL carries a faceting query parameter (`sort_by`, `filter.*`, `constraint`, `pf_*`, `grid_list`) and its canonical is empty or points at itself rather than the unfiltered collection | `parameter`, `canonical` |
+| `shopify-duplicate-product-path` | warning | page | A product is reached via `/collections/<c>/products/<handle>` and its canonical is empty or does not equal the `/products/<handle>` form | `canonical`, `canonical_should_be` |
+| `shopify-products-json-exposed` ⚙︎ | info | **site** | `/products.json?limit=1` answers an unauthenticated request with at least one product | `sample_handle` |
+
+> **One check is opt-in.** `shopify-products-json-exposed` is the only check in this analyzer
+> that fetches anything the crawl did not already fetch, so it rides `--specialized` (or
+> `analyzers.specialized: true`) alongside the WordPress security probes. Everything else here
+> is passive — it reads only the already-crawled HTML and headers. `TemplatePolicy`
+> (`/policies/*`) is deliberately excluded from `shopify-indexable-utility`: refund and privacy
+> pages are meant to be indexed, unlike `/search`, `/cart`, and the rest of the utility set.
+
+**Expected schema per template:**
+
+| Template | Path shape | Expected | Notes |
+| --- | --- | --- | --- |
+| `home` | `/` | `Organization` (or `LocalBusiness`), and `WebSite` | |
+| `product` | `/products/<handle>`, `/collections/<handle>/products/<handle>` | `Product` (or `ProductGroup`), and `BreadcrumbList` | |
+| `collection` | `/collections/<handle>` | `CollectionPage` or `ItemList`, and `BreadcrumbList` | |
+| `article` | `/blogs/<blog>/<article>` | `BlogPosting` (or `Article`/`NewsArticle`), and `BreadcrumbList` | |
+| `blog` | `/blogs/<blog>`, `/blogs/<blog>/tagged/<tag>` | `Blog` or `CollectionPage` | A tag-filtered listing (`/tagged/<tag>`) routes here, not to `article` — it is a filtered index of posts, not a single post, and demanding `BlogPosting` on it would false-positive on every tag page of every store with a blog. |
+| `page` | `/pages/<handle>` | `WebPage`, `AboutPage`, `ContactPage`, or `FAQPage` | |
+| `policy` | `/policies/<handle>` | nothing asserted | Shopify's built-in legal pages (refund, privacy, terms). Deliberately **not** folded into `utility`: `utility` means "should not be indexable," and a later check flags indexable utility pages, but policy pages are meant to be indexed — filing them under `utility` would make that check false-positive on every store's policy pages. |
+| `utility` | `/cart`, `/search`, `/account/*`, `/challenge`, `/checkouts/*`, `/orders/*`, `/password` | nothing asserted | A cart, search, account, or password-gate page has nothing to say to a search engine. |
+| `unknown` | anything else (app-proxy routes such as `/apps/<app>`, custom page types) | nothing asserted | Not a route Shopify's own templates render, so no schema expectation is known to assert. |
+
+> **Shopify Markets locale prefixes are skipped for classification only, never stripped from
+> the URL.** `/en-ca/products/tee` and `/fr/collections/all` classify identically to their
+> unprefixed equivalents — a Markets storefront serves every route under a locale prefix, and
+> refusing to recognize it would silently drop a whole localized store's URLs into `unknown`.
+> The prefix is preserved in the URL itself; only the classification logic skips over it,
+> because a later check that rebuilds a canonical URL from the page's own URL must keep the
+> prefix or it will point a canonical at a path that does not exist in that market.
+
+> **Attribution is by script attributes, never contents.** Each JSON-LD block is attributed to
+> the app named in its own `src`/`id`/`class`, else to the nearest recognized app script before
+> it, else to the theme. An app's name appears inside unrelated inline JSON often enough that
+> matching on script *contents* would misattribute blocks. Recognized apps: JSON-LD for SEO,
+> Schema Plus, SearchPie, Schema App, SEOAnt, Yoast for Shopify, TinyIMG, Smart SEO, Avada SEO.
+
+> **Raw mode sees what every crawler sees.** Shopify themes render JSON-LD server-side, so a
+> raw crawl finds it. Several SEO apps inject it with JavaScript instead; when one is installed
+> and the raw HTML has none, `shopify-schema-client-injected` says so rather than reporting the
+> page as bare. Re-run with `--render headless` to see what the app emits.
+
+> **Variant counts are distinct values, and the maximum across sources, not the sum.** Each DOM
+> selector counts distinct non-empty variant ids — the `value` attribute, or the attribute itself
+> for `[data-variant-id]` — so a buy form rendered twice (main plus sticky add-to-cart) or a
+> swatch grid that repeats an id per thumbnail counts each variant once, and a placeholder
+> `<option>` with no value ("Choose an option") is never counted. A theme commonly renders its
+> variant picker more than once — a `<select>` for narrow viewports, radio inputs for wide — so
+> the page takes the maximum across selectors rather than summing them. Many themes use picker
+> markup no selector recognizes, so a second source counts the distinct `variant` query
+> parameters in the `url` of every `Offer` on a page-level `Product` (one not nested under a list
+> property such as `isRelatedTo`). The page's count is the larger of the two, and `source` says
+> which supplied it.
 
 ---
 

@@ -50,7 +50,7 @@ func newCrawlCmd() *cobra.Command {
 	f.BoolP("verbose", "v", false, "log each fetch and rate-limit change to stderr while crawling")
 	f.Bool("adaptive-delay", true, "automatically slow the crawl when the server returns HTTP 429/503")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
-	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes)")
+	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes, Shopify /products.json probe)")
 	f.Bool("security-audit", false, "enable the opt-in security audit (TLS/certificate, cookie attributes, response-header hygiene)")
 	f.Bool("ignore-external-tagging", true, "ignore the utm analyzer's tagging-quality warnings for links leaving the domain")
 	f.Bool("save", false, "also save the crawl to the store for later `gocrawl history` / `gocrawl compare`")

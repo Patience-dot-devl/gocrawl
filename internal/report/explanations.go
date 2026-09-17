@@ -325,6 +325,58 @@ var explanations = map[string]Explanation{
 		Fix:    "Delete or block access to readme.html in production (many security plugins/server rules can do this automatically).",
 	},
 
+	// --- shopify: Shopify storefront checks ---
+	"shopify-detected": {
+		What:   "The site was identified as a Shopify storefront, with the theme it runs.",
+		Impact: "Informational. It tells the rest of this report which template each URL renders and which checks apply.",
+		Fix:    "No action needed.",
+	},
+	"shopify-template-schema-gap": {
+		What:   "One or more crawled pages of this Shopify template are missing a schema.org type that template should carry; the finding's page count says how many.",
+		Impact: "Pages of this template win no rich result for the missing type — product pages without Product markup, say, get no price, rating, or availability treatment in search.",
+		Fix:    "Add the markup to the template once (theme Liquid or an SEO app), and every page it renders gains it. Check the example URLs to confirm the template was identified correctly.",
+	},
+	"shopify-schema-app-conflict": {
+		What:   "Two sources — typically the theme and an SEO app — each emit Product structured data on the same page, without knowing about each other.",
+		Impact: "Search engines pick one and discard the other, so the page may be represented by stale or incomplete markup, and any disagreement between them risks a structured-data manual action.",
+		Fix:    "Pick one owner. Either disable structured data in the theme (most themes expose a setting) or turn off the app's Product schema, so a single source emits it.",
+	},
+	"shopify-schema-client-injected": {
+		What:   "A structured-data app is installed, but the HTML served to the crawler contains no JSON-LD — the app is injecting it with JavaScript.",
+		Impact: "Google renders JavaScript and will usually see it, but rendering is deferred and other crawlers and AI answer engines often do not render at all, so the markup is invisible to them.",
+		Fix:    "Re-run the crawl with --render headless to confirm what the app emits. Prefer server-rendered structured data in theme Liquid, where every crawler sees it on the first fetch.",
+	},
+	"shopify-flat-variant-product": {
+		What:   "The page sells several variants but its markup describes a single Product, with no ProductGroup or hasVariant.",
+		Impact: "Search engines see one item where the store sells several, so variant-level attributes — size, colour, per-variant price and availability — never reach Shopping or rich results.",
+		Fix:    "Emit a ProductGroup with productGroupID and variesBy, and one Product per variant under hasVariant.",
+	},
+	"shopify-single-offer-range": {
+		What:   "The product's variants are priced differently, but the markup states one Offer price.",
+		Impact: "The stated price is wrong for every variant that does not match it, and a price that contradicts the page risks suppression of price-bearing rich results.",
+		Fix:    "Use an AggregateOffer with lowPrice and highPrice, or give each variant its own Offer under a ProductGroup.",
+	},
+	"shopify-indexable-utility": {
+		What:   "A Shopify utility page — /search, /cart, /account/*, /challenge, /checkouts, /orders or /password — is crawlable and not marked noindex. /policies/* is deliberately excluded: those pages are meant to be indexed.",
+		Impact: "These pages carry no content worth ranking, and /search in particular generates an unbounded set of URLs from whatever anyone links to, wasting crawl budget and risking thin-content pages in the index.",
+		Fix:    "Add <meta name=\"robots\" content=\"noindex,follow\"> to the utility templates in theme.liquid, or disallow the paths in robots.txt.liquid.",
+	},
+	"shopify-indexable-facet": {
+		What:   "A sorted or filtered collection URL (?sort_by=, ?filter.*=) is indexable and does not canonicalise to the unfiltered collection.",
+		Impact: "Each permutation is the same products in a different order, competing with the collection it came from and multiplying crawl budget across near-identical pages.",
+		Fix:    "Emit a canonical pointing at the unfiltered collection URL on every faceted variant, and consider disallowing the parameters in robots.txt.",
+	},
+	"shopify-duplicate-product-path": {
+		What:   "A product is served at /collections/<collection>/products/<handle> without a canonical pointing at /products/<handle>.",
+		Impact: "Shopify serves a product once per collection it belongs to, so a product in ten collections becomes ten competing URLs, splitting link signals across all of them.",
+		Fix:    "Most themes already emit the right canonical; if yours does not, set it to {{ product.url }} prefixed with the shop URL rather than {{ canonical_url }} in a collection context.",
+	},
+	"shopify-products-json-exposed": {
+		What:   "The store's /products.json endpoint answers unauthenticated requests with the product catalogue.",
+		Impact: "Titles, handles, variants and prices can be scraped wholesale by competitors and repricing bots. Shopify enables this by default, so it is worth a deliberate decision rather than an accident.",
+		Fix:    "If the catalogue is not meant to be public, block /products.json (and /collections/*/products.json) at the CDN or in robots.txt. Note that robots.txt deters crawlers but does not prevent access.",
+	},
+
 	// --- duplicates: cross-page duplicate detection ---
 	"duplicate-content": {
 		What:   "The page body is identical to one or more other crawled pages.",
@@ -982,12 +1034,12 @@ var explanations = map[string]Explanation{
 
 	// --- structured: JSON-LD ---
 	"structured-breadcrumb-candidate": {
-		What:   "The page has breadcrumb navigation but no BreadcrumbList structured data.",
+		What:   "Pages render breadcrumb navigation but carry no BreadcrumbList structured data. The trail is theme chrome, so this is reported once for the site, with the number of affected pages, up to five examples, and the largest number of breadcrumb links seen.",
 		Impact: "You miss eligibility for the breadcrumb rich result in search, which improves click-through and clarifies page hierarchy.",
 		Fix:    "Add BreadcrumbList JSON-LD whose itemListElement mirrors the visible breadcrumb trail.",
 	},
 	"structured-product-candidate": {
-		What:   "The page reads like a product page (a price alongside an add-to-cart/buy action) but has no Product structured data.",
+		What:   "The page reads like a product page (a price co-located with an add-to-cart/buy control, in the same form or a small enclosing container, not just anywhere on the page) but has no Product structured data.",
 		Impact: "You miss eligibility for product rich results (price, availability, reviews) in search.",
 		Fix:    "Add Product (with a nested Offer) JSON-LD describing the item, price, and availability.",
 	},
@@ -1009,7 +1061,67 @@ var explanations = map[string]Explanation{
 	"structured-missing-required": {
 		What:   "A structured-data object is missing required schema.org fields.",
 		Impact: "Incomplete markup is ineligible for the corresponding rich results.",
-		Fix:    "Add the required properties for the schema type (per schema.org / Google's documentation).",
+		Fix:    "Add the required properties for the schema type, per the required tier documented for that type (per schema.org / Google's documentation).",
+	},
+	"structured-missing-recommended": {
+		What:   "Structured data of this type omits fields Google recommends for its rich result, across the pages listed.",
+		Impact: "The page stays eligible for the rich result but renders a plainer one — no ratings, no author, no imagery — so it wins fewer clicks than a fully described competitor.",
+		Fix:    "Add the listed properties to the template that emits this type. Because the gap repeats site-wide, one template edit fixes every affected page.",
+	},
+	"structured-missing-merchant": {
+		What:   "Product or ProductGroup markup omits the fields Google Shopping and free product listings read: a product identifier, price validity, shipping, return policy, and item condition. For a ProductGroup, these are also satisfied if every variant's Offer carries them.",
+		Impact: "Products are ineligible for, or downranked in, Shopping and free listing surfaces, and shoppers see no shipping, returns, or condition detail before clicking.",
+		Fix:    "Emit gtin (or mpn) on the Product (for a ProductGroup, on each variant), and priceValidUntil, shippingDetails, hasMerchantReturnPolicy and itemCondition on the offer. Most of the offer fields can be templated once from store-level shipping and return settings. When the identifiers already sit on the Offer, structured-identifier-on-offer is reported instead of the identifier gap.",
+	},
+	"structured-identifier-on-offer": {
+		What:   "Product or ProductGroup markup carries no gtin or mpn of its own, but its offers do (for a ProductGroup, also its variants' offers). The fields listed are the identifier properties found on offers, such as offers.gtin12. These pages are not also reported as missing an identifier under structured-missing-merchant.",
+		Impact: "Google's merchant-listing documentation places gtin and mpn on the Product and does not document reading them from an Offer, so the identifiers the store already has may not be matched to the product in Shopping and free listings.",
+		Fix:    "Move the identifiers onto the Product, one per variant. On Shopify that means modelling variants as a ProductGroup with hasVariant, each variant a Product carrying its own gtin taken from the variant's Barcode field in the Shopify admin (variant.barcode in Liquid), with its Offer beneath it.",
+	},
+	"structured-variant-incomplete": {
+		What:   "A ProductGroup declares variants inline under hasVariant, but those variants omit fields Google requires on each one: name, image, price and currency, a sku or GTIN, and the attribute the group varies by (size, color, ...). Variants listed only by url are references to other pages and are not checked.",
+		Impact: "Google cannot match the incomplete variants to a distinct purchasable item, so they are dropped from variant-aware Shopping and product results, and the group shows fewer options than the store sells.",
+		Fix:    "Emit every listed field on each hasVariant entry. On Shopify these come from variant data the theme already has: variant.title, variant.featured_image, variant.price, variant.sku or variant.barcode, and the option values. Brand, description and ratings may stay on the ProductGroup.",
+	},
+	"structured-duplicate-type": {
+		What:   "A page-level type (Product, Organization, WebSite, ...) is declared in more than one JSON-LD block, usually because a theme and an SEO/marketing app each emit their own copy.",
+		Impact: "Search engines pick one declaration and ignore the rest; which one is not up to the site, and the ignored copy's fields are wasted.",
+		Fix:    "Consolidate to a single JSON-LD source for the type, or make the duplicate blocks agree exactly.",
+	},
+	"structured-conflicting-value": {
+		What:   "Duplicate declarations of the same type disagree on a key value (name, SKU, price, currency, or availability).",
+		Impact: "One of the two blocks is simply wrong; a price that contradicts the page can trigger a manual action from Google's Merchant Center.",
+		Fix:    "Correct the source that is out of date, or remove the redundant block so only the accurate one remains.",
+	},
+	"structured-unresolved-id": {
+		What:   "A JSON-LD {\"@id\": ...} reference points at a node that is not declared anywhere on the page.",
+		Impact: "The reference silently drops whatever it was meant to convey (a publisher, a brand, a parent product); engines see the property as absent.",
+		Fix:    "Declare the referenced node on the page, or replace the reference with the inline object.",
+	},
+	"structured-relative-url": {
+		What:   "A structured-data URL property holds a relative path rather than an absolute URL.",
+		Impact: "Structured data is consumed outside the page's context, so a relative path resolves against nothing and the image or link is discarded.",
+		Fix:    "Emit absolute URLs (including scheme and host) for url, image, logo, thumbnailUrl, contentUrl, embedUrl and sameAs.",
+	},
+	"structured-empty-url": {
+		What:   "Structured data declares a URL property (url, image, logo, thumbnailUrl, contentUrl, embedUrl or sameAs) with an empty or whitespace-only string. The blanks usually come from the theme and repeat on every page, so this is reported once per type for the site, with the properties affected, the number of pages, up to five examples, and the largest number of empty entries seen in one property on one page.",
+		Impact: "An empty string is not a URL: the entry tells search engines nothing, and Google's Rich Results Test flags it as an invalid URL. No rich-result eligibility impact is documented, so this is housekeeping rather than a blocker.",
+		Fix:    "Fill in the missing values or stop emitting blank ones. On Shopify, empty sameAs entries come from the theme's social-link settings (Online Store → Themes → Customize → Theme settings → Social media): fill them in, or change the snippet that builds the JSON-LD to skip blanks, e.g. wrap each entry in {% if settings.social_x_link != blank %}.",
+	},
+	"structured-invalid-date": {
+		What:   "A structured-data date property is not in ISO 8601 format.",
+		Impact: "An unparseable date is ignored, costing whatever it signalled — article freshness, event timing, or an offer's expiry.",
+		Fix:    "Format dates as YYYY-MM-DD or a full ISO 8601 timestamp such as 2026-09-14T08:30:00+02:00.",
+	},
+	"structured-malformed-price": {
+		What:   "A price property carries a currency symbol, a thousands separator, or a range instead of a bare decimal number.",
+		Impact: "The price fails to parse, which makes the offer invalid and removes the product from price-bearing rich results.",
+		Fix:    "Write the price as digits with an optional decimal point (19.99, not $1,299.00) and put the currency in priceCurrency.",
+	},
+	"structured-price-mismatch": {
+		What:   "The price in Product structured data differs from the price rendered on the page.",
+		Impact: "Markup that contradicts visible content violates Google's structured-data guidelines and risks a manual action suppressing every rich result on the site.",
+		Fix:    "Generate the markup price from the same data that renders the visible price, so discounts and currency changes cannot drift apart.",
 	},
 	"structured-none": {
 		What:   "The page has no JSON-LD structured data.",
@@ -1017,7 +1129,7 @@ var explanations = map[string]Explanation{
 		Fix:    "Add relevant JSON-LD (e.g. Article, Product, Organization, BreadcrumbList) where appropriate.",
 	},
 	"structured-data": {
-		What:   "Valid JSON-LD structured data was found, with its declared types.",
+		What:   "Valid JSON-LD structured data was found, with its declared types, including types nested inside other objects (an Offer inside a Product, an Author inside an Article).",
 		Impact: "Positive signal. Enables rich results and clearer entity understanding.",
 		Fix:    "No action needed. Keep the markup accurate and aligned with visible content.",
 	},

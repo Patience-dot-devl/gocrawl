@@ -68,7 +68,10 @@ gocrawl compare example.com latest
 
 ### What it reports
 
-Issue identity is `(analyzer, code, url)`. Against that, the diff buckets every finding:
+Issue identity is `(analyzer, code, url)`, plus `data.instance` when an analyzer sets it to
+separate findings that would otherwise share that key (see [Issue](output.md#issue)). Identity
+is counted, not just matched: three identical findings before and two now report one resolved.
+Against that, the diff buckets every finding:
 
 - **new** — present in the current crawl but not the base (regressions, or freshly found);
 - **resolved** — present in the base but gone now (fixed, or no longer reached);

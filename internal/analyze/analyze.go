@@ -6,6 +6,8 @@ package analyze
 
 import (
 	"context"
+	"net/url"
+	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
@@ -28,6 +30,13 @@ type Issue struct {
 	Message  string         `json:"message"`
 	Data     map[string]any `json:"data,omitempty"`
 }
+
+// InstanceKey is the Data key an analyzer sets when it emits several findings that share one
+// (Analyzer, Code, URL) — a site-wide rollup raised once per schema.org type, say. Its string
+// value joins the finding's identity when two crawls are compared, so those findings stay
+// distinct instead of collapsing into one. Findings without it keep the three-part identity,
+// which is why adding it to an existing code re-keys that code against saved reports.
+const InstanceKey = "instance"
 
 // Analyzer is a single check. Implementations must be safe for sequential reuse.
 type Analyzer interface {
@@ -124,4 +133,67 @@ func Run(ctx context.Context, analyzers []Analyzer, result *crawler.Result) []Is
 		issues = append(issues, a.Analyze(ctx, result)...)
 	}
 	return issues
+}
+
+// SiteBase returns the scheme://host of the crawl, derived from the seed or, failing that,
+// from the first crawled page's final URL. Analyzers that aggregate a finding across the
+// whole crawl — a server configuration, a CMS fingerprint, a template-wide schema gap — use
+// it as the issue URL, so one site-wide fact does not repeat on every page of the report.
+func SiteBase(result *crawler.Result) string {
+	if u, err := url.Parse(result.Seed); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	for _, p := range result.Pages {
+		if u, err := url.Parse(p.FinalURL); err == nil && u.Host != "" {
+			return u.Scheme + "://" + u.Host
+		}
+	}
+	return result.Seed
+}
+
+// DeclaredCanonical returns the page's <head> link[rel="canonical"] href resolved against the
+// page's final URL, or "" when the page declares none or the href does not parse. Resolution
+// matters: a theme emitting a relative href="/products/tee" would otherwise never equal the
+// absolute URL it is compared with. Only <head> is searched, matching the seo analyzer, because
+// search engines ignore a canonical in <body>. Callers that need to tell "no canonical" apart
+// from "self-canonical" use this; callers that only need the page's identity use CanonicalURL.
+func DeclaredCanonical(p *crawler.Page) string {
+	if p.Doc == nil {
+		return ""
+	}
+	href, _ := p.Doc.Find(`head link[rel="canonical"]`).First().Attr("href")
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return ""
+	}
+	ref, err := url.Parse(href)
+	if err != nil {
+		return ""
+	}
+	base, err := url.Parse(p.FinalURL)
+	if err != nil {
+		return ""
+	}
+	return base.ResolveReference(ref).String()
+}
+
+// CanonicalURL returns the URL a page declares as its canonical, resolved against its final
+// URL, or the final URL itself when it declares none or the href does not parse. Site-wide
+// counts key on it so that one product reached at /products/<h> and again at
+// /collections/<c>/products/<h> counts as the single page it is. Compare two results through
+// URLKey, not ==.
+func CanonicalURL(p *crawler.Page) string {
+	if c := DeclaredCanonical(p); c != "" {
+		return c
+	}
+	return p.FinalURL
+}
+
+// URLKey normalizes a URL for identity comparison by dropping its fragment and any trailing
+// slash, which differ without addressing a different page.
+func URLKey(raw string) string {
+	if i := strings.IndexByte(raw, '#'); i >= 0 {
+		raw = raw[:i]
+	}
+	return strings.TrimRight(raw, "/")
 }

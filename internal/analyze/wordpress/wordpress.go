@@ -132,7 +132,7 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	if !s.detected {
 		return nil // not WordPress: stay silent
 	}
-	base := siteBase(result)
+	base := analyze.SiteBase(result)
 
 	var issues []analyze.Issue
 	add := func(sev analyze.Severity, code, msg string, data map[string]any) {
@@ -539,20 +539,6 @@ func headerSignals(p *crawler.Page) bool {
 		return true
 	}
 	return strings.Contains(p.Header.Get("Link"), "api.w.org")
-}
-
-// siteBase returns the scheme://host of the crawl, derived from the seed or, failing that, the
-// first crawled page's final URL.
-func siteBase(result *crawler.Result) string {
-	if u, err := url.Parse(result.Seed); err == nil && u.Host != "" {
-		return u.Scheme + "://" + u.Host
-	}
-	for _, p := range result.Pages {
-		if u, err := url.Parse(p.FinalURL); err == nil && u.Host != "" {
-			return u.Scheme + "://" + u.Host
-		}
-	}
-	return ""
 }
 
 func sortedKeys(m map[string]bool) []string {

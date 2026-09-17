@@ -23,7 +23,7 @@ type Params struct {
 	MaxDuration           string   `json:"max_duration,omitempty" jsonschema:"Wall-clock budget for the whole crawl as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
 	Render                string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
 	Analyzers             []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
-	Specialized           *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized AI-search checks (AEO answer-lead, GEO quotable-density); off by default"`
+	Specialized           *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes, Shopify /products.json probe); off by default"`
 	SecurityAudit         *bool    `json:"security_audit,omitempty" jsonschema:"Enable the opt-in security audit: TLS protocol and certificate checks, Set-Cookie attribute hygiene, and response-header policy; off by default"`
 	IgnoreExternalTagging *bool    `json:"ignore_external_tagging,omitempty" jsonschema:"Suppress the utm analyzer's tagging-quality warnings for links leaving the domain (default true — the site doesn't control third-party tagging)"`
 	RespectRobots         *bool    `json:"respect_robots,omitempty" jsonschema:"Obey robots.txt while crawling (default true)"`

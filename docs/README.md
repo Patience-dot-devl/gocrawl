@@ -7,7 +7,7 @@ the [project README](../README.md) for install and a quick start; come here for 
 | --- | --- |
 | [Install & run](install.md) | Per-platform install on Windows, macOS, and Linux — `go install`, building from source, PATH setup, verifying, running, and the optional headless browser. |
 | [Configuration](configuration.md) | Every option, flag, env var, and default; config layering; analyzer selection; annotated example config. |
-| [Analyzers](analyzers.md) | What each of the twenty-four analyzers checks (technical SEO + SEA + AI search + WordPress), with every issue code, severity, threshold, and `data` field. |
+| [Analyzers](analyzers.md) | What each of the twenty-five analyzers checks (technical SEO + SEA + AI search + WordPress + Shopify), with every issue code, severity, threshold, and `data` field. |
 | [Output / report](output.md) | The JSON, CSV, and HTML report formats — `Report`, `Summary`, `Issue` — with examples. |
 | [Storage & comparison](storage.md) | Saving crawls (`--save`), listing them (`gocrawl history`), and diffing them over time (`gocrawl compare`, with a `--fail-on-new` CI gate). |
 | [Redirect-rule verification](redirect-check.md) | Checking a HubSpot-style redirect-rule CSV export against a live site with `gocrawl check-redirects`. |

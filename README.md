@@ -7,7 +7,7 @@ A highly-customizable, free and open-source (FOSS) website crawler for **SEO** a
 over every page — checking technical SEO, redirects, broken links, `robots.txt`,
 `sitemap.xml` coverage, structured data, and more — then writes a JSON, CSV, or HTML report.
 
-> **Status:** v0.6.0, actively developed. Twenty-four analyzers cover technical SEO, SEA,
+> **Status:** v0.6.0, actively developed. Twenty-five analyzers cover technical SEO, SEA,
 > AI-search, and CMS-specific checks; raw-HTML and headless (chromedp) rendering with
 > lab-mode Core Web Vitals; JSON/CSV/HTML reports; crawl storage & comparison over time; an
 > MCP server; and a web app (`gocrawl serve`) with a REST API and embedded browser UI. The
@@ -215,7 +215,7 @@ Key crawl options:
 
 ## Analyzers
 
-Twenty-four analyzers, run in registration order:
+Twenty-five analyzers, run in registration order:
 
 | Name | What it checks |
 | --- | --- |
@@ -224,7 +224,7 @@ Twenty-four analyzers, run in registration order:
 | `links` | Internal/external links, broken links, links to redirects, empty anchors, inbound-link counts |
 | `robots` | `robots.txt` discovery/parsing, declared sitemaps, disallow violations |
 | `sitemap` | `sitemap.xml` discovery/parsing and crawl-coverage cross-check |
-| `structured` | JSON-LD extraction, schema.org `@type` reporting, required-field validation |
+| `structured` | JSON-LD extraction via a shared schema.org graph, rich-result field tiering (required/recommended/merchant) per `@type`, duplicate/conflicting-type detection, and markup-integrity checks (`@id` resolution, relative URLs, price/date formatting, price-vs-page mismatches) |
 | `perf` | Core Web Vitals (LCP, FCP, CLS, TBT, TTFB) against Google's thresholds — populated with `--render headless` |
 | `images` | Alt text (missing, empty, duplicated, filename-derived), non-descriptive filenames, missing `width`/`height` dimensions |
 | `urls` | URL hygiene: uppercase paths, underscores, non-ASCII characters, overly long URLs |
@@ -236,6 +236,7 @@ Twenty-four analyzers, run in registration order:
 | `content` | Thin pages (< 100 words) and pages well below the crawl's average word count |
 | `botwall` | **Crawl integrity** — detects CAPTCHA / bot-challenge walls (reCAPTCHA, hCaptcha, Turnstile, Cloudflare/DataDome/AWS WAF/PerimeterX/Imperva) served instead of real content, so a silently-blocked crawl isn't mistaken for a clean audit |
 | `wordpress` | **CMS** — WordPress detection: version disclosure, plugin/emoji/jQuery-Migrate bloat, default tagline, ugly permalinks, conflicting SEO plugins, indexable attachment/search/archive pages, multilingual/WPML setup, leaked ACF markup, and opt-in xmlrpc/user-enumeration/directory-listing/readme probes |
+| `shopify` | **CMS** — Shopify detection: per-template structured-data coverage, theme/app schema conflicts, flattened product variants, indexable utility/faceted URLs, collection-nested product paths without a canonical, and an opt-in `/products.json` exposure probe |
 | `utm` | **SEA** — UTM tagging on outbound links: partial/empty/duplicate params, casing |
 | `tracking` | **SEA** — marketing/analytics tags (GTM, GA4, UA, Google Ads, Meta Pixel); missing/duplicate installs |
 | `datalayer` | **SEA** — GTM/dataLayer audit: snippet wiring, Consent Mode, event inventory, GA4 e-commerce validation, duplicate conversions, PII; runtime checks need `--render headless` |
@@ -246,9 +247,9 @@ Twenty-four analyzers, run in registration order:
 
 `seaurl` is a shared UTM-parsing helper used by `utm`/`tracking`, not a registered analyzer.
 
-The `aeo` direct-answer-lead and `geo` quotable-density checks, plus the `wordpress`
-security-endpoint probes, are **opt-in** specialized checks, off by default; enable them with
-`--specialized`. See
+The `aeo` direct-answer-lead and `geo` quotable-density checks, the `wordpress`
+security-endpoint probes, and the `shopify` `/products.json` exposure probe are **opt-in**
+specialized checks, off by default; enable them with `--specialized`. See
 [docs/analyzers.md](docs/analyzers.md) for every issue code, severity, and threshold.
 
 ### Security audit (opt-in)
