@@ -1,7 +1,7 @@
 # Structured-data & Shopify analyzer — follow-up work
 
 Date: 2026-09-14
-Status: **P0–P2 and P4 fixed** (2026-09-15, commits `f3d714f..98498ae`); P3 applied; P5–P9 open
+Status: **P0–P2, P4, P5 and F10–F13 fixed** (2026-09-15 `f3d714f..98498ae`, 2026-09-17 `7aff116..519d669`); P3 applied with one row reverted; P6–P9 open
 Branch: `shopify-structured-data-analyzer`
 Spec: [`../specs/2026-09-14-structured-data-shopify-design.md`](../specs/2026-09-14-structured-data-shopify-design.md)
 Plan: [`../plans/2026-09-14-structured-data-shopify.md`](../plans/2026-09-14-structured-data-shopify.md)
@@ -13,6 +13,11 @@ document records what two end-of-run reviews and one live smoke test found *afte
 Verified end-to-end against live Allbirds markup served locally: the sitewide false positive is
 gone while all four genuine findings on that page survive, and eight crawls of the same page now
 produce byte-identical output (before, it permuted between runs).
+
+**Update 2026-09-17.** Second wave, `7aff116..519d669`: F10 (diff identity), F12 (relative
+canonicals), F11 (four guard tests, each mutation-verified), F13 (doc comment), and F4 decided
+as *check variants, rolled up*. Checking F4 against Google's product-variants page also showed
+P3's `ProductGroup` row was wrong — see the note there.
 
 Items are ordered by what they cost a user, not by effort. Each carries its status.
 
@@ -171,7 +176,7 @@ requirements. A field in the wrong tier either cries wolf or stays silent on som
 | `Recipe` | `image` | recommended | **required** | Silent. (`recipeIngredient`/`recipeInstructions` are correctly recommended) |
 | `LocalBusiness` | `address` | recommended | **required** | Silent |
 | `Organization` | `logo`, `url` | recommended | required | Knowledge-panel logo under-reported |
-| `ProductGroup` | `hasVariant`, `productGroupID` | recommended | **required** | A `ProductGroup` without them is inert |
+| `ProductGroup` | `hasVariant`, `productGroupID` | recommended | ~~required~~ **recommended** | **Reverted in `519d669`.** Google's product-variants page requires only `name` on the group; variants may join via `isVariantOf` |
 | `Product` | `offers.availability` | required | recommended | Cries wolf — Google lists it as recommended |
 | `WebSite` | `potentialAction` | recommended | **drop** | Stale advice: sitelinks searchbox deprecated Nov 2023 |
 
@@ -203,7 +208,13 @@ never the only one.
 
 ## P5 — Open question, needs a human decision
 
-### ⚠️ F4. Is the `.hasVariant` eligibility exemption right? — STILL OPEN, needs a human decision
+### ✅ F4. Is the `.hasVariant` eligibility exemption right? — DECIDED: check, rolled up
+
+**FIXED** in `519d669`. Inline variants are checked against Google's variant rules (name, image,
+price, currency, sku/GTIN, each `variesBy` dimension) and reported once per type as
+`structured-variant-incomplete`, counting pages not variants. url-only variants stay exempt:
+they are Google's own multi-page reference shape, so the Allbirds pattern stays silent.
+Untyped inline variants are not graph nodes and are not checked.
 
 `listProperties` in `eligibility.go` exempts nodes under `.hasVariant` from all tier checks, on
 the grounds that variants are deliberately thin copies (Allbirds' carry only a `url`).
@@ -317,7 +328,12 @@ and says where the setting lives.
 
 ## P2b — Structural findings from the whole-branch review
 
-### ⏳ F10. The two site-wide rollups collide in the report-diff key — OPEN
+### ✅ F10. The two site-wide rollups collide in the report-diff key
+
+**FIXED** in `7aff116`. Issues may carry `data.instance` (`analyze.InstanceKey`), which joins the
+diff identity; both rollups set it. Pairing is now count-based too, which also fixes the
+pre-existing case of several `link-broken` findings on one page collapsing. Existing codes were
+not given an instance, so saved reports do not re-key.
 
 `internal/diff/diff.go:74` keys a finding on `[Analyzer, Code, URL]`. But `rollup.issues`
 (`rollup.go:65-84`) emits one issue **per type**, all at the same base URL with the same code, and
@@ -332,7 +348,9 @@ multi-instance findings. Minimal fix: fold the discriminator into the code, or l
 into the issue URL (`base + "#Product"`). If the contract should not change now, it at least needs
 a note in `docs/output.md`.
 
-### ⏳ F11. Four guards have no test at all — OPEN
+### ✅ F11. Four guards have no test at all
+
+**FIXED** in the test commit after `7aff116`; each new test fails with its guard removed.
 
 Each was found by mutation and each survived the full suite. None is a defect today; all are the
 kind of guard a future refactor deletes as dead code.
@@ -348,7 +366,9 @@ kind of guard a future refactor deletes as dead code.
   `shopify-schema-client-injected`.
 - `schema.go:120` — `sort.Strings(attributed)`, a determinism sort.
 
-### ⏳ F12. A relative canonical false-positives `shopify-duplicate-product-path` — OPEN
+### ✅ F12. A relative canonical false-positives `shopify-duplicate-product-path`
+
+**FIXED**: `canonicalOf` resolves against the page URL and searches only `<head>`. Both directions tested.
 
 `internal/analyze/shopify/seo.go:79` compares `canonicalOf(p.Doc)` against an absolute `want`
 without resolving it against `p.FinalURL`. A theme emitting
@@ -360,7 +380,9 @@ omission flips `shopify-indexable-facet` (`seo.go:64`) the *other* way, into sil
 both consistent. Also `canonicalOf:37` searches the whole document, where the `seo` analyzer scopes
 to `head link[rel="canonical"]`.
 
-### ⏳ F13. The package doc claims a caching property the code does not have — OPEN
+### ✅ F13. The package doc claims a caching property the code does not have
+
+**FIXED** by correcting the comment. The triple parse itself remains; caching was not done.
 
 `internal/analyze/schemaorg/schemaorg.go:3-4` says "JSON-LD is parsed once per page." It is parsed
 **three** times — `templateGapIssues` (`template.go:183`), `shopify.analyzePage`
