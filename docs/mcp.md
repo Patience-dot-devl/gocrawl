@@ -58,7 +58,7 @@ fields fall back to the built-in defaults:
 | `max_duration` | string | *(unlimited)* | Wall-clock budget for the whole crawl as a Go duration string, e.g. `90m`; on expiry the crawl stops early and still returns a partial report. |
 | `render` | string | `raw` | `raw` (HTTP fetch) or `headless` (chromedp — renders JS and captures Core Web Vitals; needs a Chromium-class browser on PATH). |
 | `analyzers` | string[] | *(all)* | Subset of analyzer names to run; empty runs all. |
-| `specialized` | bool | `false` | Enable the opt-in specialized checks: AEO answer-lead, GEO quotable-density, WordPress security probes. |
+| `specialized` | bool | `false` | Enable the opt-in specialized checks: AEO answer-lead, GEO quotable-density, WordPress security probes, Shopify `/products.json` probe. |
 | `security_audit` | bool | `false` | Enable the opt-in [security audit](analyzers.md#security-audit-opt-in): TLS/certificate, cookie, and response-header checks. |
 | `ignore_external_tagging` | bool | `true` | Suppress the `utm` analyzer's tagging-quality warnings for links leaving the domain. |
 | `respect_robots` | bool | `true` | Obey `robots.txt`. |
