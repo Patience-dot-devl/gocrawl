@@ -2,6 +2,7 @@ package structured_test
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 
@@ -550,5 +551,144 @@ func TestWebSitePotentialActionNeverAppears(t *testing.T) {
 	}
 	if is, ok := find(issues, "structured-missing-required"); ok {
 		t.Errorf("a WebSite with name and url should raise no required gap, got %+v", is.Data)
+	}
+}
+
+// productPage wraps completeProduct (every required field, no recommended or merchant ones, so
+// both rollups fire) in a page whose <head> carries extraHead — typically a canonical link.
+func productPage(extraHead string) string {
+	return `<html><head>` + extraHead + `<script type="application/ld+json">` + completeProduct +
+		`</script></head><body><h1>Tee</h1></body></html>`
+}
+
+// inBothOrders returns res with its pages sorted by URL and a copy with them reversed. The
+// pages helper builds from a map, whose order is random; running both fixed orders makes a
+// test prove its assertion whichever duplicate the crawl reached first, instead of passing or
+// failing by chance.
+func inBothOrders(res *crawler.Result) []*crawler.Result {
+	fwd := append([]*crawler.Page(nil), res.Pages...)
+	sort.Slice(fwd, func(i, j int) bool { return fwd[i].FinalURL < fwd[j].FinalURL })
+	rev := make([]*crawler.Page, len(fwd))
+	for i, p := range fwd {
+		rev[len(fwd)-1-i] = p
+	}
+	return []*crawler.Result{
+		{Seed: res.Seed, Pages: fwd},
+		{Seed: res.Seed, Pages: rev},
+	}
+}
+
+// assertRollupDedupe checks both product rollups for the expected distinct-page count and
+// example list, in both crawl orders.
+func assertRollupDedupe(t *testing.T, res *crawler.Result, wantPages int, wantExamples []string) {
+	t.Helper()
+	for i, ordered := range inBothOrders(res) {
+		issues := structured.New().Analyze(context.Background(), ordered)
+		for _, code := range []string{"structured-missing-recommended", "structured-missing-merchant"} {
+			got := findAll(issues, code)
+			if len(got) != 1 {
+				t.Fatalf("order %d: expected 1 %s issue, got %d", i, code, len(got))
+			}
+			d := got[0].Data
+			if d["pages"] != wantPages {
+				t.Errorf("order %d: %s pages = %v, want %d", i, code, d["pages"], wantPages)
+			}
+			for field, n := range d["missing"].(map[string]int) {
+				if n != wantPages {
+					t.Errorf("order %d: %s missing[%s] = %d, want %d", i, code, field, n, wantPages)
+				}
+			}
+			examples, _ := d["examples"].([]string)
+			sorted := append([]string(nil), examples...)
+			sort.Strings(sorted)
+			if strings.Join(sorted, " ") != strings.Join(wantExamples, " ") {
+				t.Errorf("order %d: %s examples = %v, want %v", i, code, examples, wantExamples)
+			}
+		}
+	}
+}
+
+// TestRollupCountsDuplicateURLsOfOnePageOnce reproduces the dermalogica.nl double count: every
+// product is also served at /collections/<c>/products/<h>, canonicalised to /products/<h>.
+// Both copies are one page, so the rollups must say pages: 1 and name the canonical URL.
+func TestRollupCountsDuplicateURLsOfOnePageOnce(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/tee":                 productPage(""),
+		"https://shop.test/collections/all/products/tee": productPage(`<link rel="canonical" href="https://shop.test/products/tee">`),
+	})
+	assertRollupDedupe(t, res, 1, []string{"https://shop.test/products/tee"})
+}
+
+// TestRollupDedupeStillCountsDistinctPages guards the other direction: a product with no
+// canonical is its own page and must still be counted.
+func TestRollupDedupeStillCountsDistinctPages(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/tee":                 productPage(""),
+		"https://shop.test/collections/all/products/tee": productPage(`<link rel="canonical" href="https://shop.test/products/tee">`),
+		"https://shop.test/products/cap":                 productPage(""),
+	})
+	assertRollupDedupe(t, res, 2, []string{"https://shop.test/products/cap", "https://shop.test/products/tee"})
+}
+
+// TestRollupDedupeResolvesRelativeCanonical pins that the dedupe compares resolved URLs: a
+// theme emitting href="/products/tee" points at the same page as the absolute form.
+func TestRollupDedupeResolvesRelativeCanonical(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/tee":                 productPage(""),
+		"https://shop.test/collections/all/products/tee": productPage(`<link rel="canonical" href="/products/tee">`),
+	})
+	assertRollupDedupe(t, res, 1, []string{"https://shop.test/products/tee"})
+}
+
+// TestRollupCountsOnePageOnceAcrossItsNodes covers a page carrying two nodes of one type (a
+// theme's Product plus an app's). It is still one page: pages and each missing count stay at 1.
+func TestRollupCountsOnePageOnceAcrossItsNodes(t *testing.T) {
+	html := `<html><head><script type="application/ld+json">` + completeProduct + `</script>` +
+		`<script type="application/ld+json">` + completeProduct + `</script></head><body></body></html>`
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/tee": html})
+	assertRollupDedupe(t, res, 1, []string{"https://shop.test/products/tee"})
+}
+
+// TestRollupDuplicateAddsNoFieldsOfItsOwn pins "a duplicate adds nothing" for the field counts,
+// not just the page count: when the canonical page has been counted, a later duplicate that
+// happens to lack an extra field must not add that field to missing. The order is fixed here
+// on purpose, because the first page reaching a canonical is the one whose fields count.
+func TestRollupDuplicateAddsNoFieldsOfItsOwn(t *testing.T) {
+	withBrand := strings.Replace(completeProduct, `"name":"Tee",`, `"name":"Tee","brand":{"@type":"Brand","name":"Acme"},`, 1)
+	canonical := `<html><head><script type="application/ld+json">` + withBrand + `</script></head><body></body></html>`
+	dup := productPage(`<link rel="canonical" href="https://shop.test/products/tee">`)
+	res := pages(t, "https://shop.test", map[string]string{"https://shop.test/products/tee": canonical})
+	res.Pages = append(res.Pages, pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/collections/all/products/tee": dup,
+	}).Pages...)
+
+	is, ok := find(structured.New().Analyze(context.Background(), res), "structured-missing-recommended")
+	if !ok {
+		t.Fatal("expected structured-missing-recommended")
+	}
+	missing := is.Data["missing"].(map[string]int)
+	if _, has := missing["brand"]; has {
+		t.Errorf("the duplicate's missing brand must not count against the canonical page, got %v", missing)
+	}
+	if is.Data["pages"] != 1 {
+		t.Errorf("pages = %v, want 1", is.Data["pages"])
+	}
+}
+
+// TestRollupDedupeIgnoresTrailingSlashAndFragment pins the canonical comparison: a canonical
+// written with a trailing slash and a fragment names the same page as the bare URL.
+func TestRollupDedupeIgnoresTrailingSlashAndFragment(t *testing.T) {
+	res := pages(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/tee":                 productPage(""),
+		"https://shop.test/collections/all/products/tee": productPage(`<link rel="canonical" href="https://shop.test/products/tee/#main">`),
+	})
+	for i, ordered := range inBothOrders(res) {
+		is, ok := find(structured.New().Analyze(context.Background(), ordered), "structured-missing-merchant")
+		if !ok {
+			t.Fatalf("order %d: expected structured-missing-merchant", i)
+		}
+		if is.Data["pages"] != 1 {
+			t.Errorf("order %d: pages = %v, want 1", i, is.Data["pages"])
+		}
 	}
 }

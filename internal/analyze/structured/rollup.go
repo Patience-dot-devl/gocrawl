@@ -22,6 +22,12 @@ type rollupEntry struct {
 	missing  map[string]int // field (or any-of group) -> number of pages missing it
 	pages    int
 	examples []string
+	// owner maps a canonical URL key (analyze.URLKey) to the FinalURL of the page that claimed
+	// it, and counted to the fields already tallied for it. Together they make every count
+	// here a count of distinct canonical pages: a product reached at /products/<h> and again
+	// at /collections/<c>/products/<h> is one page, however many nodes of the type it carries.
+	owner   map[string]string
+	counted map[string]map[string]bool
 }
 
 // rollup aggregates the field gaps that recur on every page of a template. Recommended and
@@ -39,24 +45,45 @@ func newRollup() *rollup {
 	return &rollup{entries: make(map[rollupKey]*rollupEntry)}
 }
 
-// add records that pageURL declared a node of type typ that was missing the given fields.
-func (r *rollup) add(code, typ string, missing []string, pageURL string) {
+// add records that the page at pageURL, whose canonical URL is canonical, declared a node of
+// type typ missing the given fields. Counts are per canonical URL: a different page with the
+// same canonical adds nothing, whichever of the two was crawled first, and the example is the
+// canonical URL so it does not depend on crawl order either. A second node of the type on the
+// same page does not count the page again; it only adds fields that page was not yet counted
+// as missing.
+func (r *rollup) add(code, typ string, missing []string, pageURL, canonical string) {
 	if len(missing) == 0 {
 		return
 	}
 	key := rollupKey{code: code, typ: typ}
 	e, ok := r.entries[key]
 	if !ok {
-		e = &rollupEntry{missing: make(map[string]int)}
+		e = &rollupEntry{
+			missing: make(map[string]int),
+			owner:   make(map[string]string),
+			counted: make(map[string]map[string]bool),
+		}
 		r.entries[key] = e
 		r.order = append(r.order, key)
 	}
-	e.pages++
-	if len(e.examples) < maxExamples {
-		e.examples = append(e.examples, pageURL)
+	ck := analyze.URLKey(canonical)
+	owner, seen := e.owner[ck]
+	if seen && owner != pageURL {
+		return
+	}
+	if !seen {
+		e.owner[ck] = pageURL
+		e.counted[ck] = make(map[string]bool)
+		e.pages++
+		if len(e.examples) < maxExamples {
+			e.examples = append(e.examples, canonical)
+		}
 	}
 	for _, f := range missing {
-		e.missing[f]++
+		if !e.counted[ck][f] {
+			e.counted[ck][f] = true
+			e.missing[f]++
+		}
 	}
 }
 

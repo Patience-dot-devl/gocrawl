@@ -157,11 +157,14 @@ type gapKey struct {
 	label    string
 }
 
-// gapEntry counts the pages of a template missing one expectation.
+// gapEntry counts the pages of a template missing one expectation. seen holds the canonical
+// URL keys (analyze.URLKey) already counted, so a product reached at /products/<h> and again at
+// /collections/<c>/products/<h> is one page, not two.
 type gapEntry struct {
 	anyOf    []string
 	pages    int
 	examples []string
+	seen     map[string]bool
 }
 
 // maxExamples caps the example URLs on an aggregated finding, matching the structured
@@ -181,6 +184,8 @@ func templateGapIssues(result *crawler.Result, base string) []analyze.Issue {
 		}
 		tmpl := Classify(p.FinalURL)
 		g, _ := schemaorg.Parse(p.Doc)
+		canonical := analyze.CanonicalURL(p)
+		ck := analyze.URLKey(canonical)
 		for _, exp := range expectations {
 			if exp.template != tmpl || g.HasType(exp.anyOf...) {
 				continue
@@ -188,13 +193,19 @@ func templateGapIssues(result *crawler.Result, base string) []analyze.Issue {
 			key := gapKey{template: tmpl, label: exp.label}
 			e, ok := entries[key]
 			if !ok {
-				e = &gapEntry{anyOf: exp.anyOf}
+				e = &gapEntry{anyOf: exp.anyOf, seen: make(map[string]bool)}
 				entries[key] = e
 				order = append(order, key)
 			}
+			// A duplicate URL of a page already counted adds nothing, whichever copy was
+			// crawled first; the example is the canonical URL, so it is order-independent too.
+			if e.seen[ck] {
+				continue
+			}
+			e.seen[ck] = true
 			e.pages++
 			if len(e.examples) < maxExamples {
-				e.examples = append(e.examples, p.FinalURL)
+				e.examples = append(e.examples, canonical)
 			}
 		}
 	}

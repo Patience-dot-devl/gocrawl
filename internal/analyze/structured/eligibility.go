@@ -153,6 +153,7 @@ func exemptFromEligibility(path string) bool {
 // caller renders once per crawl.
 func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.Issue {
 	var issues []analyze.Issue
+	canonical := analyze.CanonicalURL(p)
 	for _, n := range g.Nodes {
 		if exemptFromEligibility(n.Path) {
 			continue
@@ -170,10 +171,10 @@ func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.
 					Data:    map[string]any{"type": ty, "missing": missing, "path": n.Path},
 				})
 			}
-			roll.add("structured-missing-recommended", ty, missingFields(g, n, spec.recommended, nil), p.FinalURL)
-			roll.add("structured-missing-merchant", ty, missingFields(g, n, spec.merchant, merchantFallback(ty, g, n)), p.FinalURL)
+			roll.add("structured-missing-recommended", ty, missingFields(g, n, spec.recommended, nil), p.FinalURL, canonical)
+			roll.add("structured-missing-merchant", ty, missingFields(g, n, spec.merchant, merchantFallback(ty, g, n)), p.FinalURL, canonical)
 			if ty == "ProductGroup" {
-				roll.add("structured-variant-incomplete", ty, variantGaps(g, n), p.FinalURL)
+				roll.add("structured-variant-incomplete", ty, variantGaps(g, n), p.FinalURL, canonical)
 			}
 		}
 	}

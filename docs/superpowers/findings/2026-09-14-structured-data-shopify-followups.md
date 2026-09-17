@@ -391,6 +391,19 @@ or hang a per-page graph off `crawler.Page`. On a 5k-page crawl this is the bran
 
 ---
 
+## P10 — Functional test on dermalogica.nl
+
+Spec: [`../specs/2026-09-17-dermalogica-functional-fixes-design.md`](../specs/2026-09-17-dermalogica-functional-fixes-design.md).
+
+- ✅ **Fix 1 — site-wide counts double-counted duplicate product URLs.** Fixed in
+  `fix(analyze): count rolled-up pages once per canonical URL`. The `structured` rollups and
+  `shopify-template-schema-gap` now count each page once per canonical URL (new
+  `analyze.CanonicalURL`, with `shopify.canonicalOf` built on the same resolution), so
+  `/collections/<c>/products/<h>` no longer doubles `/products/<h>`. Examples are canonical
+  URLs.
+
+---
+
 ## Confirmed sound — do not re-open
 
 Both reviews independently verified these; they are settled.

@@ -180,6 +180,11 @@ have.
 > so a recommended-field gap repeats identically on every page of a template. Those three codes
 > aggregate into one issue per type, carrying the affected page count and up to five example
 > URLs, instead of one issue per page.
+> Pages are counted once per **canonical URL** (the `<head>` `link[rel="canonical"]`,
+> resolved against the page URL; the page URL itself when none is declared), compared without
+> fragment or trailing slash. A product reached at `/products/<h>` and again at
+> `/collections/<c>/products/<h>` with a canonical to the first is one page, and the examples
+> list canonical URLs.
 
 > **Thin copies are exempt.** Objects nested under `itemListElement`, `hasVariant`,
 > `isVariantOf`, `isSimilarTo`, `isRelatedTo` or `isAccessoryOrSparePartFor` are deliberately
@@ -588,7 +593,9 @@ what makes classifying by path reliable here in a way it would not be on an arbi
 and checked against the schema.org types that template should carry. A gap is a property of
 the template, not of one page: `shopify-template-schema-gap` fires per (template, missing type)
 pair, carrying the count of pages found missing it and up to five example URLs, rather than
-repeating the same fact once per page.
+repeating the same fact once per page. As with the `structured` rollups, pages are counted once
+per canonical URL, so a product's `/collections/<c>/products/<h>` copy canonicalised to
+`/products/<h>` does not count twice, and the examples are canonical URLs.
 
 | Code | Severity | Scope | Triggered when | `data` |
 | --- | --- | --- | --- | --- |

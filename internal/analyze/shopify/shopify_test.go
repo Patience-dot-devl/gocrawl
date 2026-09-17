@@ -2,6 +2,7 @@ package shopify_test
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 
@@ -155,6 +156,97 @@ func TestTemplateSchemaGapRollsUpPerTemplate(t *testing.T) {
 		if is.Data["template"] == "product" && !strings.Contains(is.Message, "3 Shopify product pages have no") {
 			t.Errorf("expected the message to carry the affected-page count, got %q", is.Message)
 		}
+	}
+}
+
+// bareProductPageWith is bareProductPage with extraHead (typically a canonical link) in <head>.
+func bareProductPageWith(extraHead string) string {
+	return strings.Replace(bareProductPage, "</head>", extraHead+"</head>", 1)
+}
+
+// assertProductGapDedupe runs the analyzer over res with its pages in URL order and again
+// reversed — the store helper builds from a map, so a fixed pair of orders is what proves the
+// dedupe holds whichever duplicate the crawl reached first — and checks both product-template
+// gaps for the expected distinct-page count and examples.
+func assertProductGapDedupe(t *testing.T, res *crawler.Result, wantPages int, wantExamples []string) {
+	t.Helper()
+	fwd := append([]*crawler.Page(nil), res.Pages...)
+	sort.Slice(fwd, func(i, j int) bool { return fwd[i].FinalURL < fwd[j].FinalURL })
+	rev := make([]*crawler.Page, len(fwd))
+	for i, p := range fwd {
+		rev[len(fwd)-1-i] = p
+	}
+	for i, ps := range [][]*crawler.Page{fwd, rev} {
+		gaps := findAll(run(t, &crawler.Result{Seed: res.Seed, Pages: ps}), "shopify-template-schema-gap")
+		var product int
+		for _, is := range gaps {
+			if is.Data["template"] != "product" {
+				continue
+			}
+			product++
+			if is.Data["pages"] != wantPages {
+				t.Errorf("order %d: %v gap pages = %v, want %d", i, is.Data["expected"], is.Data["pages"], wantPages)
+			}
+			examples := append([]string(nil), is.Data["examples"].([]string)...)
+			sort.Strings(examples)
+			if strings.Join(examples, " ") != strings.Join(wantExamples, " ") {
+				t.Errorf("order %d: %v gap examples = %v, want %v", i, is.Data["expected"], is.Data["examples"], wantExamples)
+			}
+		}
+		if product != 2 {
+			t.Fatalf("order %d: expected 2 product-template gaps, got %d (%+v)", i, product, gaps)
+		}
+	}
+}
+
+// TestTemplateSchemaGapCountsDuplicateURLsOnce reproduces the dermalogica.nl double count: a
+// product reached at /products/<h> and at /collections/<c>/products/<h>, canonicalised to the
+// first, is one page of the product template, not two.
+func TestTemplateSchemaGapCountsDuplicateURLsOnce(t *testing.T) {
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":                             shopifyHome,
+		"https://shop.test/products/tee":                 bareProductPage,
+		"https://shop.test/collections/all/products/tee": bareProductPageWith(`<link rel="canonical" href="https://shop.test/products/tee">`),
+	})
+	assertProductGapDedupe(t, res, 1, []string{"https://shop.test/products/tee"})
+
+	res.Pages = append(res.Pages, store(t, "https://shop.test", map[string]string{
+		"https://shop.test/products/cap": bareProductPage,
+	}).Pages...)
+	assertProductGapDedupe(t, res, 2, []string{"https://shop.test/products/cap", "https://shop.test/products/tee"})
+}
+
+// TestTemplateSchemaGapDedupeResolvesRelativeCanonical pins that a relative canonical dedupes
+// exactly like its absolute form.
+func TestTemplateSchemaGapDedupeResolvesRelativeCanonical(t *testing.T) {
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":                             shopifyHome,
+		"https://shop.test/products/tee":                 bareProductPage,
+		"https://shop.test/collections/all/products/tee": bareProductPageWith(`<link rel="canonical" href="/products/tee">`),
+	})
+	assertProductGapDedupe(t, res, 1, []string{"https://shop.test/products/tee"})
+}
+
+// TestTemplateSchemaGapDedupeIgnoresTrailingSlashAndFragment pins that the canonical
+// comparison drops a trailing slash and fragment, which do not address a different page.
+func TestTemplateSchemaGapDedupeIgnoresTrailingSlashAndFragment(t *testing.T) {
+	res := store(t, "https://shop.test", map[string]string{
+		"https://shop.test/":                             shopifyHome,
+		"https://shop.test/products/tee":                 bareProductPage,
+		"https://shop.test/collections/all/products/tee": bareProductPageWith(`<link rel="canonical" href="https://shop.test/products/tee/#main">`),
+	})
+	var product int
+	for _, is := range findAll(run(t, res), "shopify-template-schema-gap") {
+		if is.Data["template"] != "product" {
+			continue
+		}
+		product++
+		if is.Data["pages"] != 1 {
+			t.Errorf("%v gap pages = %v, want 1", is.Data["expected"], is.Data["pages"])
+		}
+	}
+	if product != 2 {
+		t.Fatalf("expected 2 product-template gaps, got %d", product)
 	}
 }
 

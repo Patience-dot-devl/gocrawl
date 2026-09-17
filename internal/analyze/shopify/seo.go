@@ -29,29 +29,11 @@ func indexable(p *crawler.Page) bool {
 }
 
 // canonicalOf returns the page's declared canonical URL resolved against the page's own URL,
-// or "" when it has none. Resolution matters in both directions: a theme emitting a relative
-// href="/products/tee" would otherwise never equal the absolute URL it is compared with,
-// false-positiving shopify-duplicate-product-path and silencing shopify-indexable-facet. Only
-// <head> is searched, matching the seo analyzer, because search engines ignore a canonical in
-// <body>.
+// or "" when it has none. The "" matters to seoIssues, which treats a missing canonical
+// differently from a self-canonical one; resolution itself lives in analyze.DeclaredCanonical
+// so the site-wide counts that dedupe on analyze.CanonicalURL resolve exactly the same way.
 func canonicalOf(p *crawler.Page) string {
-	if p.Doc == nil {
-		return ""
-	}
-	href, _ := p.Doc.Find(`head link[rel="canonical"]`).First().Attr("href")
-	href = strings.TrimSpace(href)
-	if href == "" {
-		return ""
-	}
-	base, err := url.Parse(p.FinalURL)
-	if err != nil {
-		return href
-	}
-	ref, err := url.Parse(href)
-	if err != nil {
-		return href
-	}
-	return base.ResolveReference(ref).String()
+	return analyze.DeclaredCanonical(p)
 }
 
 // seoIssues reports the crawlable URLs Shopify generates by default that a store rarely wants
@@ -131,15 +113,7 @@ func facetParam(rawURL string) (string, bool) {
 // sameURL compares two URLs ignoring a trailing slash and fragment, which differ without
 // meaning anything.
 func sameURL(a, b string) bool {
-	return strings.TrimRight(stripFragment(a), "/") == strings.TrimRight(stripFragment(b), "/")
-}
-
-// stripFragment drops a URL's fragment.
-func stripFragment(raw string) string {
-	if i := strings.IndexByte(raw, '#'); i >= 0 {
-		return raw[:i]
-	}
-	return raw
+	return analyze.URLKey(a) == analyze.URLKey(b)
 }
 
 // canonicalProductURL returns the /products/<handle> form of a nested
