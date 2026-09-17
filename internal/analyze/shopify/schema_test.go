@@ -27,6 +27,11 @@ func TestSchemaAppConflict(t *testing.T) {
 	if len(sources) != 2 {
 		t.Fatalf("expected two attributed sources, got %v", sources)
 	}
+	// Sorted, not document order: the theme block comes first on the page, and a report whose
+	// Data follows page order would churn in gocrawl compare when an app moves its script tag.
+	if sources[0] != "JSON-LD for SEO" || sources[1] != "theme" {
+		t.Errorf("expected sources sorted [JSON-LD for SEO theme], got %v", sources)
+	}
 }
 
 func TestTwoThemeBlocksAreNotAConflict(t *testing.T) {
@@ -240,5 +245,24 @@ func TestPlaceholderOptionIsNotCountedAsVariant(t *testing.T) {
 	}
 	if _, ok := find(issues, "shopify-flat-variant-product"); ok {
 		t.Error("a placeholder option with no value is not a second variant")
+	}
+}
+
+// TestNoClientInjectionWarningOnUtilityPages pins the template gate. Apps load sitewide, so the
+// cart and search pages carry the same app script as a product page; no store is expected to
+// mark those up, and a warning there would be noise on every crawl.
+func TestNoClientInjectionWarningOnUtilityPages(t *testing.T) {
+	html := `<html><head>
+		<script src="https://cdn.shopify.com/s/files/1/0/assets/theme.js"></script>
+		<script>Shopify.theme = {"name":"Dawn","id":123456};</script>
+		<script src="https://cdn.shopify.com/extensions/abc/searchpie/assets/app.js"></script>
+	</head><body><h1>Cart</h1></body></html>`
+	res := store(t, "https://shop.test", map[string]string{"https://shop.test/cart": html})
+	issues := run(t, res)
+	if _, ok := find(issues, "shopify-detected"); !ok {
+		t.Fatal("expected shopify-detected — otherwise this test passes vacuously")
+	}
+	if is, ok := find(issues, "shopify-schema-client-injected"); ok {
+		t.Errorf("a utility page is not expected to carry structured data, got %+v", is)
 	}
 }

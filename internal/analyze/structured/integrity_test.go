@@ -67,6 +67,36 @@ func TestAgreeingDuplicateHasNoConflict(t *testing.T) {
 	}
 }
 
+// TestListTilesAcrossBlocksAreNotDuplicateProducts pins topLevelOfType's exemption. A theme and
+// an app each emitting an ItemList of product tiles is two lists, and the tiles inside them are
+// thin copies, not two sources fighting over one page-level Product.
+func TestListTilesAcrossBlocksAreNotDuplicateProducts(t *testing.T) {
+	list := `{"@type":"ItemList","itemListElement":[{"@type":"ListItem","position":1,
+		"item":{"@type":"Product","name":"Tee","url":"https://shop.test/products/tee"}}]}`
+	res := page(t, `<html><head>
+		<script type="application/ld+json">`+list+`</script>
+		<script type="application/ld+json">`+list+`</script>
+	</head><body></body></html>`)
+	issues := structured.New().Analyze(context.Background(), res)
+	for _, is := range issues {
+		if is.Code == "structured-duplicate-type" && is.Data["type"] == "Product" {
+			t.Errorf("product tiles inside two ItemLists are not duplicate Products, got %+v", is)
+		}
+	}
+}
+
+// TestIDWithPropertiesIsADeclarationNotAReference pins referencedIDs' bare-stub rule. An object
+// carrying @id alongside real properties declares the entity inline; only an object whose sole
+// key is @id points elsewhere and can dangle.
+func TestIDWithPropertiesIsADeclarationNotAReference(t *testing.T) {
+	res := page(t, `<html><head><script type="application/ld+json">
+		{"@type":"WebSite","name":"Shop","publisher":{"@id":"https://shop.test/#org","name":"Shop Inc"}}
+	</script></head><body></body></html>`)
+	if is, ok := find(structured.New().Analyze(context.Background(), res), "structured-unresolved-id"); ok {
+		t.Errorf("an inline declaration with an @id is not a dangling reference, got %+v", is)
+	}
+}
+
 func TestUnresolvedIDReference(t *testing.T) {
 	res := page(t, `<html><head><script type="application/ld+json">
 		{"@type":"WebSite","name":"Shop","publisher":{"@id":"https://shop.test/#missing"}}
