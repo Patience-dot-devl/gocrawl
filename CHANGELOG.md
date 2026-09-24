@@ -8,6 +8,11 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Changed
 
+- **Analyzer fetches obey the crawl's politeness rules.** The extra requests analyzers make
+  after the crawl — `sitemap.xml`, `llms.txt`, and the `--specialized` WordPress and Shopify
+  probes — now go through the crawl's rate limiter and, when `respect_robots` is on, its
+  robots.txt policy (`crawler.Engine.Govern`). Previously they ran unthrottled and ignored
+  `Disallow` rules the crawl itself honoured.
 - **`gocrawl serve` hardening.** The web server binds `127.0.0.1:8080` instead of every
   interface, rejects requests whose `Host` header is not a loopback address (DNS rebinding),
   rejects cross-origin `POST`s (CSRF), requires `Content-Type: application/json` on

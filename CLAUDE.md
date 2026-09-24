@@ -27,7 +27,8 @@ Analyzers are **pure**: they read a `crawler.Result` and return `[]analyze.Issue
 not fetch, mutate shared state, or print. (Exception: a few analyzers like `sitemap`, `geo`,
 `wordpress`, and `shopify` are constructed with a `crawler.Fetcher` so they can pull a small
 number of extra resources such as `sitemap.xml`, `llms.txt`, or `/products.json` — these still
-emit Issues, never print.)
+emit Issues, never print. `runner.Run` hands them a fetcher wrapped by `Engine.Govern`, so those
+extra fetches obey the crawl's rate limiter and robots.txt policy.)
 
 ## Data flow
 
