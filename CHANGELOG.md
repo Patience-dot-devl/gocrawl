@@ -6,6 +6,17 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- **`redirects` analyzer files findings under the served URL.** `http-client-error`,
+  `http-server-error`, `http-body-truncated`, `http-slow-response`, and `http-mixed-content`
+  on a page reached through a redirect were attributed to the requested URL; they now use the
+  final URL like every other per-page analyzer. The redirect codes themselves still sit on
+  the requested URL. Saved reports compared with `gocrawl compare` will show these findings
+  as moved, once.
+- **robots.txt fetched once per host.** Concurrent workers reaching a new host all fetched
+  its robots.txt; the first now fetches and the rest wait for its result.
+
 ### Changed
 
 - **Analyzer fetches obey the crawl's politeness rules.** The extra requests analyzers make
