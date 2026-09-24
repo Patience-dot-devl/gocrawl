@@ -5,7 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestRobotsDataTestAgent(t *testing.T) {
@@ -186,4 +189,54 @@ func TestRobotsManagerFetch(t *testing.T) {
 			t.Errorf("expected robots.txt to be fetched once (cached), got %d fetches", hits)
 		}
 	})
+}
+
+// blockingFetcher counts fetches and holds each one until release is closed, so a test can
+// line up several concurrent callers on the same cache miss.
+type blockingFetcher struct {
+	started chan struct{} // one send per fetch that has begun
+	release chan struct{}
+	count   atomic.Int32
+}
+
+func (f *blockingFetcher) Fetch(_ context.Context, _ string) (*Page, error) {
+	f.count.Add(1)
+	f.started <- struct{}{}
+	<-f.release
+	return &Page{StatusCode: 200, Body: []byte("User-agent: *\nDisallow: /private\n")}, nil
+}
+
+// TestRobotsManagerSingleFetchUnderConcurrentMisses: when several workers hit a host whose
+// robots.txt isn't cached yet, exactly one of them should fetch it and the rest should wait
+// for that result, rather than each firing its own request at the server.
+func TestRobotsManagerSingleFetchUnderConcurrentMisses(t *testing.T) {
+	const callers = 5
+	f := &blockingFetcher{started: make(chan struct{}, callers), release: make(chan struct{})}
+	mgr := newRobotsManager(f, "gocrawl")
+	u, _ := url.Parse("https://example.com/private")
+
+	var wg sync.WaitGroup
+	results := make([]bool, callers)
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = mgr.allowed(context.Background(), u)
+		}()
+	}
+	// Wait for the first fetch to begin, then give the other callers time to reach the cache
+	// miss while it is still in flight. Only the leader's fetch should ever start.
+	<-f.started
+	time.Sleep(50 * time.Millisecond)
+	close(f.release)
+	wg.Wait()
+
+	if n := f.count.Load(); n != 1 {
+		t.Fatalf("robots.txt fetched %d times by %d concurrent callers, want 1", n, callers)
+	}
+	for i, allowed := range results {
+		if allowed {
+			t.Errorf("caller %d: /private allowed, want disallowed (waiter got a different result from the leader)", i)
+		}
+	}
 }

@@ -15,6 +15,10 @@ type robotsManager struct {
 
 	mu    sync.Mutex
 	cache map[string]*RobotsData
+	// inflight holds, per cache key, a channel closed when that key's fetch lands in cache.
+	// Every worker pool member reaches a new host at about the same time, so without it the
+	// first N cache misses would each fetch robots.txt themselves.
+	inflight map[string]chan struct{}
 }
 
 func newRobotsManager(fetcher Fetcher, userAgent string) *robotsManager {
@@ -22,6 +26,7 @@ func newRobotsManager(fetcher Fetcher, userAgent string) *robotsManager {
 		fetcher:   fetcher,
 		userAgent: userAgent,
 		cache:     make(map[string]*RobotsData),
+		inflight:  make(map[string]chan struct{}),
 	}
 }
 
@@ -29,21 +34,40 @@ func newRobotsManager(fetcher Fetcher, userAgent string) *robotsManager {
 // includes the scheme: a host can serve a different robots.txt on http vs. https (e.g. a site
 // that should only be crawled over https and deliberately disallows everything on http), so
 // caching by host alone would incorrectly apply one scheme's rules to the other.
+//
+// Concurrent misses on one key share a single fetch: the first caller becomes the leader and
+// the rest wait for its result. A waiter whose context ends first gives up with empty data,
+// which allows everything — the same answer a failed fetch produces.
 func (m *robotsManager) get(ctx context.Context, u *url.URL) *RobotsData {
 	key := u.Scheme + "://" + u.Host
-	m.mu.Lock()
-	if d, ok := m.cache[key]; ok {
+	for {
+		m.mu.Lock()
+		if d, ok := m.cache[key]; ok {
+			m.mu.Unlock()
+			return d
+		}
+		if done, ok := m.inflight[key]; ok {
+			m.mu.Unlock()
+			select {
+			case <-done:
+				continue
+			case <-ctx.Done():
+				return &RobotsData{Host: u.Host}
+			}
+		}
+		done := make(chan struct{})
+		m.inflight[key] = done
 		m.mu.Unlock()
-		return d
+
+		data := m.fetch(ctx, u)
+
+		m.mu.Lock()
+		m.cache[key] = data
+		delete(m.inflight, key)
+		m.mu.Unlock()
+		close(done)
+		return data
 	}
-	m.mu.Unlock()
-
-	data := m.fetch(ctx, u)
-
-	m.mu.Lock()
-	m.cache[key] = data
-	m.mu.Unlock()
-	return data
 }
 
 func (m *robotsManager) fetch(ctx context.Context, u *url.URL) *RobotsData {
