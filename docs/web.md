@@ -16,12 +16,32 @@ gocrawl serve
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--addr` | `:8080` | Address to listen on. |
+| `--addr` | `127.0.0.1:8080` | Address to listen on. Loopback by default; see [Exposure](#exposure) before binding anything else. |
 | `--store-dir` | `~/.gocrawl/crawls` | Crawl history root, same store used by `--save`, `gocrawl history`, and `gocrawl compare`. |
 
 Open `http://localhost:8080` in a browser. Ctrl-C shuts the server down gracefully (in-flight
 HTTP requests are given up to 10s to finish; crawl jobs already running detach from the
 request that started them, so they aren't tied to a shutdown).
+
+## Exposure
+
+The server has **no authentication**. It is built to be driven from a browser on the same
+machine, and a few guards keep it that way:
+
+- It listens on loopback by default, and rejects (`403`) any request whose `Host` header is
+  not `localhost` / `127.0.0.1` / `[::1]`. That stops DNS-rebinding pages, which reach
+  `127.0.0.1` under their own hostname.
+- Non-`GET` API requests with an `Origin` header must come from the same origin as the
+  server (`403` otherwise), and `POST /api/crawls` insists on `Content-Type:
+  application/json` (`415` otherwise). Together these stop any other web page you have open
+  from starting or cancelling crawls.
+- At most 4 crawls run at once; a fifth `POST /api/crawls` returns `429` until one finishes
+  or is cancelled.
+
+Binding a non-loopback `--addr` (for example `:8080` or `0.0.0.0:8080`) switches the `Host`
+check off, prints a warning, and makes the API reachable by anyone on that network. A crawl
+runs from this machine with whatever proxy, Basic Auth, or cookie the request supplies, so
+only do this behind something that authenticates (a reverse proxy, VPN, or SSH tunnel).
 
 ## Building the real UI into the binary
 
@@ -70,7 +90,7 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | --- | --- |
 | `GET /api/analyzers` | List available analyzers (same as `list_analyzers` over MCP). |
 | `GET /api/explanations` | Every issue code's what/impact/fix explanation, keyed by code — the same text baked into the HTML report, used by the live report view. |
-| `POST /api/crawls` | Start a crawl. Body is the same field set as the [MCP `crawl` tool](mcp.md#crawl) (`url` required) plus `save: bool` to persist the report to the store when it finishes. Returns `202` with the job immediately; the crawl runs in the background. |
+| `POST /api/crawls` | Start a crawl. Body is JSON (`Content-Type: application/json` required) with the same field set as the [MCP `crawl` tool](mcp.md#crawl) (`url` required) plus `save: bool` to persist the report to the store when it finishes. Returns `202` with the job immediately; the crawl runs in the background. `429` when the running-crawl cap is reached. |
 | `GET /api/crawls` | List every job (in-memory, this process) merged with the store's saved history, newest first. |
 | `GET /api/crawls/{id}` | One job's status and, once finished, its full `Report` (see [Output reference](output.md)). Falls back to the store for an id that isn't a live job. |
 | `POST /api/crawls/{id}/cancel` | Cancel a running crawl. Like Ctrl-C on the CLI, this doesn't error the crawl — it stops early and still returns whatever was fetched as a partial report (`Report.Coverage.Interrupted`), tracked here as job status `canceled`. |

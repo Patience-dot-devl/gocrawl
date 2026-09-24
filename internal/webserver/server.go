@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"sort"
 
@@ -19,16 +20,24 @@ import (
 
 // Server serves the gocrawl web API and embedded frontend.
 type Server struct {
-	store *store.Store
-	jobs  *jobManager
-	mux   *http.ServeMux
+	store        *store.Store
+	jobs         *jobManager
+	mux          *http.ServeMux
+	allowAnyHost bool
+	maxRunning   int
 }
 
-// New builds a Server backed by st for crawl history (persisted via --save).
-func New(st *store.Store) *Server {
+// New builds a Server backed by st for crawl history (persisted via --save). By default it
+// only answers requests whose Host header is a loopback address and runs at most
+// DefaultMaxRunning crawls at once; see the Option values to change either.
+func New(st *store.Store, opts ...Option) *Server {
 	s := &Server{
-		store: st,
-		jobs:  newJobManager(),
+		store:      st,
+		jobs:       newJobManager(),
+		maxRunning: DefaultMaxRunning,
+	}
+	for _, o := range opts {
+		o(s)
 	}
 	s.mux = http.NewServeMux()
 	s.routes()
@@ -37,7 +46,7 @@ func New(st *store.Store) *Server {
 
 // Handler returns the http.Handler serving the API and frontend.
 func (s *Server) Handler() http.Handler {
-	return s.mux
+	return s.guard(s.mux)
 }
 
 func (s *Server) routes() {
@@ -70,6 +79,12 @@ type startCrawlRequest struct {
 }
 
 func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
+	// A cross-origin HTML form can only send text/plain or form encodings without a CORS
+	// preflight; insisting on JSON is the second half of the CSRF guard in guard.go.
+	if ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); ct != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, errors.New("Content-Type must be application/json"))
+		return
+	}
 	var req startCrawlRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("decoding request body: %w", err))
@@ -82,7 +97,12 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	job := s.jobs.start(seed, cancel)
+	job, ok := s.jobs.start(seed, cancel, s.maxRunning)
+	if !ok {
+		cancel()
+		writeError(w, http.StatusTooManyRequests, fmt.Errorf("%d crawls already running; wait for one to finish or cancel it", s.maxRunning))
+		return
+	}
 
 	go func() {
 		defer cancel()

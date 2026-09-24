@@ -155,18 +155,20 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 		return nil, err
 	}
 
-	// Sitemap analyzer fetches with a raw fetcher regardless of render mode. It's built fresh
-	// here rather than reusing engine's fetcher, so — unlike that fetcher and the robots
-	// fetcher inside crawler.New — it isn't restricted to the seed's own host by default.
-	// The sitemap analyzer fetches whatever URL robots.txt's Sitemap: directive names, which
-	// is routinely a different host (a CDN, a separate subdomain) with no FollowExternal
-	// needed to reach it, so Basic Auth and the Cookie header must be restricted here
-	// explicitly.
+	// Analyzers that fetch extra resources (sitemap.xml, llms.txt, the --specialized probes)
+	// use a raw fetcher regardless of render mode. It's built fresh here rather than reusing
+	// engine's fetcher, so — unlike that fetcher and the robots fetcher inside crawler.New —
+	// it isn't restricted to the seed's own host by default. The sitemap analyzer fetches
+	// whatever URL robots.txt's Sitemap: directive names, which is routinely a different host
+	// (a CDN, a separate subdomain) with no FollowExternal needed to reach it, so Basic Auth
+	// and the Cookie header must be restricted here explicitly. engine.Govern then puts those
+	// fetches under the crawl's rate limiter and robots.txt policy, so a probe can't hit a
+	// path the crawl was told to leave alone, or run unthrottled once the crawl is over.
 	analyzerFetcher := crawler.NewHTTPFetcher(opts)
 	if seedURL, perr := url.Parse(seed); perr == nil {
 		analyzerFetcher.RestrictCredentialsToHost(seedURL.Host, opts.AllowSubdomains)
 	}
-	reg := BuildRegistry(analyzerFetcher, RegistryOptions{
+	reg := BuildRegistry(engine.Govern(analyzerFetcher), RegistryOptions{
 		Specialized:           cfg.Analyzers.Specialized,
 		SecurityAudit:         cfg.Analyzers.SecurityAudit,
 		IgnoreExternalTagging: cfg.Analyzers.IgnoreExternalTagging,

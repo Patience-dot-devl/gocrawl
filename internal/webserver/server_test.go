@@ -26,6 +26,10 @@ func doJSON(t *testing.T, srv *Server, method, path string, body any) (*httptest
 		}
 	}
 	req := httptest.NewRequest(method, path, &buf)
+	req.Host = "localhost:8080"
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -146,6 +150,7 @@ func TestStartCrawlPollAndExport(t *testing.T) {
 		{"html", "text/html"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, "/api/crawls/"+id+"/export?format="+format.name, nil)
+		req.Host = "localhost:8080"
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -183,6 +188,7 @@ func TestCancelCrawl(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/crawls/"+id+"/cancel", nil)
+	req.Host = "localhost:8080"
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
@@ -198,6 +204,7 @@ func TestCancelCrawl(t *testing.T) {
 func TestCancelUnknownCrawlReturnsNotFound(t *testing.T) {
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/crawls/does-not-exist/cancel", nil)
+	req.Host = "localhost:8080"
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {

@@ -6,6 +6,37 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- **`redirects` analyzer files findings under the served URL.** `http-client-error`,
+  `http-server-error`, `http-body-truncated`, `http-slow-response`, and `http-mixed-content`
+  on a page reached through a redirect were attributed to the requested URL; they now use the
+  final URL like every other per-page analyzer. The redirect codes themselves still sit on
+  the requested URL. Saved reports compared with `gocrawl compare` will show these findings
+  as moved, once.
+- **robots.txt fetched once per host.** Concurrent workers reaching a new host all fetched
+  its robots.txt; the first now fetches and the rest wait for its result.
+
+### Changed
+
+- **Analyzer fetches obey the crawl's politeness rules.** The extra requests analyzers make
+  after the crawl — `sitemap.xml`, `llms.txt`, and the `--specialized` WordPress and Shopify
+  probes — now go through the crawl's rate limiter and, when `respect_robots` is on, its
+  robots.txt policy (`crawler.Engine.Govern`). Previously they ran unthrottled and ignored
+  `Disallow` rules the crawl itself honoured.
+- **`gocrawl serve` hardening.** The web server binds `127.0.0.1:8080` instead of every
+  interface, rejects requests whose `Host` header is not a loopback address (DNS rebinding),
+  rejects cross-origin `POST`s (CSRF), requires `Content-Type: application/json` on
+  `POST /api/crawls`, caps concurrent crawls at 4 (`429` beyond that), and sets header/idle
+  timeouts on the listener. Binding a non-loopback `--addr` relaxes the `Host` check and
+  prints a warning, since the API has no authentication.
+
+### Security
+
+- Upgraded `golang.org/x/net` (v0.33.0 → v0.59.0) and pinned the Go toolchain to 1.26.6,
+  clearing 15 `govulncheck` findings reachable from the HTML fetch path. CI now runs
+  `govulncheck`, and Dependabot tracks Go, npm, and GitHub Actions updates.
+
 ## [0.8.0] - 2026-09-17
 
 ### Added

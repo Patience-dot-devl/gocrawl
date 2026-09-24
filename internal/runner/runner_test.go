@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -163,5 +164,42 @@ func TestRunDoesNotLeakBasicAuthToSitemapHost(t *testing.T) {
 	}
 	if sitemapAuth != "" {
 		t.Errorf("Authorization = %q, want empty (credentials leaked to the sitemap's host)", sitemapAuth)
+	}
+}
+
+// TestRunAnalyzerProbesRespectRobots: the fetcher Run hands to the analyzer registry drives
+// every extra request an analyzer makes (sitemap.xml, llms.txt, the --specialized WordPress
+// and Shopify probes). Those must obey the same robots.txt policy as the crawl, or a site
+// that disallows /wp-json/ still gets probed there.
+func TestRunAnalyzerProbesRespectRobots(t *testing.T) {
+	var probed []string
+	var mu sync.Mutex
+	seed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/robots.txt":
+			fmt.Fprint(w, "User-agent: *\nDisallow: /sitemap.xml\nDisallow: /llms.txt\n")
+		case "/sitemap.xml", "/llms.txt":
+			mu.Lock()
+			probed = append(probed, r.URL.Path)
+			mu.Unlock()
+			http.NotFound(w, r)
+		default:
+			fmt.Fprint(w, "<html><head><title>Home</title></head><body>hello</body></html>")
+		}
+	}))
+	defer seed.Close()
+
+	cfg := config.Default()
+	cfg.Crawl.MaxDepth = 0
+	cfg.Crawl.MaxPages = 5
+	cfg.Crawl.RespectRobots = true
+
+	if _, err := Run(context.Background(), cfg, seed.URL); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(probed) != 0 {
+		t.Fatalf("analyzers fetched robots-disallowed paths %v", probed)
 	}
 }

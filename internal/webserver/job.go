@@ -54,7 +54,22 @@ func newJobID() string {
 // start, get, and list all return Job by value: a snapshot copied out while holding the lock.
 // The canonical, mutable *Job lives only in m.jobs and is never handed to a caller, so a
 // Report/Status read here can never race against finish/cancel mutating that same struct.
-func (m *jobManager) start(seed string, cancel context.CancelFunc) Job {
+//
+// start refuses (ok == false) when maxRunning jobs are already in StatusRunning, so the
+// count and the insert happen under one lock and two concurrent starts cannot both slip
+// past the cap.
+func (m *jobManager) start(seed string, cancel context.CancelFunc, maxRunning int) (Job, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	running := 0
+	for _, j := range m.jobs {
+		if j.Status == StatusRunning {
+			running++
+		}
+	}
+	if running >= maxRunning {
+		return Job{}, false
+	}
 	j := &Job{
 		ID:        newJobID(),
 		Seed:      seed,
@@ -62,11 +77,8 @@ func (m *jobManager) start(seed string, cancel context.CancelFunc) Job {
 		StartedAt: time.Now(),
 		cancel:    cancel,
 	}
-	m.mu.Lock()
 	m.jobs[j.ID] = j
-	snapshot := *j
-	m.mu.Unlock()
-	return snapshot
+	return *j, true
 }
 
 func (m *jobManager) get(id string) (Job, bool) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
@@ -223,6 +224,60 @@ func TestErrorWithoutReferrerOmitsFoundOn(t *testing.T) {
 			if _, ok := iss.Data["found_on"]; ok {
 				t.Error("found_on should be absent when the page has no referrer")
 			}
+		}
+	}
+}
+
+// TestNonRedirectIssuesUseFinalURL: after a redirect the status, truncation, timing, and
+// mixed-content findings describe the page that was actually served, so they must be
+// attributed to its final URL — every other per-page analyzer does the same. Only the
+// redirect findings themselves belong on the requested URL, since they describe the hop.
+func TestNonRedirectIssuesUseFinalURL(t *testing.T) {
+	const reqURL = "https://example.com/old"
+	const finalURL = "https://example.com/new"
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script src="http://cdn.example.com/a.js"></script></head><body></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := &crawler.Result{Pages: []*crawler.Page{{
+		RequestedURL: reqURL,
+		FinalURL:     finalURL,
+		StatusCode:   404,
+		ContentType:  "text/html",
+		Doc:          doc,
+		Truncated:    true,
+		Duration:     5 * time.Second,
+		Redirects:    []crawler.Redirect{{From: reqURL, To: finalURL, Status: 301}},
+	}}}
+
+	byCode := map[string]string{}
+	for _, iss := range New().Analyze(context.Background(), result) {
+		byCode[iss.Code] = iss.URL
+	}
+	if got := byCode["http-redirect"]; got != reqURL {
+		t.Errorf("http-redirect URL = %q, want requested %q", got, reqURL)
+	}
+	for _, code := range []string{"http-client-error", "http-body-truncated", "http-slow-response", "http-mixed-content"} {
+		got, ok := byCode[code]
+		if !ok {
+			t.Errorf("%s not reported", code)
+			continue
+		}
+		if got != finalURL {
+			t.Errorf("%s URL = %q, want final %q", code, got, finalURL)
+		}
+	}
+}
+
+// TestIssuesFallBackToRequestedURLWithoutFinal: a fetch that never produced a response has
+// no final URL, so its findings stay on the requested one.
+func TestIssuesFallBackToRequestedURLWithoutFinal(t *testing.T) {
+	result := &crawler.Result{Pages: []*crawler.Page{
+		{RequestedURL: "https://example.com/down", Err: "connection refused"},
+	}}
+	for _, iss := range New().Analyze(context.Background(), result) {
+		if iss.URL != "https://example.com/down" {
+			t.Errorf("%s URL = %q, want requested URL", iss.Code, iss.URL)
 		}
 	}
 }

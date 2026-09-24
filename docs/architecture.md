@@ -74,6 +74,11 @@ breadth-first walk:
   `FollowNofollow`).
 - `robots.txt` is collected for every crawled host afterward, so the `robots` analyzer has
   data even when `RespectRobots` is off.
+- Analyzers that fetch extra resources after the crawl (`sitemap`, `geo`'s `llms.txt`, the
+  `--specialized` `wordpress` and `shopify` probes) get their fetcher from `Engine.Govern`,
+  which puts every request under the same rate limiter and `RespectRobots` policy as the
+  crawl. A robots-disallowed probe returns `crawler.ErrRobotsDisallowed` without touching the
+  server, and a `429` seen by a probe backs off the shared adaptive limiter.
 - Stopping early (a canceled context, e.g. Ctrl-C or `MaxDuration`) still returns everything
   fetched so far as a result, flagged via `Result.Coverage.Interrupted` /
   `DurationLimitReached` rather than discarded as an error.

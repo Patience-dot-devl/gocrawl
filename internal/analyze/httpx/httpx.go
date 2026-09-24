@@ -31,10 +31,23 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 }
 
 func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
-	url := p.RequestedURL
+	// Redirect findings describe the hop, so they sit on the URL that was requested. Every
+	// other finding describes the response that was actually served, so it sits on the final
+	// URL, like every other per-page analyzer — otherwise a 404 or mixed-content warning
+	// reached through a redirect would be filed under a page that no longer exists.
+	pageURL := p.FinalURL
+	if pageURL == "" {
+		pageURL = p.RequestedURL
+	}
 	var issues []analyze.Issue
-	add := func(sev analyze.Severity, code, msg string, data map[string]any) {
+	addAt := func(url string, sev analyze.Severity, code, msg string, data map[string]any) {
 		issues = append(issues, analyze.Issue{Analyzer: "redirects", URL: url, Severity: sev, Code: code, Message: msg, Data: data})
+	}
+	add := func(sev analyze.Severity, code, msg string, data map[string]any) {
+		addAt(pageURL, sev, code, msg, data)
+	}
+	addRedirect := func(sev analyze.Severity, code, msg string, data map[string]any) {
+		addAt(p.RequestedURL, sev, code, msg, data)
 	}
 
 	// found_on records the page this URL was first discovered on, so a broken/unreachable
@@ -66,11 +79,11 @@ func (a Analyzer) analyzePage(p *crawler.Page) []analyze.Issue {
 		}
 		switch {
 		case loop:
-			add(analyze.Error, "http-redirect-loop", "Redirect loop detected", map[string]any{"chain": chain(p)})
+			addRedirect(analyze.Error, "http-redirect-loop", "Redirect loop detected", map[string]any{"chain": chain(p)})
 		case n > 1:
-			add(analyze.Warning, "http-redirect-chain", "Multiple redirects before final URL", map[string]any{"hops": n, "chain": chain(p)})
+			addRedirect(analyze.Warning, "http-redirect-chain", "Multiple redirects before final URL", map[string]any{"hops": n, "chain": chain(p)})
 		default:
-			add(analyze.Info, "http-redirect", "Page redirects", map[string]any{"to": p.FinalURL, "status": p.Redirects[0].Status})
+			addRedirect(analyze.Info, "http-redirect", "Page redirects", map[string]any{"to": p.FinalURL, "status": p.Redirects[0].Status})
 		}
 	}
 

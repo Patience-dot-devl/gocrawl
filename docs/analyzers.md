@@ -78,6 +78,10 @@ every page. (The analyzer's internal package is `httpx`; its registered name is 
 **Threshold:** slow-response fires above 2 seconds. Mixed-content reports up to 5 example
 URLs.
 
+**Issue URL:** the three redirect codes are filed under the URL that was requested, because
+they describe the hop. Every other code is filed under the final URL the response came from,
+like the rest of the per-page analyzers; `found_on` still points at the page that linked it.
+
 ---
 
 ## `links` — Link analysis
