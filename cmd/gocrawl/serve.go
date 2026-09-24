@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,7 +28,7 @@ func newServeCmd() *cobra.Command {
 		RunE: runServe,
 	}
 	f := cmd.Flags()
-	f.String("addr", ":8080", "address to listen on")
+	f.String("addr", "127.0.0.1:8080", "address to listen on; the server has no authentication, so binding to a non-loopback address exposes it to the network")
 	f.String("store-dir", "", "store directory for crawl history (default: ~/.gocrawl/crawls)")
 	return cmd
 }
@@ -38,7 +40,14 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	srv := &http.Server{Addr: addr, Handler: webserver.New(st).Handler()}
+	var opts []webserver.Option
+	if !isLoopbackBind(addr) {
+		// The operator asked for a reachable server; the loopback Host check would only
+		// lock out the clients they just opened the door to.
+		opts = append(opts, webserver.AllowAnyHost())
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: --addr %s is not loopback; the web API has no authentication and anyone who can reach it can start crawls from this machine\n", addr)
+	}
+	srv := newHTTPServer(addr, webserver.New(st, opts...).Handler())
 
 	ctx := cmd.Context()
 	errCh := make(chan error, 1)
@@ -59,6 +68,33 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
 	}
+}
+
+// newHTTPServer builds the listener with header/idle timeouts so a client that opens a
+// connection and never finishes its request headers can't pin a goroutine forever. There is
+// no WriteTimeout: report exports can be large, and the crawl itself runs detached from the
+// request that started it, so no handler is legitimately slow enough to need one.
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+}
+
+// isLoopbackBind reports whether a listen address only accepts local connections. An empty
+// host (":8080") binds every interface.
+func isLoopbackBind(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // displayAddr turns a bind address like ":8080" into a browsable "localhost:8080".

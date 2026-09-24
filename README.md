@@ -99,7 +99,7 @@ gocrawl crawl https://example.com --config gocrawl.yaml
 # Verify a HubSpot redirect-rule export against the live site
 gocrawl check-redirects --input redirects.csv --domain example.com --output results.csv
 
-# Run as a web app: REST API + embedded browser UI on :8080
+# Run as a web app: REST API + embedded browser UI on 127.0.0.1:8080
 gocrawl serve
 
 # Run as an MCP server over stdio, for agentic tools

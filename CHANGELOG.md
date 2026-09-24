@@ -6,6 +6,21 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **`gocrawl serve` hardening.** The web server binds `127.0.0.1:8080` instead of every
+  interface, rejects requests whose `Host` header is not a loopback address (DNS rebinding),
+  rejects cross-origin `POST`s (CSRF), requires `Content-Type: application/json` on
+  `POST /api/crawls`, caps concurrent crawls at 4 (`429` beyond that), and sets header/idle
+  timeouts on the listener. Binding a non-loopback `--addr` relaxes the `Host` check and
+  prints a warning, since the API has no authentication.
+
+### Security
+
+- Upgraded `golang.org/x/net` (v0.33.0 → v0.59.0) and pinned the Go toolchain to 1.26.6,
+  clearing 15 `govulncheck` findings reachable from the HTML fetch path. CI now runs
+  `govulncheck`, and Dependabot tracks Go, npm, and GitHub Actions updates.
+
 ## [0.8.0] - 2026-09-17
 
 ### Added
