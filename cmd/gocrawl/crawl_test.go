@@ -119,6 +119,38 @@ func TestCrawlExplicitBasicAuthWinsOverSeedCredentials(t *testing.T) {
 	}
 }
 
+// --header must be a StringArray: a Signature-Input value contains commas, and a StringSlice
+// flag would split it into several bogus headers.
+func TestCrawlHeaderFlagKeepsCommas(t *testing.T) {
+	sigInput := `sig1=("@authority" "signature-agent");keyid="a,b";tag="web-bot-auth"`
+	var got string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			got = r.Header.Get("Signature-Input")
+		}
+		fmt.Fprint(w, `<html><head><title>Home</title></head><body>ok</body></html>`)
+	}))
+	defer ts.Close()
+
+	cmd := newCrawlCmd()
+	for name, value := range map[string]string{
+		"format": "json",
+		"out":    filepath.Join(t.TempDir(), "report.json"),
+		"header": "Signature-Input: " + sigInput,
+	} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd.SetContext(context.Background())
+	if err := runCrawl(cmd, []string{ts.URL}); err != nil {
+		t.Fatalf("runCrawl: %v", err)
+	}
+	if got != sigInput {
+		t.Errorf("Signature-Input = %q, want %q", got, sigInput)
+	}
+}
+
 // TestCrawlMaxDurationStopsEarly guards against the --max-duration flag never reaching the
 // crawl: a home page linking to a page that hangs past the budget must still produce a report,
 // labeled as partial coverage, rather than hanging or erroring.

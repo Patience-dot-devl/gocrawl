@@ -40,6 +40,11 @@ type Params struct {
 	ProxyRotation     string   `json:"proxy_rotation,omitempty" jsonschema:"Rotation across proxies: off, round-robin, random, or sticky-host"`
 	BasicAuth         string   `json:"basic_auth,omitempty" jsonschema:"HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)"`
 	Cookie            string   `json:"cookie,omitempty" jsonschema:"Raw Cookie header sent on every request, for sites gated by an app-level session cookie rather than server-level Basic Auth (e.g. a Shopify storefront password page) where a valid session cookie is already available"`
+	Headers           []string `json:"headers,omitempty" jsonschema:"Extra request headers as 'Name: value' strings, sent only to the seed host (plus subdomains when subdomains is set); raw render mode only. Prefer header_profile for secrets so their values stay out of the request"`
+	// HeaderProfile deliberately takes a profile name rather than a file path: a path would let
+	// any MCP or web API caller make gocrawl read an arbitrary local file and send its
+	// "key: value" lines to a host of the caller's choosing.
+	HeaderProfile string `json:"header_profile,omitempty" jsonschema:"Name of a header profile: a file of 'Name: value' lines at ~/.gocrawl/headers/<name>.headers, sent like headers. Use this for secrets such as Shopify crawler access signatures, so the values never pass through the request"`
 }
 
 // ToConfig validates and maps p onto a config.Config, returning the normalized seed URL
@@ -107,6 +112,8 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	cfg.Crawl.ProxyRotation = p.ProxyRotation
 	cfg.Crawl.BasicAuth = p.BasicAuth
 	cfg.Crawl.Cookie = p.Cookie
+	cfg.Crawl.Headers = p.Headers
+	cfg.Crawl.HeaderProfile = p.HeaderProfile
 
 	var user, pass string
 	seed, user, pass = crawler.SanitizeSeed(seed)

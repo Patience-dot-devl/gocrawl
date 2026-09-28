@@ -4,7 +4,10 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -56,8 +59,17 @@ type CrawlConfig struct {
 	// app-level session gates (e.g. a Shopify storefront password page) where the operator
 	// already has a valid session and supplies its cookie by hand, as opposed to BasicAuth's
 	// server-level realm challenge.
-	Cookie  string        `mapstructure:"cookie"`
-	Timeout time.Duration `mapstructure:"timeout"`
+	Cookie string `mapstructure:"cookie"`
+	// Headers are extra request headers as "Name: value" strings, sent on every request to
+	// the crawled host and scoped like BasicAuth and Cookie. HeaderFile names a file of such
+	// lines, and HeaderProfile names one stored in HeaderProfileDir() — the form the MCP and
+	// web APIs accept, so a caller can pick a header set without seeing (or being able to
+	// point gocrawl at) arbitrary files. All three may be combined; for a name set more than
+	// once, Headers beats HeaderFile, which beats HeaderProfile.
+	Headers       []string      `mapstructure:"headers"`
+	HeaderFile    string        `mapstructure:"header_file"`
+	HeaderProfile string        `mapstructure:"header_profile"`
+	Timeout       time.Duration `mapstructure:"timeout"`
 	// MaxDuration bounds the crawl's total wall-clock time (0 = unlimited). When it elapses,
 	// the crawl stops early and still produces a report from whatever was fetched so far.
 	MaxDuration     time.Duration `mapstructure:"max_duration"`
@@ -175,6 +187,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("crawl.proxy_rotation", d.Crawl.ProxyRotation)
 	v.SetDefault("crawl.basic_auth", d.Crawl.BasicAuth)
 	v.SetDefault("crawl.cookie", d.Crawl.Cookie)
+	v.SetDefault("crawl.headers", d.Crawl.Headers)
+	v.SetDefault("crawl.header_file", d.Crawl.HeaderFile)
+	v.SetDefault("crawl.header_profile", d.Crawl.HeaderProfile)
 	v.SetDefault("crawl.timeout", d.Crawl.Timeout)
 	v.SetDefault("crawl.max_duration", d.Crawl.MaxDuration)
 	v.SetDefault("crawl.max_body_bytes", d.Crawl.MaxBodyBytes)
@@ -269,6 +284,14 @@ func (c Config) ToOptions() (crawler.Options, error) {
 		o.BasicAuthPass = pass
 	}
 	o.Cookie = c.Crawl.Cookie
+	headers, err := c.Crawl.loadHeaders()
+	if err != nil {
+		return o, err
+	}
+	if headers.Get("Authorization") != "" && o.BasicAuthUser != "" {
+		return o, fmt.Errorf("a custom Authorization header can't be combined with basic_auth, which sets the same header")
+	}
+	o.Headers = headers
 
 	inc, err := compile(c.Crawl.Include)
 	if err != nil {
@@ -322,6 +345,75 @@ func parseBasicAuth(raw string) (user, pass string, err error) {
 		return "", "", fmt.Errorf(`want "user:pass", got %q`, raw)
 	}
 	return user, pass, nil
+}
+
+// loadHeaders merges the header profile, header file, and inline headers, in that order, into
+// one validated http.Header (nil when none are configured).
+func (c CrawlConfig) loadHeaders() (http.Header, error) {
+	var lines []string
+	if name := strings.TrimSpace(c.HeaderProfile); name != "" {
+		path, err := HeaderProfilePath(name)
+		if err != nil {
+			return nil, fmt.Errorf("header_profile: %w", err)
+		}
+		profile, err := readHeaderFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("header_profile %q: %w", name, err)
+		}
+		lines = append(lines, profile...)
+	}
+	if path := strings.TrimSpace(c.HeaderFile); path != "" {
+		file, err := readHeaderFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("header_file: %w", err)
+		}
+		lines = append(lines, file...)
+	}
+	lines = append(lines, c.Headers...)
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	h, err := crawler.ParseHeaderLines(lines)
+	if err != nil {
+		return nil, fmt.Errorf("headers: %w", err)
+	}
+	if len(h) == 0 {
+		return nil, nil
+	}
+	return h, nil
+}
+
+// headerProfileName restricts profile names to a plain file-name stem, so a profile can only
+// ever resolve to a file directly inside HeaderProfileDir — never "../../.ssh/config" or an
+// absolute path.
+var headerProfileName = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
+
+// HeaderProfileDir is where named header profiles live: ~/.gocrawl/headers, alongside the
+// crawl store's ~/.gocrawl/crawls.
+func HeaderProfileDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return filepath.Join(".gocrawl", "headers")
+	}
+	return filepath.Join(home, ".gocrawl", "headers")
+}
+
+// HeaderProfilePath resolves a header profile name to <HeaderProfileDir>/<name>.headers.
+func HeaderProfilePath(name string) (string, error) {
+	if !headerProfileName.MatchString(name) {
+		return "", fmt.Errorf("invalid profile name %q (letters, digits, '.', '_' and '-' only, not starting with '.')", name)
+	}
+	return filepath.Join(HeaderProfileDir(), name+".headers"), nil
+}
+
+// readHeaderFile returns the lines of a header file ("Name: value" per line; blank lines and
+// '#' comments are skipped by crawler.ParseHeaderLines).
+func readHeaderFile(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n"), nil
 }
 
 func compile(patterns []string) ([]*regexp.Regexp, error) {

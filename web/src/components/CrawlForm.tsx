@@ -30,6 +30,9 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   const [basicAuthPass, setBasicAuthPass] = useState('')
   const [cookieAuth, setCookieAuth] = useState(false)
   const [cookie, setCookie] = useState('')
+  const [customHeaders, setCustomHeaders] = useState(false)
+  const [headers, setHeaders] = useState('')
+  const [headerProfile, setHeaderProfile] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -103,6 +106,10 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
     }
     if (basicAuthUser.trim()) params.basic_auth = `${basicAuthUser.trim()}:${basicAuthPass}`
     if (cookieAuth && cookie.trim()) params.cookie = cookie.trim()
+    if (customHeaders) {
+      if (headers.trim()) params.headers = splitList(headers)
+      if (headerProfile.trim()) params.header_profile = headerProfile.trim()
+    }
     try {
       const job = await startCrawl(params)
       onStarted(job.id)
@@ -295,6 +302,35 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
               onChange={(e) => setCookie(e.target.value)}
             />
           </label>
+        )}
+
+        <label className="checkbox">
+          <input type="checkbox" checked={customHeaders} onChange={(e) => setCustomHeaders(e.target.checked)} />
+          Send custom request headers (e.g. a Shopify crawler access signature)
+        </label>
+        {customHeaders && (
+          <>
+            <label>
+              Header profile (name of a file at ~/.gocrawl/headers/&lt;name&gt;.headers on this
+              machine — the way to use a stored secret without pasting it here)
+              <input
+                type="text"
+                placeholder="uk"
+                value={headerProfile}
+                onChange={(e) => setHeaderProfile(e.target.value)}
+              />
+            </label>
+            <label>
+              Extra headers (one "Name: value" per line; sent only to the seed host, override
+              the profile by name, not supported with headless rendering)
+              <textarea
+                rows={3}
+                placeholder="X-Access-Token: abc123"
+                value={headers}
+                onChange={(e) => setHeaders(e.target.value)}
+              />
+            </label>
+          </>
         )}
       </details>
 

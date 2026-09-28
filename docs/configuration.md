@@ -37,6 +37,10 @@ default** (the value used when you set nothing).
 | `crawl.proxies` | `--proxies` | list of string | *(none)* | Pool of proxy URLs to rotate across. See [Rotating proxies and User-Agents](#rotating-proxies-and-user-agents). |
 | `crawl.proxy_rotation` | `--proxy-rotation` | string | `round-robin` | How a multi-entry proxy pool is picked: `off`, `round-robin`, `random`, or `sticky-host`. |
 | `crawl.basic_auth` | `--basic-auth` | string | *(none)* | HTTP Basic Auth credentials as `user:pass`, for sites gated by server-level Basic Auth (common on staging/acceptance environments). See [HTTP Basic Auth](#http-basic-auth). The interactive menu has separate username/password fields for this. |
+| `crawl.cookie` | `--cookie` | string | *(none)* | Raw `Cookie` header, for sites gated by an app-level session cookie. See [Cookie-gated sites](#cookie-gated-sites-eg-a-shopify-storefront-password). |
+| `crawl.headers` | `--header` (repeatable) | list of string | *(none)* | Extra request headers as `"Name: value"`, sent only to the crawled host. See [Custom request headers](#custom-request-headers-eg-shopify-crawler-access-signatures). |
+| `crawl.header_file` | `--header-file` | string | *(none)* | Path to a file of `Name: value` lines, merged into `headers`. |
+| `crawl.header_profile` | `--header-profile` | string | *(none)* | Name of a header file stored at `~/.gocrawl/headers/<name>.headers`, merged into `headers`. The only header source the MCP server and web API accept besides inline `headers`. |
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
 | `crawl.max_duration` | `--max-duration` | duration | `0` (unlimited) | Wall-clock budget for the whole crawl (e.g. `"90m"`). On expiry the crawl stops early and still writes a report from whatever was fetched, flagged as **partial coverage** (see [Output](output.md#coverage)) — the same mechanism a Ctrl-C interruption uses. |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
@@ -212,6 +216,73 @@ every redirect hop, and is restricted the same way for the `sitemap`/`geo`/`word
 analyzers' extra fetches. Not supported with `--render headless`, for the same per-host-scoping
 reason as `--basic-auth`.
 
+### Custom request headers (e.g. Shopify crawler access signatures)
+
+Some sites let a specific crawler past their bot protection when it sends agreed-upon headers.
+The main case is Shopify's **crawler access signatures**: a store owner creates one in the
+Shopify admin under *Online Store → Preferences → Crawler access*, and Shopify hands back three
+headers — `Signature`, `Signature-Input`, and `Signature-Agent` — that a crawler sends on every
+request to get past the storefront's bot protection and its rate limiting. Each signature is
+valid for one domain and expires after at most three months. Any other header-based access
+token works the same way.
+
+There are three ways to supply headers, and they can be combined:
+
+```sh
+# Inline, repeatable. Fine for a quick test; the value lands in shell history and `ps`.
+gocrawl crawl https://example.com --header "X-Access-Token: abc123"
+
+# From a file: one "Name: value" per line, '#' comments and blank lines allowed.
+gocrawl crawl https://uk.example-store.com --header-file ~/secrets/uk.headers
+
+# From a named profile: ~/.gocrawl/headers/<name>.headers, same format.
+gocrawl crawl https://uk.example-store.com --header-profile uk
+```
+
+A header file for a Shopify signature looks like this (values abbreviated):
+
+```text
+# UK store — created 2026-09-28, expires 2026-12-27
+Signature: sig1=:jR3...Zw==:
+Signature-Input: sig1=("@authority" "signature-agent");created=...;expires=...;keyid="...";alg="ed25519";tag="web-bot-auth"
+Signature-Agent: https://shopify.com
+```
+
+Keep it readable only by you (`chmod 600`), and outside any repository.
+
+**Profiles are how agents and the web UI use secrets.** The MCP `crawl` tool and the web API
+accept `headers` (inline values) and `header_profile` (a name), but deliberately **not** a file
+path: a path would let any caller make gocrawl read an arbitrary local file and send its
+`key: value` lines to a host of the caller's choosing. A profile name can only resolve to a file
+directly inside `~/.gocrawl/headers/`, and passing the name keeps the signature itself out of
+the agent's conversation and logs. One profile per domain (`uk`, `de`, …) matches how Shopify
+issues signatures.
+
+**Precedence.** Sources merge as profile, then file, then inline `--header`; for a header name
+set more than once the later source wins, so an inline `--header` can override a single value
+from a file. From the environment, use `GOCRAWL_CRAWL_HEADER_FILE` or
+`GOCRAWL_CRAWL_HEADER_PROFILE` — `GOCRAWL_CRAWL_HEADERS` goes through the environment's
+comma-separated list decoding, which splits values like `Signature-Input` apart.
+
+**Refused names.** `Host`, `Content-Length`, `Transfer-Encoding`, `Accept-Encoding`, and the
+hop-by-hop headers (`Connection`, `Keep-Alive`, `Upgrade`, …) are managed by the HTTP client, and
+`Cookie` and `User-Agent` have their own options (`--cookie`, `--user-agent`), so all of these
+are rejected with an error pointing at the fix. A custom `Authorization` header is allowed, but
+not together with `--basic-auth`, which sets the same header. Names and values are validated as
+HTTP field syntax, so a value containing a line break is rejected rather than smuggling in
+another header.
+
+**Scoping.** Custom headers are treated as credentials, exactly like `--basic-auth` and
+`--cookie`: sent only to the seed host (plus subdomains under `--subdomains`), never over an
+https → http downgrade, re-checked on every redirect hop, and sent on the same terms for
+`robots.txt` and the `sitemap`/`geo`/`wordpress`/`shopify` analyzers' extra fetches. Not
+supported with `--render headless`, for the same per-host-scoping reason.
+
+With a valid Shopify signature the crawl should no longer need the slow, single-worker settings
+otherwise used to stay under Shopify's rate limits. Keep `adaptive_delay` on regardless, and if
+the store still answers with 429s, check the signature: Shopify treats a rate-limited signed
+crawler as one whose signature isn't valid (expired, or created for a different domain).
+
 ## Selecting analyzers
 
 Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (see
@@ -337,6 +408,8 @@ replaced by underscores. They override the YAML file and are overridden by CLI f
 | `crawl.max_duration` | `GOCRAWL_CRAWL_MAX_DURATION` |
 | `crawl.max_body_bytes` | `GOCRAWL_CRAWL_MAX_BODY_BYTES` |
 | `crawl.respect_robots` | `GOCRAWL_CRAWL_RESPECT_ROBOTS` |
+| `crawl.header_file` | `GOCRAWL_CRAWL_HEADER_FILE` |
+| `crawl.header_profile` | `GOCRAWL_CRAWL_HEADER_PROFILE` |
 | `render` | `GOCRAWL_RENDER` |
 | `output.format` | `GOCRAWL_OUTPUT_FORMAT` |
 | `store.dir` | `GOCRAWL_STORE_DIR` |
@@ -403,6 +476,16 @@ crawl:
   # operator who already has a valid session and supplies its cookie by hand. Scoped and
   # leak-guarded the same way as basic_auth; also not supported with render: "headless".
   cookie: ""
+  # Extra request headers, one "Name: value" string each — e.g. the Signature /
+  # Signature-Input / Signature-Agent triple of a Shopify crawler access key. Treated as
+  # credentials: scoped and leak-guarded the same way as basic_auth, and not supported with
+  # render: "headless". Keep secrets out of this file: point header_file at a separate file of
+  # "Name: value" lines, or name a header_profile stored at ~/.gocrawl/headers/<name>.headers
+  # (the only form the MCP server and web API accept). All three merge; for a header set more
+  # than once, headers beats header_file, which beats header_profile.
+  headers: []
+  header_file: ""
+  header_profile: ""
   timeout: "15s"        # per-request timeout
   max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report

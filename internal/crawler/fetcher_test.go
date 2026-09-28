@@ -290,6 +290,147 @@ func TestFetchDoesNotLeakCookieAcrossHostRedirect(t *testing.T) {
 	}
 }
 
+func TestFetchSendsCustomHeadersToRequestedHost(t *testing.T) {
+	var got http.Header
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		fmt.Fprint(w, "ok")
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:       &http.Client{},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+		headers:      http.Header{"Signature-Agent": {"https://shopify.com"}, "Accept": {"text/html"}},
+	}
+	if _, err := f.Fetch(context.Background(), ts.URL); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if v := got.Get("Signature-Agent"); v != "https://shopify.com" {
+		t.Errorf("Signature-Agent = %q, want https://shopify.com", v)
+	}
+	if v := got.Values("Accept"); len(v) != 1 || v[0] != "text/html" {
+		t.Errorf("Accept = %v, want the custom header to replace the default", v)
+	}
+}
+
+// Custom headers are treated as credentials (e.g. a Shopify crawler access signature), so they
+// must not follow a redirect to another host — same guarantee as Basic Auth and Cookie.
+func TestFetchDoesNotLeakCustomHeadersAcrossHostRedirect(t *testing.T) {
+	var originSig, otherSig string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originSig = r.Header.Get("Signature")
+		http.Redirect(w, r, "http://other.invalid/asset", http.StatusFound)
+	}))
+	defer origin.Close()
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		otherSig = r.Header.Get("Signature")
+		fmt.Fprint(w, "ok")
+	}))
+	defer other.Close()
+
+	otherAddr := strings.TrimPrefix(other.URL, "http://")
+	dialer := &net.Dialer{}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if strings.HasPrefix(addr, "other.invalid:") {
+				addr = otherAddr
+			}
+			return dialer.DialContext(ctx, network, addr)
+		},
+	}
+
+	f := &HTTPFetcher{
+		client: &http.Client{
+			Transport:     transport,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+		headers:      http.Header{"Signature": {"sig1=:abc:"}},
+	}
+	page, err := f.Fetch(context.Background(), origin.URL)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if len(page.Redirects) != 1 {
+		t.Fatalf("got %d redirects, want 1 (fetch didn't reach the cross-host target)", len(page.Redirects))
+	}
+	if originSig != "sig1=:abc:" {
+		t.Errorf("origin Signature = %q, want sig1=:abc:", originSig)
+	}
+	if otherSig != "" {
+		t.Errorf("other-host Signature = %q, want empty (header leaked across redirect)", otherSig)
+	}
+}
+
+func TestFetchOmitsCustomHeadersWhenAuthHostAllowedRejects(t *testing.T) {
+	var gotSig string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSig = r.Header.Get("Signature")
+		fmt.Fprint(w, "ok")
+	}))
+	defer ts.Close()
+
+	f := &HTTPFetcher{
+		client:          &http.Client{},
+		ua:              NewUAPool(Options{}),
+		maxBody:         1 << 20,
+		maxRedirects:    5,
+		headers:         http.Header{"Signature": {"sig1=:abc:"}},
+		authHostAllowed: func(string) bool { return false },
+	}
+	if _, err := f.Fetch(context.Background(), ts.URL); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if gotSig != "" {
+		t.Errorf("Signature = %q, want empty (header sent to a host authHostAllowed rejected)", gotSig)
+	}
+}
+
+func TestFetchDropsCustomHeadersOnSchemeDowngrade(t *testing.T) {
+	var secureSig, plainSig string
+	transport := stubRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Scheme == "https" {
+			secureSig = req.Header.Get("Signature")
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Header:     http.Header{"Location": []string{"http://secure.invalid/asset"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+			}, nil
+		}
+		plainSig = req.Header.Get("Signature")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+
+	f := &HTTPFetcher{
+		client: &http.Client{
+			Transport:     transport,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		ua:           NewUAPool(Options{}),
+		maxBody:      1 << 20,
+		maxRedirects: 5,
+		headers:      http.Header{"Signature": {"sig1=:abc:"}},
+	}
+	if _, err := f.Fetch(context.Background(), "https://secure.invalid/"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if secureSig != "sig1=:abc:" {
+		t.Errorf("https Signature = %q, want sig1=:abc:", secureSig)
+	}
+	if plainSig != "" {
+		t.Errorf("http Signature = %q, want empty (header leaked on scheme downgrade)", plainSig)
+	}
+}
+
 type stubRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }

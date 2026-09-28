@@ -44,6 +44,16 @@ crawl:
   # operator who already has a valid session and supplies its cookie by hand. Scoped and
   # leak-guarded the same way as basic_auth; also not supported with render: "headless".
   cookie: ""
+  # Extra request headers, one "Name: value" string each — e.g. the Signature /
+  # Signature-Input / Signature-Agent triple of a Shopify crawler access key. Treated as
+  # credentials: scoped and leak-guarded the same way as basic_auth, and not supported with
+  # render: "headless". Keep secrets out of this file: point header_file at a separate file of
+  # "Name: value" lines, or name a header_profile stored at ~/.gocrawl/headers/<name>.headers
+  # (the only form the MCP server and web API accept). All three merge; for a header set more
+  # than once, headers beats header_file, which beats header_profile.
+  headers: []
+  header_file: ""
+  header_profile: ""
   timeout: "15s"        # per-request timeout
   max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report

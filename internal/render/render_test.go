@@ -59,6 +59,16 @@ func TestNewHeadlessFetcherRejectsCookie(t *testing.T) {
 	}
 }
 
+// TestNewHeadlessFetcherRejectsCustomHeaders mirrors the Basic Auth and Cookie cases: custom
+// headers are treated as credentials and Chromium can't scope them to one host.
+func TestNewHeadlessFetcherRejectsCustomHeaders(t *testing.T) {
+	opts := crawler.DefaultOptions()
+	opts.Headers = http.Header{"Signature": {"sig1=:abc:"}}
+	if _, err := NewHeadlessFetcher(opts); err == nil {
+		t.Fatal("expected an error combining custom headers with --render headless, got nil")
+	}
+}
+
 func TestHeadlessFetchCapturesCWV(t *testing.T) {
 	if !hasBrowser() {
 		t.Skip("no Chromium-class browser available on PATH")

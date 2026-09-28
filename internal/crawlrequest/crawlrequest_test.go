@@ -116,6 +116,26 @@ func TestToConfig_MapsCookie(t *testing.T) {
 	}
 }
 
+func TestToConfig_MapsHeadersAndProfile(t *testing.T) {
+	cfg, _, err := Params{
+		URL:           "https://example.com",
+		Headers:       []string{"X-Token: abc"},
+		HeaderProfile: "uk",
+	}.ToConfig()
+	if err != nil {
+		t.Fatalf("ToConfig: %v", err)
+	}
+	if len(cfg.Crawl.Headers) != 1 || cfg.Crawl.Headers[0] != "X-Token: abc" {
+		t.Errorf("Headers = %q, want [X-Token: abc]", cfg.Crawl.Headers)
+	}
+	if cfg.Crawl.HeaderProfile != "uk" {
+		t.Errorf("HeaderProfile = %q, want uk", cfg.Crawl.HeaderProfile)
+	}
+	if cfg.Crawl.HeaderFile != "" {
+		t.Errorf("HeaderFile = %q, want empty (not settable from a request)", cfg.Crawl.HeaderFile)
+	}
+}
+
 func TestToConfig_ExplicitBasicAuthWinsOverSeedUserinfo(t *testing.T) {
 	cfg, _, err := Params{URL: "https://user:pass@example.com", BasicAuth: "explicit:auth"}.ToConfig()
 	if err != nil {
