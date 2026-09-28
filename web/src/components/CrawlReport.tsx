@@ -64,9 +64,6 @@ export default function CrawlReport({ id }: { id: string }) {
   }, [])
 
   useEffect(() => {
-    setJob(null)
-    setError('')
-
     let stopped = false
     async function poll() {
       try {
@@ -87,23 +84,10 @@ export default function CrawlReport({ id }: { id: string }) {
     }
   }, [id])
 
+  // The server attaches the report once, when the crawl finishes, and App keys this component
+  // by crawl id, so the report-derived UI state below starts fresh for every report without a
+  // reset effect. A code missing from codeOn counts as shown.
   const report = job?.report
-
-  // Reset all report-derived UI state whenever a new report loads, and seed the codes filter
-  // with every code present (default: everything shown).
-  useEffect(() => {
-    if (!report) return
-    const codes = Array.from(new Set(report.issues.map((i) => i.code))).sort()
-    setCodeOn(Object.fromEntries(codes.map((c) => [c, true])))
-    setSeverityOn({ error: true, warning: true, info: true })
-    setAnalyzerFilter('')
-    setSearch('')
-    setHideResolved(false)
-    setHideNonissue(false)
-    setReview({})
-    setSelected(new Set())
-    setTab('issues')
-  }, [report])
 
   useEffect(() => {
     if (job?.status !== 'running') return

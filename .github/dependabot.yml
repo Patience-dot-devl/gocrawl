@@ -14,7 +14,15 @@ updates:
     groups:
       web-deps:
         patterns: ["*"]
+    ignore:
+      # @types/node tracks the Node major that CI and release run on (node-version in
+      # .github/workflows); bump both together by hand.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
