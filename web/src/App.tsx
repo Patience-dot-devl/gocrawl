@@ -40,7 +40,7 @@ export default function App() {
       <main>
         {route.view === 'new' && <CrawlForm onStarted={(id) => (window.location.hash = `#/crawl/${id}`)} />}
         {route.view === 'history' && <History onSelect={(id) => (window.location.hash = `#/crawl/${id}`)} />}
-        {route.view === 'crawl' && <CrawlReport id={route.id} />}
+        {route.view === 'crawl' && <CrawlReport key={route.id} id={route.id} />}
       </main>
     </div>
   )
