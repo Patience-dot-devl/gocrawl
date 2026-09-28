@@ -24,6 +24,7 @@ type HTTPFetcher struct {
 	basicAuthUser string
 	basicAuthPass string
 	cookie        string
+	headers       http.Header
 
 	// allowRedirect, when set, gates each redirect hop against crawl scope, exclude rules,
 	// and robots.txt — the same check applied to a URL before it's ever enqueued. Without
@@ -33,8 +34,8 @@ type HTTPFetcher struct {
 	// such as the robots.txt fetcher, which has no crawl scope to check against.
 	allowRedirect func(ctx context.Context, u *url.URL) bool
 
-	// authHostAllowed, when set, restricts Basic Auth and the Cookie header to hosts it
-	// approves of. This is deliberately independent of allowRedirect/crawl scope: inScope
+	// authHostAllowed, when set, restricts Basic Auth, the Cookie header, and custom headers to
+	// hosts it approves of. This is deliberately independent of allowRedirect/crawl scope: inScope
 	// stops enforcing the seed-host check the moment FollowExternal is set, but credentials
 	// configured for the seed must never follow a link off it regardless — otherwise a crawl
 	// with --external --basic-auth sends the seed's Authorization header to every third-party
@@ -47,8 +48,8 @@ type HTTPFetcher struct {
 	authHostAllowed func(host string) bool
 }
 
-// RestrictCredentialsToHost limits this fetcher's Basic Auth and Cookie header to requests
-// whose host is seedHost, or one of its subdomains when allowSubdomains is set — the same
+// RestrictCredentialsToHost limits this fetcher's Basic Auth, Cookie header, and custom
+// headers to requests whose host is seedHost, or one of its subdomains when allowSubdomains is set — the same
 // scope rule the crawl itself uses (see Engine.authHostAllowed). Exported so packages outside
 // crawler that build their own HTTPFetcher for crawl-scoped work (currently runner.Run, for
 // the sitemap/geo/wordpress analyzers) can apply the same restriction Engine.New wires onto
@@ -93,6 +94,7 @@ func NewHTTPFetcher(opts Options) *HTTPFetcher {
 		basicAuthUser: opts.BasicAuthUser,
 		basicAuthPass: opts.BasicAuthPass,
 		cookie:        opts.Cookie,
+		headers:       opts.Headers,
 	}
 }
 
@@ -152,6 +154,14 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 		}
 		if f.cookie != "" && authHostOK && schemeOK {
 			req.Header.Set("Cookie", f.cookie)
+		}
+		// Custom headers are treated as credentials (the common case is an access token or a
+		// signature such as Shopify's crawler access keys), so they get the same scope. Set
+		// after Accept so a custom Accept overrides the default.
+		if len(f.headers) > 0 && authHostOK && schemeOK {
+			for name, values := range f.headers {
+				req.Header[name] = append([]string(nil), values...)
+			}
 		}
 
 		resp, err := f.client.Do(req)

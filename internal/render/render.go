@@ -59,6 +59,11 @@ func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 		// has no per-host equivalent.
 		return nil, fmt.Errorf("--cookie is not supported with --render headless (Chromium can't scope the header to the target host, so it would be sent to every third-party resource the page loads); use raw mode instead")
 	}
+	if len(opts.Headers) > 0 {
+		// Custom headers are treated as credentials (access tokens, crawler signatures), so
+		// the same host-scoping problem applies.
+		return nil, fmt.Errorf("custom headers (--header / --header-file / --header-profile) are not supported with --render headless (Chromium can't scope them to the target host, so they would be sent to every third-party resource the page loads); use raw mode instead")
+	}
 	allocOpts := append([]chromedp.ExecAllocatorOption{},
 		chromedp.DefaultExecAllocatorOptions[:]...)
 	ua := crawler.NewUAPool(opts)

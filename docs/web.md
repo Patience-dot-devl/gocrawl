@@ -40,8 +40,9 @@ machine, and a few guards keep it that way:
 
 Binding a non-loopback `--addr` (for example `:8080` or `0.0.0.0:8080`) switches the `Host`
 check off, prints a warning, and makes the API reachable by anyone on that network. A crawl
-runs from this machine with whatever proxy, Basic Auth, or cookie the request supplies, so
-only do this behind something that authenticates (a reverse proxy, VPN, or SSH tunnel).
+runs from this machine with whatever proxy, Basic Auth, cookie, or custom headers the request
+supplies, and can name any header profile stored on it, so only do this behind something that
+authenticates (a reverse proxy, VPN, or SSH tunnel).
 
 ## Building the real UI into the binary
 
@@ -67,7 +68,9 @@ Three views, all against the API below:
   audit, and an option to ignore UTM tagging issues on external links, and an "Advanced"
   section for include/exclude regexes, User-Agent (or a rotating pool), proxy (or a rotating
   pool), HTTP Basic Auth, and a session-cookie field (a checkbox reveals a paste box) for sites
-  gated by an app-level cookie, e.g. a Shopify storefront password page. (A few CLI-only flags
+  gated by an app-level cookie, e.g. a Shopify storefront password page, and a custom-headers
+  field (inline `Name: value` lines and/or a stored header profile name, e.g. for a Shopify
+  crawler access signature). (A few CLI-only flags
   with no menu equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form
   either.) Starts a job and jumps to its report.
 - **Report** — polls the running job, then shows a partial-coverage banner when the crawl

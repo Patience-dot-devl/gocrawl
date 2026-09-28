@@ -218,6 +218,62 @@ func TestCrawlDoesNotLeakBasicAuthToExternalHost(t *testing.T) {
 	}
 }
 
+// TestCrawlScopesCustomHeadersToSeedHost is the end-to-end version of the fetcher-level
+// guards: the seed's pages and its robots.txt carry the custom headers (Shopify's bot
+// protection covers robots.txt too), while an external host followed under FollowExternal —
+// page and robots.txt alike — gets none.
+func TestCrawlScopesCustomHeadersToSeedHost(t *testing.T) {
+	var mu sync.Mutex
+	seedSigs := map[string]string{}
+	var externalSigs []string
+
+	external := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		externalSigs = append(externalSigs, r.Header.Get("Signature"))
+		mu.Unlock()
+		fmt.Fprint(w, "<html><body>external</body></html>")
+	}))
+	defer external.Close()
+	externalURL := strings.Replace(external.URL, "127.0.0.1", "localhost", 1)
+
+	seed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seedSigs[r.URL.Path] = r.Header.Get("Signature")
+		mu.Unlock()
+		if r.URL.Path == "/robots.txt" {
+			fmt.Fprint(w, "User-agent: *\nAllow: /\n")
+			return
+		}
+		fmt.Fprintf(w, `<html><body><a href="%s">external</a></body></html>`, externalURL)
+	}))
+	defer seed.Close()
+
+	opts := DefaultOptions()
+	opts.FollowExternal = true
+	opts.Headers = http.Header{"Signature": {"sig1=:abc:"}}
+
+	e := New(opts, NewHTTPFetcher(opts))
+	if _, err := e.Crawl(context.Background(), seed.URL); err != nil {
+		t.Fatalf("Crawl: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, path := range []string{"/", "/robots.txt"} {
+		if got := seedSigs[path]; got != "sig1=:abc:" {
+			t.Errorf("seed %s Signature = %q, want sig1=:abc:", path, got)
+		}
+	}
+	if len(externalSigs) == 0 {
+		t.Fatal("expected the external host to be fetched (FollowExternal not taking effect)")
+	}
+	for _, got := range externalSigs {
+		if got != "" {
+			t.Errorf("external Signature = %q, want empty (header leaked to an external host)", got)
+		}
+	}
+}
+
 // TestEngineRobotsUsesRotationPoolUserAgent guards against a real bug: robots.txt checks used
 // opts.UserAgent even when a UserAgents rotation pool superseded it for actual requests, so
 // the crawl could test the wrong identity against a per-agent robots.txt rule.

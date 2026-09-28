@@ -43,6 +43,9 @@ func newCrawlCmd() *cobra.Command {
 	f.String("proxy-rotation", "", "rotation across proxies: off, round-robin, random, or sticky-host (default round-robin)")
 	f.String("basic-auth", "", "HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)")
 	f.String("cookie", "", "raw Cookie header sent on every request, for sites gated by an app-level session cookie (e.g. a Shopify storefront password page) rather than server-level Basic Auth")
+	f.StringArray("header", nil, `extra request header as "Name: value" (repeatable), sent only to the seed host like --cookie`)
+	f.String("header-file", "", `file of extra request headers, one "Name: value" per line ('#' comments allowed)`)
+	f.String("header-profile", "", "named header file at ~/.gocrawl/headers/<name>.headers")
 	f.Bool("respect-robots", true, "obey robots.txt while crawling")
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
@@ -165,6 +168,17 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("cookie") {
 		cfg.Crawl.Cookie, _ = f.GetString("cookie")
+	}
+	if f.Changed("header") {
+		// StringArray, not StringSlice: header values routinely contain commas (e.g.
+		// Signature-Input), which StringSlice would split into separate entries.
+		cfg.Crawl.Headers, _ = f.GetStringArray("header")
+	}
+	if f.Changed("header-file") {
+		cfg.Crawl.HeaderFile, _ = f.GetString("header-file")
+	}
+	if f.Changed("header-profile") {
+		cfg.Crawl.HeaderProfile, _ = f.GetString("header-profile")
 	}
 	if f.Changed("respect-robots") {
 		cfg.Crawl.RespectRobots, _ = f.GetBool("respect-robots")

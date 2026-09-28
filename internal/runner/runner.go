@@ -160,8 +160,8 @@ func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, e
 	// engine's fetcher, so — unlike that fetcher and the robots fetcher inside crawler.New —
 	// it isn't restricted to the seed's own host by default. The sitemap analyzer fetches
 	// whatever URL robots.txt's Sitemap: directive names, which is routinely a different host
-	// (a CDN, a separate subdomain) with no FollowExternal needed to reach it, so Basic Auth
-	// and the Cookie header must be restricted here explicitly. engine.Govern then puts those
+	// (a CDN, a separate subdomain) with no FollowExternal needed to reach it, so Basic Auth,
+	// the Cookie header, and custom headers must be restricted here explicitly. engine.Govern then puts those
 	// fetches under the crawl's rate limiter and robots.txt policy, so a probe can't hit a
 	// path the crawl was told to leave alone, or run unthrottled once the crawl is over.
 	analyzerFetcher := crawler.NewHTTPFetcher(opts)

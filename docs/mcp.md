@@ -74,6 +74,8 @@ fields fall back to the built-in defaults:
 | `proxy_rotation` | string | `round-robin` | `off`, `round-robin`, `random`, or `sticky-host`. |
 | `basic_auth` | string | *(none)* | HTTP Basic Auth credentials as `user:pass`, for sites gated by server-level Basic Auth (see [Configuration](configuration.md#http-basic-auth)). |
 | `cookie` | string | *(none)* | Raw `Cookie` header sent on every request, for sites gated by an app-level session cookie rather than server-level Basic Auth, e.g. a Shopify storefront password page (see [Configuration](configuration.md#cookie-gated-sites-eg-a-shopify-storefront-password)). |
+| `headers` | string[] | *(none)* | Extra request headers as `"Name: value"`, sent only to the seed host; raw render mode only. For secrets prefer `header_profile`. |
+| `header_profile` | string | *(none)* | Name of a header file at `~/.gocrawl/headers/<name>.headers` on the server's machine, e.g. a Shopify crawler access signature. The agent passes only the name, so the secret never enters its context. A file path is deliberately not accepted (see [Custom request headers](configuration.md#custom-request-headers-eg-shopify-crawler-access-signatures)). |
 
 **Output** ([`CrawlOutput`](../internal/mcpserver/server.go)): `{ "report": <Report> }`, where
 `<Report>` is the full crawl report documented in the [Output reference](output.md).

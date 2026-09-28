@@ -44,6 +44,7 @@ func runInteractive(cmd *cobra.Command) error {
 
 		basicAuthUser, basicAuthPass, _ = strings.Cut(cfg.Crawl.BasicAuth, ":")
 		cookie                          = cfg.Crawl.Cookie
+		headerFile                      = cfg.Crawl.HeaderFile
 
 		render     = cfg.Render
 		format     = cfg.Output.Format
@@ -140,6 +141,10 @@ func runInteractive(cmd *cobra.Command) error {
 				Description("Raw Cookie header, for sites gated by an app-level session cookie (e.g. a Shopify storefront password page) rather than server-level Basic Auth. Leave blank otherwise.").
 				EchoMode(huh.EchoModePassword).
 				Value(&cookie),
+			huh.NewInput().
+				Title("Header file").
+				Description("Path to a file of extra request headers, one \"Name: value\" per line (e.g. a Shopify crawler access signature). Sent only to the crawled host; raw mode only. Leave blank otherwise.").
+				Value(&headerFile),
 		),
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
@@ -191,6 +196,7 @@ func runInteractive(cmd *cobra.Command) error {
 		cfg.Crawl.BasicAuth = ""
 	}
 	cfg.Crawl.Cookie = strings.TrimSpace(cookie)
+	cfg.Crawl.HeaderFile = strings.TrimSpace(headerFile)
 	cfg.Render = render
 	cfg.Output.Format = format
 	cfg.Output.Path = strings.TrimSpace(outputPath)

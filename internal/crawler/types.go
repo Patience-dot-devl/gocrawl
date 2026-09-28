@@ -308,7 +308,13 @@ type Options struct {
 	// or any site whose access check lives in a cookie rather than a Basic Auth realm) where
 	// the operator already has a valid session and supplies its cookie by hand. Scoped and
 	// leak-guarded identically to BasicAuthUser/Pass (see HTTPFetcher.authHostAllowed).
-	Cookie          string
+	Cookie string
+	// Headers are extra request headers sent on every request to the crawled host — e.g. an
+	// access token, or the Signature / Signature-Input / Signature-Agent triple of a Shopify
+	// crawler access key. Treated as credentials: scoped and leak-guarded identically to
+	// BasicAuthUser/Pass and Cookie. Build it with ParseHeaderLines, which refuses names the
+	// HTTP client manages itself.
+	Headers         http.Header
 	Include         []*regexp.Regexp
 	Exclude         []*regexp.Regexp
 	RespectRobots   bool

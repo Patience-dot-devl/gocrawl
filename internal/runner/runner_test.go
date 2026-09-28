@@ -167,6 +167,62 @@ func TestRunDoesNotLeakBasicAuthToSitemapHost(t *testing.T) {
 	}
 }
 
+// TestRunScopesCustomHeadersForAnalyzerFetches: the analyzer registry's fetcher must send the
+// custom headers to the seed host (a Shopify store's sitemap sits behind the same bot
+// protection as its pages) but not to a sitemap hosted elsewhere.
+func TestRunScopesCustomHeadersForAnalyzerFetches(t *testing.T) {
+	var mu sync.Mutex
+	var offHostSig string
+	seedSigs := map[string]string{}
+
+	sitemapHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		offHostSig = r.Header.Get("Signature")
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`)
+	}))
+	defer sitemapHost.Close()
+	offHostSitemap := strings.Replace(sitemapHost.URL, "127.0.0.1", "localhost", 1) + "/sitemap.xml"
+
+	var seedURL string
+	seed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seedSigs[r.URL.Path] = r.Header.Get("Signature")
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/robots.txt":
+			fmt.Fprintf(w, "User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\nSitemap: %s\n", seedURL, offHostSitemap)
+		case "/sitemap.xml":
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`)
+		default:
+			fmt.Fprint(w, "<html><head><title>Home</title></head><body>hello</body></html>")
+		}
+	}))
+	defer seed.Close()
+	seedURL = seed.URL
+
+	cfg := config.Default()
+	cfg.Crawl.Headers = []string{"Signature: sig1=:abc:"}
+	cfg.Crawl.MaxPages = 5
+
+	if _, err := Run(context.Background(), cfg, seed.URL); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, path := range []string{"/", "/robots.txt", "/sitemap.xml"} {
+		if got := seedSigs[path]; got != "sig1=:abc:" {
+			t.Errorf("seed %s Signature = %q, want sig1=:abc:", path, got)
+		}
+	}
+	if offHostSig != "" {
+		t.Errorf("off-host sitemap Signature = %q, want empty (header leaked to another host)", offHostSig)
+	}
+}
+
 // TestRunAnalyzerProbesRespectRobots: the fetcher Run hands to the analyzer registry drives
 // every extra request an analyzer makes (sitemap.xml, llms.txt, the --specialized WordPress
 // and Shopify probes). Those must obey the same robots.txt policy as the crawl, or a site
