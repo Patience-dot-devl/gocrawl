@@ -6,6 +6,29 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-28
+
+### Added
+
+- **Custom request headers (`--header`, `--header-file`, `--header-profile`).** Sites that
+  let a known crawler past their bot protection by agreed-upon headers (Shopify's crawler
+  access signatures, header-based access tokens) had no way to be crawled, since gocrawl
+  could only send a `Cookie` header and Basic Auth. Headers come from three sources, merged
+  profile → file → inline with later sources winning by name: `--header "Name: value"`
+  (repeatable), `--header-file <path>` (one `Name: value` per line, `#` comments), and
+  `--header-profile <name>` (resolved to `~/.gocrawl/headers/<name>.headers`). Custom headers
+  are treated as credentials: scoped and leak-guarded exactly like `--cookie` and
+  `--basic-auth` (seed host plus subdomains only, no scheme downgrade, re-checked on every
+  redirect hop and applied the same way to the robots.txt and analyzer fetchers) and rejected
+  under `--render headless`. Headers the HTTP client manages (`Host`, `Content-Length`,
+  `Accept-Encoding`, hop-by-hop headers) or that have their own option (`Cookie`,
+  `User-Agent`) are refused, as is `Authorization` combined with `--basic-auth`; names and
+  values are validated as HTTP field syntax, ruling out CR/LF injection. Exposed in the CLI,
+  config/YAML/env, interactive menu, MCP, web API and the web UI's crawl form. The MCP `crawl`
+  tool and web API accept inline `headers` and a `header_profile` name but not a file path,
+  so a caller cannot make gocrawl read an arbitrary local file and send it to a host of their
+  choosing.
+
 ### Fixed
 
 - **`redirects` analyzer files findings under the served URL.** `http-client-error`,
@@ -340,7 +363,8 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.5.0...v0.6.0
