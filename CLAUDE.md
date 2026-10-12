@@ -14,7 +14,7 @@ It ships as a single static binary (no runtime deps) and can also run as an MCP
 (Model Context Protocol) server over stdio so agentic tools can drive crawls, or as a web
 application (`gocrawl serve`) with a REST API and an embedded browser UI.
 
-Module path: `github.com/Patience-dot-devl/gocrawl`. Requires Go 1.26+.
+Module path: `github.com/Patience-dot-devl/gocrawl`. Requires Go 1.27+.
 
 ## The core design idea
 
