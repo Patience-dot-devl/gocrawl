@@ -9,7 +9,7 @@ How to install, build, and run `gocrawl` on **Windows**, **macOS**, and **Linux*
 
 | What | When you need it | Notes |
 | --- | --- | --- |
-| [**Go 1.26+**](https://go.dev/dl/) | To `go install` or build from source | Not needed if you download a prebuilt binary. Check with `go version`. |
+| [**Go 1.27+**](https://go.dev/dl/) | To `go install` or build from source | Not needed if you download a prebuilt binary. Check with `go version`. |
 | **Git** | Only to build from source | [git-scm.com/downloads](https://git-scm.com/downloads) |
 | **Chrome / Chromium / Edge** | Only for `--render headless` | Must be on `PATH`. See [Headless rendering](#headless-rendering-optional). |
 
@@ -202,6 +202,6 @@ crawls. The `gocrawl` command must be on the client's `PATH` (or referenced by a
 | Symptom | Fix |
 | --- | --- |
 | `command not found: gocrawl` / `'gocrawl' is not recognized` | The Go bin dir isn't on your `PATH`. Run `gocrawl path` (by full path — see [PATH setup](#putting-the-go-bin-directory-on-your-path)) to add it, then restart your terminal. |
-| `go: command not found` | Install [Go 1.26+](https://go.dev/dl/) and reopen your terminal. |
+| `go: command not found` | Install [Go 1.27+](https://go.dev/dl/) and reopen your terminal. |
 | `launching headless browser: ...` | No Chrome/Chromium/Edge on `PATH` — install one (see [Headless rendering](#headless-rendering-optional)) or drop `--render headless`. |
 | `make: command not found` (Windows) | Use the `go build` / `go install` commands directly — see [Build from source](#build-from-source). |
