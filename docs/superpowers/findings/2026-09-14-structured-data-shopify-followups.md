@@ -1,3 +1,14 @@
+---
+id: "2026-09-14-structured-data-shopify-followups"
+title: "Structured-data \u0026 Shopify analyzer — follow-up work"
+scope: "Follow-up fixes found while reviewing the structured-data and Shopify analyzers; P6–P9 still open"
+topic: "findings"
+status: "current"
+superseded_by: []
+updated: 2026-09-17
+depends_on: ["../specs/2026-09-14-structured-data-shopify-design.md", "../plans/2026-09-14-structured-data-shopify.md", "../specs/2026-09-17-dermalogica-functional-fixes-design.md"]
+sources: []
+---
 # Structured-data & Shopify analyzer — follow-up work
 
 Date: 2026-09-14

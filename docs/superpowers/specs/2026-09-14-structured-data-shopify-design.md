@@ -1,3 +1,14 @@
+---
+id: "2026-09-14-structured-data-shopify-design"
+title: "Structured-data depth and a Shopify analyzer"
+scope: "Design of the shared JSON-LD parser, deeper structured-data checks, and the Shopify analyzer"
+topic: "spec"
+status: "archived"
+superseded_by: []
+updated: 2026-09-14
+depends_on: []
+sources: []
+---
 # Structured-data depth and a Shopify analyzer
 
 Date: 2026-09-14

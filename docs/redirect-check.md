@@ -1,3 +1,14 @@
+---
+id: "redirect-check"
+title: "Redirect-rule verification"
+scope: "Checking a HubSpot-style redirect-rule CSV export against a live site with `gocrawl check-redirects`."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-07-16
+depends_on: []
+sources: []
+---
 # Verifying a redirect-rule export (`check-redirects`)
 
 `gocrawl check-redirects` verifies a redirect-rule CSV export — the format produced by

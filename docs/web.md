@@ -1,3 +1,14 @@
+---
+id: "web"
+title: "Web UI"
+scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's built on, and building the frontend from source."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-09-28
+depends_on: ["mcp.md", "output.md"]
+sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web"]
+---
 # Web UI guide
 
 gocrawl can run as a small web application: an HTTP API to start and inspect crawls, backed

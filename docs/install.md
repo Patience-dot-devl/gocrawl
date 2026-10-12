@@ -1,3 +1,14 @@
+---
+id: "install"
+title: "Install \u0026 run"
+scope: "Per-platform install on Windows, macOS, and Linux — `go install`, building from source, PATH setup, verifying, running, and the optional headless browser."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-10-12
+depends_on: ["web.md", "configuration.md", "mcp.md"]
+sources: ["../.goreleaser.yaml", "../Makefile"]
+---
 # Installing & running gocrawl
 
 How to install, build, and run `gocrawl` on **Windows**, **macOS**, and **Linux**.

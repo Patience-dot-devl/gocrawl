@@ -1,3 +1,14 @@
+---
+id: "mcp"
+title: "MCP server"
+scope: "Running gocrawl as an MCP server, registering it with clients, and the `crawl` / `list_analyzers` tool schemas."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-09-28
+depends_on: ["analyzers.md", "configuration.md", "output.md", "roadmap.md"]
+sources: ["../internal/mcpserver/server.go", "../cmd/gocrawl/mcp.go", "../internal/config/config.go"]
+---
 # MCP server guide
 
 gocrawl can run as a [Model Context Protocol](https://modelcontextprotocol.io) server over

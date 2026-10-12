@@ -8,6 +8,12 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Every document under `docs/` carries frontmatter (`id`, `title`, `scope`, `topic`,
+  `status`, `superseded_by`, `updated`, `depends_on`, `sources`), following the scheme used in
+  conductor-playground. The index in `docs/README.md` is generated from it by `make docs` and
+  now lists the design specs, plans, and findings with their status. Tests fail when a
+  document's frontmatter is invalid, its `depends_on` / `sources` no longer match its links,
+  or the index is stale.
 - `make check` runs everything CI runs on the Go code in one command. New tests in
   `internal/repocheck` and `internal/report` fail when the docs drift from the code: an
   undocumented issue code or analyzer, a missing package or CLI command in `AGENTS.md`, or a

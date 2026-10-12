@@ -1,3 +1,14 @@
+---
+id: "architecture"
+title: "Architecture"
+scope: "How the engine, analyzer pipeline, and report builder fit together; the package map; adding an analyzer."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-09-24
+depends_on: ["web.md", "configuration.md", "roadmap.md"]
+sources: ["../internal/runner/runner.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
+---
 # Architecture & developer guide
 
 gocrawl is built around one idea: **the crawl engine knows nothing about specific checks, and

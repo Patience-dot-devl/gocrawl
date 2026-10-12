@@ -1,3 +1,14 @@
+---
+id: "2026-07-13-check-redirects-design"
+title: "`check-redirects`: verify a redirect-rule export against a live site"
+scope: "Design of check-redirects: verifying a redirect-rule CSV export against a live site"
+topic: "spec"
+status: "archived"
+superseded_by: []
+updated: 2026-07-13
+depends_on: []
+sources: []
+---
 # `check-redirects`: verify a redirect-rule export against a live site
 
 Status: approved (design)

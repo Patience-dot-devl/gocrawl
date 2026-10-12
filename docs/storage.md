@@ -1,3 +1,14 @@
+---
+id: "storage"
+title: "Storage \u0026 comparison"
+scope: "Saving crawls (`--save`), listing them (`gocrawl history`), and diffing them over time (`gocrawl compare`, with a `--fail-on-new` CI gate)."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-09-17
+depends_on: ["output.md", "configuration.md"]
+sources: []
+---
 # Crawl storage & comparison
 
 gocrawl can save crawls to disk and diff them over time, so you can answer "did my fixes

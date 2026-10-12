@@ -1,3 +1,14 @@
+---
+id: "2026-07-29-ignore-external-utm-tagging"
+title: "Ignore External UTM Tagging Implementation Plan"
+scope: "Task-by-task plan that made the utm analyzer skip tagging warnings on external links by default"
+topic: "plan"
+status: "archived"
+superseded_by: []
+updated: 2026-07-29
+depends_on: []
+sources: []
+---
 # Ignore External UTM Tagging Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
