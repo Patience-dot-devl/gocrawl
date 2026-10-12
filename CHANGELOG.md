@@ -6,6 +6,23 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `make check` runs everything CI runs on the Go code in one command. New tests in
+  `internal/repocheck` and `internal/report` fail when the docs drift from the code: an
+  undocumented issue code or analyzer, a missing package or CLI command in `AGENTS.md`, or a
+  broken relative Markdown link.
+- A pull request template with the contribution checklist.
+
+### Changed
+
+- Agent instructions moved from `CLAUDE.md` to `AGENTS.md`, so every coding agent reads the
+  same file. `CLAUDE.md` now only imports it.
+
+### Fixed
+
+- `docs/analyzers.md` now lists the `http-body-truncated` and `sitemap-truncated` codes.
+
 ## [0.10.0] - 2026-10-12
 
 ### Changed

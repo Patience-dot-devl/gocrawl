@@ -72,6 +72,7 @@ every page. (The analyzer's internal package is `httpx`; its registered name is 
 | `http-redirect-loop` | error | A URL repeats in the redirect chain | `chain` |
 | `http-redirect-chain` | warning | More than one redirect before the final URL | `hops`, `chain` |
 | `http-redirect` | info | A single redirect | `to`, `status` |
+| `http-body-truncated` | warning | Body cut off before it was fully read (hit `crawl.max_body_bytes`, or the connection failed partway); other findings on the page may be false positives | — |
 | `http-slow-response` | warning | Response slower than the threshold (default **2s**) | `duration_ms` |
 | `http-mixed-content` | warning | HTTPS page loads `http://` subresources | `count`, `examples` |
 
@@ -133,6 +134,7 @@ Looks for sitemaps declared in `robots.txt` plus the conventional `/sitemap.xml`
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |
 | `sitemap-invalid` | warning | A fetched sitemap parsed as neither a `urlset` nor an index | — |
+| `sitemap-truncated` | warning | A declared sitemap exceeds `crawl.max_body_bytes` and was cut off before it could be parsed | — |
 | `sitemap-missing` | warning | No sitemap found at any candidate location | — |
 | `sitemap-coverage` | info | Cross-check of sitemap URLs vs. crawled pages | `sitemap_urls`, `crawled_pages`, `crawled_not_in_sitemap`, `in_sitemap_not_crawled` |
 
