@@ -6,6 +6,8 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-12
+
 ### Changed
 
 - **Go 1.27 is now required to build from source.** `chromedp` v0.19 (from v0.16) and
@@ -375,7 +377,8 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.6.0...v0.7.0
