@@ -29,7 +29,7 @@ over every page — checking technical SEO, redirects, broken links, `robots.txt
 
 ## Install
 
-Works on **Windows, macOS, and Linux**. With [Go 1.26+](https://go.dev/dl/):
+Works on **Windows, macOS, and Linux**. With [Go 1.27+](https://go.dev/dl/):
 
 ```sh
 go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@latest

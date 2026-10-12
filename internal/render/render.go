@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	cdppage "github.com/chromedp/cdproto/page"
@@ -83,7 +84,7 @@ func NewHeadlessFetcher(opts crawler.Options) (*HeadlessFetcher, error) {
 	// Warm the browser so a missing/broken Chromium surfaces here, not mid-crawl.
 	warmCtx, warmCancel := chromedp.NewContext(allocCtx, chromedp.WithErrorf(quietErrorf))
 	defer warmCancel()
-	if err := chromedp.Run(warmCtx); err != nil {
+	if err := chromedp.Do(warmCtx); err != nil {
 		allocCancel()
 		return nil, fmt.Errorf("launching headless browser: %w", err)
 	}
@@ -115,10 +116,10 @@ func hostOf(rawURL string) string {
 
 // quietErrorf is chromedp's error logger with the benign "unhandled node event"
 // noise filtered out. chromedp logs that for CDP DOM events its version doesn't
-// model (e.g. *dom.EventAdoptedStyleSheetsModified, emitted by sites using
-// constructable stylesheets). It has no effect on rendering, so we drop it and
-// pass everything else through to the default logger.
-func quietErrorf(format string, args ...interface{}) {
+// model, which happens whenever Chromium adds one ahead of chromedp. It has no
+// effect on rendering, so we drop it and pass everything else through to the
+// default logger.
+func quietErrorf(format string, args ...any) {
 	if strings.Contains(format, "unhandled node event") {
 		return
 	}
@@ -167,14 +168,79 @@ const maxCapturedRequests = 400
 
 // navState tracks main-document network activity across redirects, plus every outbound
 // request URL (bounded) so analyzers can tell which tags actually fired.
+//
+// Requests and responses arrive on two separate event iterators, read by two goroutines, so
+// a response can be handled before the request that identifies the main document. responses
+// therefore keeps every document response by request ID, and the main document's is picked
+// out once both iterators have finished.
 type navState struct {
 	mu        sync.Mutex
 	navID     network.RequestID
 	current   string
 	redirects []crawler.Redirect
-	status    int
-	headers   network.Headers
+	responses map[network.RequestID]*network.Response
 	requests  []string
+}
+
+// onRequest records one Network.requestWillBeSent event.
+func (s *navState) onRequest(e network.EventRequestWillBeSent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.requests) < maxCapturedRequests && e.Request != nil {
+		s.requests = append(s.requests, e.Request.URL)
+	}
+	if e.Type != network.ResourceTypeDocument {
+		return
+	}
+	if s.navID == "" {
+		s.navID = e.RequestID
+	}
+	if e.RequestID != s.navID {
+		return
+	}
+	if e.RedirectResponse != nil {
+		s.redirects = append(s.redirects, crawler.Redirect{
+			From:   s.current,
+			To:     e.DocumentURL,
+			Status: int(e.RedirectResponse.Status),
+		})
+		s.current = e.DocumentURL
+	}
+}
+
+// onResponse records one Network.responseReceived event for a document.
+func (s *navState) onResponse(e network.EventResponseReceived) {
+	if e.Type != network.ResourceTypeDocument || e.Response == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.responses[e.RequestID] = e.Response
+}
+
+// listen reads the network events of the tab in ctx into the state until ctx ends. The
+// returned func waits for both readers to stop; call it after cancelling ctx.
+func (s *navState) listen(ctx context.Context) (wait func()) {
+	requests := chromedp.Events(ctx, network.RequestWillBeSent)
+	responses := chromedp.Events(ctx, network.ResponseReceived)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for e, err := range requests {
+			if err != nil {
+				return
+			}
+			s.onRequest(e)
+		}
+	})
+	wg.Go(func() {
+		for e, err := range responses {
+			if err != nil {
+				return
+			}
+			s.onResponse(e)
+		}
+	})
+	return wg.Wait
 }
 
 func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler.Page, error) {
@@ -205,45 +271,10 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		rawCh <- nil
 	}()
 
-	state := &navState{current: rawURL}
-	chromedp.ListenTarget(runCtx, func(ev interface{}) {
-		switch e := ev.(type) {
-		case *network.EventRequestWillBeSent:
-			state.mu.Lock()
-			defer state.mu.Unlock()
-			if len(state.requests) < maxCapturedRequests {
-				state.requests = append(state.requests, e.Request.URL)
-			}
-			if e.Type != network.ResourceTypeDocument {
-				return
-			}
-			if state.navID == "" {
-				state.navID = e.RequestID
-			}
-			if e.RequestID != state.navID {
-				return
-			}
-			if e.RedirectResponse != nil {
-				state.redirects = append(state.redirects, crawler.Redirect{
-					From:   state.current,
-					To:     e.DocumentURL,
-					Status: int(e.RedirectResponse.Status),
-				})
-				state.current = e.DocumentURL
-			}
-		case *network.EventResponseReceived:
-			if e.Type != network.ResourceTypeDocument {
-				return
-			}
-			state.mu.Lock()
-			defer state.mu.Unlock()
-			if state.navID == "" || e.RequestID != state.navID {
-				return
-			}
-			state.status = int(e.Response.Status)
-			state.headers = e.Response.Headers
-		}
-	})
+	state := &navState{current: rawURL, responses: make(map[network.RequestID]*network.Response)}
+	listenCtx, stopListening := context.WithCancel(runCtx)
+	defer stopListening()
+	waitListeners := state.listen(listenCtx)
 
 	var (
 		htmlBody string
@@ -251,41 +282,53 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 		dlJSON   string
 		cookies  []crawler.Cookie
 	)
-	actions := []chromedp.Action{network.Enable()}
+	steps := []chromedp.Action[chromedp.Void]{chromedp.Func(func(c context.Context, t *chromedp.Target) error {
+		_, err := cdp.Call(c, t, network.Enable, network.EnableParams{})
+		return err
+	})}
 	// When the UA pool rotates, pick this page's agent and override it for the navigation. A
 	// single-agent pool is already set browser-wide at allocation, so we skip the override.
 	if h.ua.Rotates() {
 		if ua := h.ua.Next(hostOf(rawURL)); ua != "" {
-			actions = append(actions, emulation.SetUserAgentOverride(ua))
+			steps = append(steps, chromedp.Func(func(c context.Context, t *chromedp.Target) error {
+				_, err := cdp.Call(c, t, emulation.SetUserAgentOverride, emulation.SetUserAgentOverrideParams{UserAgent: ua})
+				return err
+			}))
 		}
 	}
-	actions = append(actions,
-		chromedp.ActionFunc(func(c context.Context) error {
-			_, err := cdppage.AddScriptToEvaluateOnNewDocument(cwvBootstrap).Do(c)
+	steps = append(steps,
+		chromedp.Func(func(c context.Context, t *chromedp.Target) error {
+			_, err := cdp.Call(c, t, cdppage.AddScriptToEvaluateOnNewDocument,
+				cdppage.AddScriptToEvaluateOnNewDocumentParams{Source: cwvBootstrap})
 			return err
 		}),
 		chromedp.Navigate(rawURL),
-		chromedp.WaitReady("body", chromedp.ByQuery),
+		chromedp.WaitReady(chromedp.CSS("body")),
 		// Allow paint, layout shifts, long tasks, and tag-manager pushes to settle before
 		// reading metrics and the dataLayer.
 		chromedp.Sleep(2*time.Second),
-		chromedp.Evaluate(cwvReadScript, &metrics),
-		chromedp.Evaluate(dataLayerReadScript, &dlJSON),
+		assign(chromedp.Evaluate[cwvJS](cwvReadScript), &metrics),
+		assign(chromedp.Evaluate[string](dataLayerReadScript), &dlJSON),
 		// Read the cookie jar through CDP rather than document.cookie: this sees HttpOnly and
 		// third-party cookies too, which is most of what a tracker actually drops. The crawl
 		// never answers a consent banner, so what's here is the site's pre-consent state.
-		chromedp.ActionFunc(func(c context.Context) error {
-			jar, err := storage.GetCookies().Do(c)
+		chromedp.Func(func(c context.Context, t *chromedp.Target) error {
+			jar, err := cdp.Call(c, t, storage.GetCookies, storage.GetCookiesParams{})
 			if err != nil {
 				// A cookie-jar read failing shouldn't cost us the page's Core Web Vitals.
 				return nil
 			}
-			cookies = convertCookies(jar)
+			cookies = convertCookies(jar.Cookies)
 			return nil
 		}),
-		chromedp.OuterHTML("html", &htmlBody, chromedp.ByQuery),
+		assign(chromedp.OuterHTML(chromedp.CSS("html")), &htmlBody),
 	)
-	if err := chromedp.Run(runCtx, actions...); err != nil {
+	err := chromedp.Do(runCtx, steps...)
+	// Stop the event readers before reading state: by now the document's request and response
+	// events were handled long ago (the page loaded, then settled for two seconds).
+	stopListening()
+	waitListeners()
+	if err != nil {
 		return nil, err
 	}
 	dlPresent, dlEntries := parseDataLayer(dlJSON)
@@ -300,8 +343,12 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 	}
 	state.mu.Lock()
 	p.FinalURL = state.current
-	p.StatusCode = state.status
-	p.Header = headersToHTTP(state.headers)
+	var headers network.Headers
+	if resp := state.responses[state.navID]; resp != nil {
+		p.StatusCode = int(resp.Status)
+		headers = resp.Headers
+	}
+	p.Header = headersToHTTP(headers)
 	p.Redirects = append([]crawler.Redirect(nil), state.redirects...)
 	reqs := append([]string(nil), state.requests...)
 	state.mu.Unlock()
@@ -339,6 +386,19 @@ func (h *HeadlessFetcher) headless(ctx context.Context, rawURL string) (*crawler
 	}
 	p.Render = render
 	return p, nil
+}
+
+// assign wraps an action that returns a value into one that stores the value in dst, so a
+// value-returning action can run as one step of chromedp.Do.
+func assign[T any](a chromedp.Action[T], dst *T) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+		v, err := a(ctx, t)
+		if err != nil {
+			return err
+		}
+		*dst = v
+		return nil
+	})
 }
 
 // underRendered reports whether a headless snapshot is suspiciously smaller than the raw HTML,

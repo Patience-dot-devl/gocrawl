@@ -6,6 +6,18 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **Go 1.27 is now required to build from source.** `chromedp` v0.19 (from v0.16) and
+  `cdproto` v0.157.6 need it. `chromedp` replaced its API with typed commands, generic
+  actions, and event iterators, so the headless renderer was ported to it. Rendering output
+  is unchanged.
+
+### Security
+
+- Upgraded `golang.org/x/net` (v0.59.0 → v0.61.0) and the Go toolchain (1.26.6 → 1.27.2),
+  clearing `govulncheck` findings GO-2026-6612, GO-2026-6613, and GO-2026-6617.
+
 ## [0.9.0] - 2026-09-28
 
 ### Added
