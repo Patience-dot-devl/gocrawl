@@ -11,6 +11,6 @@
 - [ ] `make check` passes (gofmt, vet, build, `test -race`, golangci-lint, docs-drift tests)
 - [ ] New behavior has tests; new analyzer checks have an HTML fixture under `testdata/`
 - [ ] New or changed issue codes have an entry in `internal/report/explanations.go` and a row in `docs/analyzers.md`
-- [ ] Relevant docs updated (`docs/`, `README.md`, `AGENTS.md` package map or CLI list)
+- [ ] Relevant docs updated (`docs/`, `README.md`, `AGENTS.md` package map or CLI list); `updated` bumped and `make docs` run for changed docs
 - [ ] User-visible change noted under `## [Unreleased]` in `CHANGELOG.md`
 - [ ] No credentials, tokens, or personal data added

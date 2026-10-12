@@ -1,3 +1,14 @@
+---
+id: "analyzers"
+title: "Analyzers"
+scope: "What each of the twenty-five analyzers checks (technical SEO + SEA + AI search + WordPress + Shopify), with every issue code, severity, threshold, and `data` field."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-10-12
+depends_on: ["output.md", "configuration.md", "architecture.md", "roadmap.md"]
+sources: ["../internal/runner/runner.go", "../internal/analyze/seo/seo.go", "../internal/analyze/httpx/httpx.go", "../internal/analyze/links/links.go", "../internal/analyze/robotscheck/robotscheck.go", "../internal/analyze/sitemap/sitemap.go", "../internal/analyze/structured/", "../internal/analyze/schemaorg/", "../internal/analyze/perf/perf.go", "../internal/analyze/images/images.go", "../internal/analyze/urls/urls.go", "../internal/analyze/security/", "../internal/analyze/pagination/pagination.go", "../internal/analyze/hreflang/hreflang.go", "../internal/analyze/amp/amp.go", "../internal/analyze/duplicates/duplicates.go", "../internal/analyze/content/content.go", "../internal/analyze/botwall/botwall.go", "../internal/analyze/wordpress/wordpress.go", "../internal/analyze/shopify/", "../internal/analyze/utm/utm.go", "../internal/analyze/tracking/tracking.go", "../internal/analyze/datalayer/datalayer.go", "../internal/analyze/landing/landing.go", "../internal/analyze/consent/", "../internal/analyze/aeo/aeo.go", "../internal/analyze/geo/geo.go"]
+---
 # Analyzer reference
 
 An **analyzer** is a single, self-contained check. Each one consumes the crawl result and

@@ -1,3 +1,14 @@
+---
+id: "2026-09-17-dermalogica-functional-fixes-design"
+title: "Fixes from the dermalogica.nl functional test"
+scope: "Fixes to false positives found by a live crawl of a Shopify store, accepted on 2026-09-17"
+topic: "spec"
+status: "archived"
+superseded_by: []
+updated: 2026-09-17
+depends_on: ["2026-09-14-structured-data-shopify-design.md"]
+sources: []
+---
 # Fixes from the dermalogica.nl functional test
 
 Date: 2026-09-17

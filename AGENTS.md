@@ -87,7 +87,7 @@ analyzers, and hands everything to the report builder.
 | `internal/store` | Persists crawl reports under `<root>/<host>/<timestamp>.json` and reads them back for `history`, `compare`, and `render`. |
 | `internal/diff` | Compares two reports: new, resolved, and persisting issues plus summary and page-set deltas. Pure transform behind `compare`. |
 | `internal/redirectcheck` | Verifies a redirect-rule CSV export against a live site and its `sitemap.xml`; backs `check-redirects` (see `docs/redirect-check.md`). |
-| `internal/repocheck` | Test-only package: checks that docs, `AGENTS.md`, and the code agree (analyzer sections, package map, CLI commands, relative links). |
+| `internal/repocheck` | Test-only package: checks that docs, `AGENTS.md`, and the code agree (analyzer sections, package map, CLI commands, relative links, docs frontmatter and index). |
 | `internal/atomicfile` | Atomic file writes (temp file + rename) so a failed overwrite never corrupts a previous artifact. |
 | `internal/report` | Builds the `Report` and serializes it (JSON, CSV, HTML); issue explanations live here. |
 | `internal/mcpserver` | Exposes `crawl` and `list_analyzers` over MCP. |
@@ -169,6 +169,7 @@ make test     # go test ./...
 make vet      # go vet ./...
 make lint     # golangci-lint run (pinned to CI's version)
 make check    # everything CI runs on Go code, in one command; run before finishing
+make docs     # regenerate docs frontmatter links and the docs/README.md index
 make run      # build + crawl https://example.com --depth 1
 ```
 
@@ -208,3 +209,32 @@ Tests enforce the parts of the docs that drift most:
 
 `docs/superpowers/` holds dated design specs and plans. They are a historical record: do not
 rewrite them to match today's code, and the link check skips them.
+
+### Docs frontmatter
+
+Every document under `docs/` (except the `docs/README.md` index) starts with frontmatter, in
+the scheme the conductor-playground repository uses, minus its client-specific keys:
+
+```yaml
+---
+id: "analyzers"                  # unique, permanent; reference docs use the file stem
+title: "Analyzers"               # the link text in the index
+scope: "What each analyzer checks, with every issue code"   # the index's "What's in it"
+topic: "reference"               # reference | spec | plan | findings (must match the folder)
+status: "current"                # current | superseded | archived
+superseded_by: []                # set exactly when status is superseded
+updated: 2026-10-12              # YYYY-MM-DD; bump it when you change the content
+depends_on: ["output.md"]        # generated: links to other docs/ documents
+sources: ["../internal/runner/runner.go"]   # generated: links to anything else in the repo
+---
+```
+
+- `depends_on` and `sources` are derived from the links in the body; don't edit them by
+  hand. `make docs` rewrites them and regenerates the index in `docs/README.md` (between the
+  `index:start` / `index:end` markers). The tests fail when either is stale.
+- Values are a small YAML subset (strings, dates, flow `[a, b]` or `- item` block lists), so
+  Obsidian's Properties panel can edit them.
+- A new reference doc also needs its `id` in `referenceOrder` in
+  `internal/repocheck/docs_test.go`, which sets the index's reading order.
+- Implemented specs and plans are `archived`. A spec still waiting to be built, or findings
+  with open items, stay `current`.

@@ -1,3 +1,14 @@
+---
+id: "2026-07-29-ignore-external-utm-tagging-design"
+title: "Ignore UTM tagging-quality warnings on external links, by default"
+scope: "Design of the ignore_external_tagging option for the utm analyzer"
+topic: "spec"
+status: "archived"
+superseded_by: []
+updated: 2026-07-29
+depends_on: []
+sources: []
+---
 # Ignore UTM tagging-quality warnings on external links, by default
 
 Status: approved (design)

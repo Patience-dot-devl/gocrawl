@@ -1,3 +1,14 @@
+---
+id: "2026-10-09-structured-opportunity-ranking-design"
+title: "Ranking structured-data opportunities"
+scope: "Proposal to rank missing-structured-data findings by fix, not by URL; approved, not yet built"
+topic: "spec"
+status: "current"
+superseded_by: []
+updated: 2026-10-12
+depends_on: []
+sources: []
+---
 # Ranking structured-data opportunities
 
 Date: 2026-10-09

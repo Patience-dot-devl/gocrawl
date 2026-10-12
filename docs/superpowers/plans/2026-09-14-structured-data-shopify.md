@@ -1,3 +1,14 @@
+---
+id: "2026-09-14-structured-data-shopify"
+title: "Structured-Data Depth and Shopify Analyzer Implementation Plan"
+scope: "Task-by-task plan that built the schemaorg parser and the Shopify analyzer"
+topic: "plan"
+status: "archived"
+superseded_by: []
+updated: 2026-09-14
+depends_on: []
+sources: []
+---
 # Structured-Data Depth and Shopify Analyzer Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

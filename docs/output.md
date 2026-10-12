@@ -1,3 +1,14 @@
+---
+id: "output"
+title: "Output / report"
+scope: "The JSON, CSV, and HTML report formats — `Report`, `Summary`, `Issue` — with examples."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-09-17
+depends_on: ["mcp.md", "analyzers.md", "storage.md", "configuration.md"]
+sources: ["../internal/report/report.go", "../internal/sitemapgen", "../internal/analyze/analyze.go", "../internal/crawler/types.go"]
+---
 # Output / report reference
 
 A crawl produces a single **report**, written as JSON (default), CSV, or HTML. The report is

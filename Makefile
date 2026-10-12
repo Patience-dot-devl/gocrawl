@@ -4,7 +4,7 @@ PKG := ./...
 # with this repo's Go toolchain, so a stale brew-installed binary can't break `make lint`.
 GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
-.PHONY: build test vet lint check run tidy clean install web-build
+.PHONY: build test vet lint check docs run tidy clean install web-build
 
 # Plain `go build` embeds the committed placeholder UI (see internal/webserver/assets.go) and
 # needs no Node. Run `make web-build` first to embed the real web UI in the binary.
@@ -24,6 +24,12 @@ vet:
 
 lint:
 	$(GOLANGCI_LINT) run
+
+# Regenerates the generated parts of docs/: each document's depends_on and sources
+# frontmatter, and the index in docs/README.md. Run after adding a doc or changing its links,
+# title, scope, status, or updated date.
+docs:
+	go test ./internal/repocheck -run 'TestDocs' -update
 
 # Everything CI runs on the Go code, in one command. AGENTS.md asks agents to run this before
 # reporting work as done; the tests include the docs-drift checks in internal/repocheck.

@@ -1,3 +1,14 @@
+---
+id: "2026-07-13-check-redirects"
+title: "check-redirects Implementation Plan"
+scope: "Task-by-task plan that built the check-redirects command"
+topic: "plan"
+status: "archived"
+superseded_by: []
+updated: 2026-07-13
+depends_on: []
+sources: []
+---
 # check-redirects Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

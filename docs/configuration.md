@@ -1,3 +1,14 @@
+---
+id: "configuration"
+title: "Configuration"
+scope: "Every option, flag, env var, and default; config layering; analyzer selection; annotated example config."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-09-28
+depends_on: ["output.md", "analyzers.md", "storage.md", "mcp.md"]
+sources: ["../internal/config/config.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../configs/example.yaml"]
+---
 # Configuration reference
 
 gocrawl reads its settings from four layers. Later layers override earlier ones:

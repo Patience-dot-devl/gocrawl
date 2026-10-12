@@ -1,3 +1,14 @@
+---
+id: "roadmap"
+title: "Roadmap"
+scope: "What's shipped (incl. the SEA and AI-search analyzers), what's in progress, and what's planned."
+topic: "reference"
+status: "current"
+superseded_by: []
+updated: 2026-09-17
+depends_on: ["analyzers.md", "architecture.md", "output.md", "mcp.md", "configuration.md"]
+sources: ["../internal/crawler", "../internal/store", "../internal/diff"]
+---
 # Feature roadmap
 
 Where gocrawl is today and where it's headed. This is a direction document, not a dated
