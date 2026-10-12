@@ -51,12 +51,14 @@ var queryDependentAnalyzers = []string{"utm", "landing", "wordpress"}
 // BuildRegistry's parameter list into a row of anonymous booleans.
 type RegistryOptions struct {
 	// Specialized enables the lower-confidence AI-search heuristics (AEO direct-answer-lead,
-	// GEO quotable-density) and the WordPress analyzer's active endpoint probes.
+	// GEO quotable-density), the WordPress analyzer's active endpoint probes, and the Shopify
+	// analyzer's /products.json probe.
 	Specialized bool
 	// SecurityAudit enables the security analyzer's TLS, certificate, and cookie audit.
 	SecurityAudit bool
 	// IgnoreExternalTagging suppresses the utm analyzer's tagging-quality warnings for
-	// links leaving the crawled domain. On by default.
+	// links leaving the crawled domain. Unlike the other fields it is on by default in
+	// config (analyzers.ignore_external_tagging); the struct's zero value turns it off.
 	IgnoreExternalTagging bool
 }
 

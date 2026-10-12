@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -26,6 +27,27 @@ func TestExplanationsComplete(t *testing.T) {
 		if e.Fix == "" {
 			t.Errorf("explanation %q has empty Fix", code)
 		}
+	}
+}
+
+// TestExplainedCodesDocumented asserts that every code with an explanation is listed in the
+// analyzer reference. TestAllAnalyzerCodesHaveExplanations closes the code-to-explanation gap;
+// this closes the explanation-to-docs gap, which let http-body-truncated and sitemap-truncated
+// ship with no row in docs/analyzers.md.
+func TestExplainedCodesDocumented(t *testing.T) {
+	doc, err := os.ReadFile("../../docs/analyzers.md")
+	if err != nil {
+		t.Fatalf("reading analyzer reference: %v", err)
+	}
+	var missing []string
+	for code := range explanations {
+		if !strings.Contains(string(doc), "`"+code+"`") {
+			missing = append(missing, code)
+		}
+	}
+	sort.Strings(missing)
+	if len(missing) > 0 {
+		t.Errorf("explained issue codes missing from docs/analyzers.md: %v", missing)
 	}
 }
 

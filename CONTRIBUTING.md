@@ -12,7 +12,9 @@ go build ./...
 go test ./...
 ```
 
-Useful Make targets: `make build`, `make test`, `make vet`, `make lint`.
+Useful Make targets: `make build`, `make test`, `make vet`, `make lint`. Before opening a PR,
+run `make check`: it runs everything CI runs on the Go code, including tests that fail when
+the docs drift from the code. AI coding agents: see [`AGENTS.md`](AGENTS.md).
 
 ## Adding a new analyzer
 
@@ -56,7 +58,7 @@ git push origin vX.Y.Z
 
 ## Guidelines
 
-- Run `go vet ./...` and `gofmt` before opening a PR.
+- Run `make check` before opening a PR.
 - Keep analyzers focused and side-effect free; emit `analyze.Issue` values rather than
   printing.
 - Add tests for new behavior.
