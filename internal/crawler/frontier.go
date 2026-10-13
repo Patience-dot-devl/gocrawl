@@ -40,6 +40,13 @@ func (f *frontier) push(t task) {
 	f.cond.Signal()
 }
 
+// queued reports how many tasks are waiting to be handed to a worker.
+func (f *frontier) queued() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.queue)
+}
+
 // next blocks until a task is available, ctx is done, or the frontier is exhausted (nothing
 // queued and nothing pending), returning ok=false in the latter two cases. Checking ctx first
 // on every wake means a cancellation abandons any remaining queued work immediately rather

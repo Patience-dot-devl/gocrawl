@@ -21,6 +21,11 @@ type Engine struct {
 	robots   *robotsManager
 	limiter  *AdaptiveLimiter
 	seedHost string
+
+	// progMu serializes OnProgress calls and guards lastProgress, the snapshot that
+	// state-only events (pause, resume) re-send with fresh live fields.
+	progMu       sync.Mutex
+	lastProgress Progress
 }
 
 // New creates an Engine. fetcher is used to retrieve pages (raw or headless); a separate
@@ -102,6 +107,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		Opts:      e.opts,
 		index:     make(map[string]*Page),
 	}
+	e.progMu.Lock()
+	e.lastProgress = Progress{}
+	e.progMu.Unlock()
 
 	var (
 		mu        sync.Mutex // guards visited, result.Pages, result.index, notCrawled, limit flags
@@ -204,6 +212,18 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			// directly at it doesn't trigger a second fetch (and duplicate per-page
 			// issues) for content already covered by this page.
 			visited[finalNorm] = true
+		}
+		if e.opts.OnProgress != nil {
+			// Emitted under mu so events arrive in recording order: Fetched rises by exactly
+			// one per event, which is what lets a consumer append one tape tick per call.
+			e.emitPage(Progress{
+				Fetched:    len(result.Pages),
+				Queued:     fr.queued(),
+				CurrentURL: page.RequestedURL,
+				FinalURL:   page.FinalURL,
+				Status:     progressStatus(page),
+				DurationMS: page.Duration.Milliseconds(),
+			})
 		}
 		mu.Unlock()
 

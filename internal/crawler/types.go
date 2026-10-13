@@ -337,6 +337,11 @@ type Options struct {
 	// partial result (see Coverage.DurationLimitReached), the same way a canceled context
 	// (e.g. an operator's Ctrl-C) does.
 	MaxDuration time.Duration
+	// OnProgress, when non-nil, is called after each page is recorded with a snapshot of the
+	// crawl's progress. Calls are serialized and arrive in recording order, so Fetched rises by
+	// exactly one per page event. It runs on a worker goroutine while the engine holds its
+	// internal locks: it must return quickly and must never call back into the Engine.
+	OnProgress func(Progress)
 }
 
 // DefaultOptions returns conservative, polite defaults. By default the crawl is bounded by
