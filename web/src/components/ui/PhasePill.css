@@ -1,0 +1,55 @@
+.phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 10px 1px 8px;
+  font-size: 13px;
+  color: var(--ink);
+  border: 1px solid var(--field);
+  border-radius: 999px;
+}
+
+.phase::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--violet);
+}
+
+.phase-crawling::before,
+.phase-done::before {
+  background: var(--s2);
+}
+
+.phase-paused {
+  border-color: var(--s3);
+}
+
+.phase-paused::before {
+  background: var(--s3);
+}
+
+.phase-stopped::before {
+  background: var(--todo);
+}
+
+.phase-failed {
+  border-color: var(--s5);
+}
+
+.phase-failed::before {
+  background: var(--s5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .phase-crawling::before {
+    animation: phase-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes phase-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

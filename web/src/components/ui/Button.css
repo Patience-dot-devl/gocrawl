@@ -1,0 +1,64 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--field);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--ink-2);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-secondary {
+  font-weight: 400;
+}
+
+.btn-go {
+  color: var(--on-fill);
+  background: var(--s2);
+  border-color: var(--s2);
+}
+
+.btn-stop {
+  color: var(--on-fill);
+  background: var(--s5);
+  border-color: var(--s5);
+}
+
+.btn-primary {
+  color: var(--on-fill);
+  background: var(--violet);
+  border-color: var(--violet);
+}
+
+.btn-pause {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--s3);
+}
+
+.btn-go:hover:not(:disabled),
+.btn-stop:hover:not(:disabled),
+.btn-primary:hover:not(:disabled),
+.btn-pause:hover:not(:disabled) {
+  border-color: var(--ink);
+}
