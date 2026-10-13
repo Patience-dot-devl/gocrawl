@@ -21,6 +21,13 @@ type RunOptions struct {
 	AdaptiveDelay bool
 	// Stats, if non-nil, is filled in with adaptive-delay activity once Run returns.
 	Stats *RunStats
+	// OnRow, if non-nil, is called once for every rule as its row completes. The arguments are
+	// the number of rows done so far and the total number of rules. Calls are serialized
+	// (never concurrent), and done rises by one per call, ending at total. Rows skipped
+	// without a fetch (external, dynamic pattern, unclassifiable) count too. OnRow is not
+	// called when Run fails before checking rows (no sitemap). It runs on a worker goroutine
+	// and holds up the other workers' progress reports, so keep it short.
+	OnRow func(done, total int)
 }
 
 // RunStats reports adaptive-delay activity for a Run call.
@@ -49,6 +56,20 @@ func Run(ctx context.Context, rules []Rule, opts RunOptions) ([]RowResult, error
 		concurrency = 1
 	}
 
+	// rowDone reports one finished row. Skipped rows finish on this goroutine, checked rows on
+	// worker goroutines; the mutex makes the count and the callback one ordered sequence.
+	var progressMu sync.Mutex
+	done, total := 0, len(rules)
+	rowDone := func() {
+		if opts.OnRow == nil {
+			return
+		}
+		progressMu.Lock()
+		defer progressMu.Unlock()
+		done++
+		opts.OnRow(done, total)
+	}
+
 	results := make([]RowResult, len(rules))
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -57,14 +78,17 @@ func Run(ctx context.Context, rules []Rule, opts RunOptions) ([]RowResult, error
 		scope, err := Classify(rule, opts.Domain)
 		if err != nil {
 			results[i] = RowResult{Verdict: VerdictError, Notes: []string{"could not classify rule: " + err.Error()}}
+			rowDone()
 			continue
 		}
 		if scope == ScopeExternal {
 			results[i] = RowResult{Scope: ScopeExternal, Verdict: VerdictSkippedExternal}
+			rowDone()
 			continue
 		}
 		if scope == ScopeDynamic {
 			results[i] = RowResult{Scope: ScopeDynamic, Verdict: VerdictSkippedDynamic}
+			rowDone()
 			continue
 		}
 
@@ -74,6 +98,7 @@ func Run(ctx context.Context, rules []Rule, opts RunOptions) ([]RowResult, error
 			defer wg.Done()
 			defer func() { <-sem }()
 			results[i] = CheckRule(ctx, fetcher, opts.Domain, rule, sitemapURLs)
+			rowDone()
 		}(i, rule)
 	}
 	wg.Wait()
