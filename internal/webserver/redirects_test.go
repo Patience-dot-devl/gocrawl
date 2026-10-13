@@ -3,6 +3,7 @@ package webserver
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
@@ -416,5 +417,155 @@ func TestRedirectCheckErrorsDoNotEchoSecrets(t *testing.T) {
 	rec, _ = doJSON(t, srv, http.MethodGet, "/api/redirect-checks/s3cret-id", nil)
 	if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "s3cret-id") {
 		t.Fatalf("unknown id: status = %d, body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestRedirectCheckExportCSV(t *testing.T) {
+	useRedirectTestSite(t, redirectTestSite(t, nil))
+	srv := newTestServer(t)
+	id := startRedirectCheckForTest(t, srv, map[string]string{"domain": "example.com"})
+	if job := pollRedirectCheck(t, srv, id); job["status"] != "done" {
+		t.Fatalf("status = %v, error = %v", job["status"], job["error"])
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/redirect-checks/"+id+"/export", nil)
+	req.Host = "localhost:8080"
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/csv" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, `filename="redirect-check-example.com.csv"`) {
+		t.Errorf("Content-Disposition = %q", cd)
+	}
+	records, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("export is not valid CSV: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("got %d CSV records, want header + 2 rows", len(records))
+	}
+	header := records[0]
+	if header[len(header)-2] != "verdict" || header[len(header)-1] != "notes" {
+		t.Errorf("header = %v", header)
+	}
+	if records[1][0] != "/old" || records[1][len(header)-2] != "ok" {
+		t.Errorf("row 1 = %v", records[1])
+	}
+	if records[2][len(header)-2] != "skipped-external" {
+		t.Errorf("row 2 = %v", records[2])
+	}
+}
+
+// TestRedirectCheckExportFilenameIsSanitized plants a finished job whose domain holds a quote,
+// CR/LF and non-ASCII characters (the domain check only rejects a few URL delimiters) and
+// checks that the Content-Disposition header stays one well-formed line.
+func TestRedirectCheckExportFilenameIsSanitized(t *testing.T) {
+	srv := newTestServer(t)
+	job, ok := srv.redirects.start(redirectJob{
+		Domain: "ex\"ample\r\nX-Evil: 1\u00e9;.com",
+		Rules:  []redirectcheck.Rule{{}},
+		Rows:   []redirectcheck.RowResult{{}},
+	}, func() {}, maxRunningRedirectChecks)
+	if !ok {
+		t.Fatal("could not start a job")
+	}
+	srv.redirects.finish(job.ID, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/redirect-checks/"+job.ID+"/export", nil)
+	req.Host = "localhost:8080"
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	cd := rec.Header().Get("Content-Disposition")
+	want := `attachment; filename="redirect-check-ex-ample--X-Evil--1--.com.csv"`
+	if cd != want {
+		t.Errorf("Content-Disposition = %q, want %q", cd, want)
+	}
+	if strings.ContainsAny(cd, "\r\n") || strings.Count(cd, `"`) != 2 {
+		t.Errorf("Content-Disposition is not well-formed: %q", cd)
+	}
+	if rec.Header().Get("X-Evil") != "" {
+		t.Errorf("domain injected a header: %v", rec.Header())
+	}
+}
+
+func TestRedirectCheckExportBeforeDoneIs409(t *testing.T) {
+	useRedirectTestSite(t, redirectTestSite(t, make(chan struct{})))
+	srv := newTestServer(t)
+	id := startRedirectCheckForTest(t, srv, map[string]string{"domain": "example.com"})
+	rec, _ := doJSON(t, srv, http.MethodGet, "/api/redirect-checks/"+id+"/export", nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rec.Code)
+	}
+	rec, _ = doJSON(t, srv, http.MethodGet, "/api/redirect-checks/nope/export", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown id: status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "nope") {
+		t.Errorf("404 body echoes the id: %s", rec.Body)
+	}
+}
+
+func TestCancelRedirectCheck(t *testing.T) {
+	useRedirectTestSite(t, redirectTestSite(t, make(chan struct{})))
+	srv := newTestServer(t)
+	id := startRedirectCheckForTest(t, srv, map[string]string{"domain": "example.com"})
+
+	// The gated site holds the sitemap fetch, so this cancel lands during sitemap discovery:
+	// the job must end canceled, not as a "could not fetch a sitemap" error.
+	rec, _ := doJSON(t, srv, http.MethodPost, "/api/redirect-checks/"+id+"/cancel", nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("cancel: status = %d, want 204", rec.Code)
+	}
+	job := pollRedirectCheck(t, srv, id)
+	if job["status"] != "canceled" {
+		t.Fatalf("status = %v (error %v), want canceled", job["status"], job["error"])
+	}
+	if _, ok := job["rows"]; ok {
+		t.Fatal("a canceled check must not carry rows")
+	}
+
+	rec, _ = doJSON(t, srv, http.MethodGet, "/api/redirect-checks/"+id+"/export", nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("export after cancel: status = %d, want 409", rec.Code)
+	}
+	rec, _ = doJSON(t, srv, http.MethodPost, "/api/redirect-checks/"+id+"/cancel", nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("second cancel: status = %d, want 409", rec.Code)
+	}
+	rec, _ = doJSON(t, srv, http.MethodPost, "/api/redirect-checks/nope/cancel", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown cancel: status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "nope") {
+		t.Errorf("404 body echoes the id: %s", rec.Body)
+	}
+
+	// A canceled check frees its slot under the cap of 2.
+	for i := 0; i < maxRunningRedirectChecks; i++ {
+		startRedirectCheckForTest(t, srv, map[string]string{"domain": "example.com"})
+	}
+}
+
+func TestCancelRedirectCheckRejectsCrossOrigin(t *testing.T) {
+	useRedirectTestSite(t, redirectTestSite(t, make(chan struct{})))
+	srv := newTestServer(t)
+	id := startRedirectCheckForTest(t, srv, map[string]string{"domain": "example.com"})
+	req := httptest.NewRequest(http.MethodPost, "/api/redirect-checks/"+id+"/cancel", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://evil.example")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+	if job, _ := srv.redirects.get(id); job.Status != StatusRunning {
+		t.Fatalf("status = %s after a rejected cancel, want running", job.Status)
 	}
 }

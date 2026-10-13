@@ -95,6 +95,8 @@ func (s *Server) redirectRoutes() {
 	s.mux.HandleFunc("GET /api/redirect-checks", s.handleListRedirectChecks)
 	s.mux.HandleFunc("POST /api/redirect-checks", s.handleStartRedirectCheck)
 	s.mux.HandleFunc("GET /api/redirect-checks/{id}", s.handleGetRedirectCheck)
+	s.mux.HandleFunc("POST /api/redirect-checks/{id}/cancel", s.handleCancelRedirectCheck)
+	s.mux.HandleFunc("GET /api/redirect-checks/{id}/export", s.handleExportRedirectCheck)
 }
 
 // redirectCheckParams are the validated non-file form fields of POST /api/redirect-checks.
@@ -146,6 +148,9 @@ func parseRedirectCheckForm(r *http.Request) (redirectCheckParams, error) {
 	}
 	return p, nil
 }
+
+// errNoRedirectCheck is the 404 body for an unknown id. It does not echo the id.
+var errNoRedirectCheck = errors.New("no redirect check with that id")
 
 // errNotHostName is returned without echoing the input, which could carry URL userinfo.
 var errNotHostName = errors.New("domain is not a host name; use the bare domain, for example example.com")
@@ -262,8 +267,55 @@ func (s *Server) handleListRedirectChecks(w http.ResponseWriter, _ *http.Request
 func (s *Server) handleGetRedirectCheck(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.redirects.get(r.PathValue("id"))
 	if !ok {
-		writeError(w, http.StatusNotFound, errors.New("no redirect check with that id"))
+		writeError(w, http.StatusNotFound, errNoRedirectCheck)
 		return
 	}
 	writeJSON(w, http.StatusOK, redirectJobViewOf(job, true))
+}
+
+func (s *Server) handleCancelRedirectCheck(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, ok := s.redirects.get(id); !ok {
+		writeError(w, http.StatusNotFound, errNoRedirectCheck)
+		return
+	}
+	// get and cancel are two locked calls. If the check finishes between them, cancel reports
+	// false and 409 is the right answer for a check that is no longer running.
+	if !s.redirects.cancel(id) {
+		writeError(w, http.StatusConflict, errors.New("that redirect check is not running"))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleExportRedirectCheck writes the input CSV back with the verdict columns appended, the
+// same file `gocrawl check-redirects --output` writes.
+func (s *Server) handleExportRedirectCheck(w http.ResponseWriter, r *http.Request) {
+	job, ok := s.redirects.get(r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, errNoRedirectCheck)
+		return
+	}
+	if job.Status != StatusDone {
+		writeError(w, http.StatusConflict, errors.New("only a finished redirect check can be exported"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="redirect-check-`+safeFileNamePart(job.Data.Domain)+`.csv"`)
+	// The status line is already sent once WriteCSV starts writing, so a failure partway
+	// through (a client that went away) has no better response to give.
+	_ = redirectcheck.WriteCSV(w, job.Data.Rules, job.Data.Rows)
+}
+
+// safeFileNamePart keeps letters, digits, dot and hyphen and turns every other character
+// into a hyphen, so a user-typed domain cannot break out of the quoted Content-Disposition
+// filename or inject header lines.
+func safeFileNamePart(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '-':
+			return r
+		}
+		return '-'
+	}, s)
 }
