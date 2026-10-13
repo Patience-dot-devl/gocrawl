@@ -20,7 +20,7 @@
   --fs-h2: 20px;
   --fs-stat: 26px;
 
-  font: var(--fs-body-lg)/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  font: var(--fs-body-lg)/1.5 var(--font-text);
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
