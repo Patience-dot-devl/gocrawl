@@ -24,9 +24,6 @@
   font-size: 13px;
   color: var(--ink-2);
 }
-.rc-stat b.rc-warn {
-  color: var(--s3);
-}
 .rc-classes {
   list-style: none;
   display: flex;

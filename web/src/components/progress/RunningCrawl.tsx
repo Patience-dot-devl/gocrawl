@@ -80,7 +80,9 @@ export default function RunningCrawl({ job, progress, tape, tapeOff, recent, rec
         summary={summary}
         live
       />
-      <p className="rc-sub">{summary}</p>
+      <p className="rc-sub" aria-hidden="true">
+        {summary}
+      </p>
       <TapeLegend sitemap={sitemapFound} />
       <div className="rc-stats">
         {sitemapTotal > 0 ? (
@@ -95,7 +97,7 @@ export default function RunningCrawl({ job, progress, tape, tapeOff, recent, rec
         <Stat value={formatCount(progress?.queued ?? 0)} label="in queue" />
         <Stat value={formatElapsed(elapsed)} label="elapsed (pauses don't count)" />
         <Stat value={rate > 0 ? `${formatRate(rate)}/s` : 'Unlimited'} label={paused ? 'request rate when paused' : 'request rate'} />
-        {throttled > 0 && <Stat value={formatCount(throttled)} label="429 or 503 responses in the last minute" warn />}
+        {throttled > 0 && <Stat value={formatCount(throttled)} label="429 or 503 responses in the last minute" />}
       </div>
       <ul className="rc-classes" aria-label="Pages by status class">
         {CLASS_ORDER.map((c) => (
@@ -139,10 +141,10 @@ export default function RunningCrawl({ job, progress, tape, tapeOff, recent, rec
   )
 }
 
-function Stat({ value, label, warn = false }: { value: string; label: string; warn?: boolean }) {
+function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="rc-stat">
-      <b className={warn ? 'rc-warn' : undefined}>{value}</b>
+      <b>{value}</b>
       <span>{label}</span>
     </div>
   )

@@ -12,7 +12,7 @@ import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
 import StatusCode from './ui/StatusCode'
 import RunningCrawl from './progress/RunningCrawl'
-import RunPhasePill from './progress/RunPhasePill'
+import { runPill } from './progress/runPill'
 import { isLive, useCrawlPoll } from './progress/useCrawlPoll'
 import './CrawlReport.css'
 
@@ -255,7 +255,9 @@ export default function CrawlReport({ id }: { id: string }) {
     hideNonissue ||
     Object.values(severityOn).some((v) => v === false)
 
-  const pill = STATUS_PILL[job.status]
+  // One PhasePill for every state, so its live region persists and a screen reader hears
+  // "Crawling" become "Crawl stopped".
+  const pill = job.status === 'running' ? runPill(progress?.phase) : STATUS_PILL[job.status]
 
   function stopCrawl() {
     setConfirmStop(false)
@@ -282,13 +284,9 @@ export default function CrawlReport({ id }: { id: string }) {
         <h1 ref={headingRef} tabIndex={-1}>
           {hostOf(job.seed)}
         </h1>
-        {job.status === 'running' ? (
-          <RunPhasePill phase={progress?.phase} live />
-        ) : (
-          <PhasePill phase={pill.phase} live>
-            {pill.label}
-          </PhasePill>
-        )}
+        <PhasePill phase={pill.phase} live>
+          {pill.label}
+        </PhasePill>
         <div className="cr-actions">
           {live && (
             <Button variant="stop" onClick={() => setConfirmStop(true)}>
@@ -329,7 +327,11 @@ export default function CrawlReport({ id }: { id: string }) {
       )}
 
       {actionError && <Notice tone="error">{actionError}</Notice>}
-      {pollError && <Notice tone="warning">{`Could not refresh this crawl: ${trimEnd(pollError)}. Trying again.`}</Notice>}
+      {pollError && (
+        <Notice tone="warning">
+          {`Could not refresh this crawl: ${trimEnd(pollError)}. ${live ? 'Trying again.' : 'Reload the page to try again.'}`}
+        </Notice>
+      )}
 
       {live && (
         <RunningCrawl
