@@ -88,11 +88,12 @@ breadth-first walk:
   `FollowNofollow`).
 - `robots.txt` is collected for every crawled host afterward, so the `robots` analyzer has
   data even when `RespectRobots` is off.
-- Analyzers that fetch extra resources after the crawl (`sitemap`, `geo`'s `llms.txt`, the
-  `--specialized` `wordpress` and `shopify` probes) get their fetcher from `Engine.Govern`,
+- Analyzers that fetch extra resources (`geo`'s `llms.txt`, the `--specialized` `wordpress` and
+  `shopify` probes) get their fetcher from `Engine.Govern`,
   which puts every request under the same rate limiter and `RespectRobots` policy as the
   crawl. A robots-disallowed probe returns `crawler.ErrRobotsDisallowed` without touching the
-  server, and a `429` seen by a probe backs off the shared adaptive limiter.
+  server, and a `429` seen by a probe backs off the shared adaptive limiter. The `sitemap`
+  analyzer fetches nothing after the crawl: it works from the pre-pass set (see below).
 - `Options.OnProgress`, when set, is called after each page is recorded with a
   [`crawler.Progress`](../internal/crawler/progress.go) snapshot: pages recorded, queue length,
   the page just recorded, the rate limit in effect, and 429/503 responses in the last minute.

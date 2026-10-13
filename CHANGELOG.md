@@ -44,6 +44,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 ### Fixed
 
 - `docs/analyzers.md` now lists the `http-body-truncated` and `sitemap-truncated` codes.
+- Web UI and API: a failed or late Stop crawl no longer replaces the report, Stop crawl asks in an in-app dialog, `GET /api/crawls/{id}` and the export answer an unknown id with a fixed `crawl not found` (no store path), report counts are singular or plural with thousands separators, the coverage notice uses UI wording, and the crawl form's fields have names.
 
 ## [0.10.0] - 2026-10-12
 
