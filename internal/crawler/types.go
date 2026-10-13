@@ -228,6 +228,11 @@ type Coverage struct {
 	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
 	MaxPages int `json:"max_pages,omitempty"`
 	MaxDepth int `json:"max_depth,omitempty"`
+	// SitemapTotal is the number of in-scope URLs the site's sitemap lists, found by
+	// runner.Run's pre-pass; SitemapFetched is how many of them this crawl fetched. Both are 0,
+	// and omitted, when no sitemap was found. Set by runner.Run, not by Engine.Crawl.
+	SitemapTotal   int `json:"sitemap_total,omitempty"`
+	SitemapFetched int `json:"sitemap_fetched,omitempty"`
 }
 
 // Page looks up a crawled page by URL (matched against requested and final URLs after

@@ -60,6 +60,9 @@ type RegistryOptions struct {
 	// links leaving the crawled domain. Unlike the other fields it is on by default in
 	// config (analyzers.ignore_external_tagging); the struct's zero value turns it off.
 	IgnoreExternalTagging bool
+	// SitemapOptions configure the sitemap analyzer. runner.Run passes sitemap.WithURLs here
+	// so the analyzer reuses the pre-pass's sitemap instead of fetching it again.
+	SitemapOptions []sitemap.Option
 }
 
 // BuildRegistry constructs the default analyzer registry. The fetcher is used by analyzers
@@ -72,7 +75,7 @@ func BuildRegistry(fetcher crawler.Fetcher, opts RegistryOptions) *analyze.Regis
 	r.Register(httpx.New())
 	r.Register(links.New())
 	r.Register(robotscheck.New())
-	r.Register(sitemap.New(fetcher))
+	r.Register(sitemap.New(fetcher, opts.SitemapOptions...))
 	r.Register(structured.New())
 	r.Register(perf.New())
 	// Content & technical SEO breadth checks (Screaming Frog parity, tier 1).
@@ -130,11 +133,11 @@ func newFetcher(cfg config.Config, opts crawler.Options) (crawler.Fetcher, error
 }
 
 // Run performs a full crawl + analysis for the given config and seed, returning a Report.
-// The seed argument overrides cfg.Seed when non-empty. runOpts customize this one call (see
-// RunOption); the CLI and MCP server pass none.
+// The seed argument overrides cfg.Seed when non-empty. runOpts add optional behavior
+// (progress reporting, pause control) for callers that need it; the CLI passes none.
 func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOption) (*report.Report, error) {
 	settings := newRunSettings(runOpts)
-	_ = settings // read by the progress and pause features once they add their fields
+	_ = settings // read by WithProgress (W1-PROG-6) and the pause options (W2-PAUSE-5)
 	if seed == "" {
 		seed = cfg.Seed
 	}
@@ -154,8 +157,10 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 		defer func() { _ = c.Close() }()
 	}
 	engine := crawler.New(opts, fetcher)
-
-	result, err := engine.Crawl(ctx, seed)
+	// Fix the crawl's host scope now rather than inside Crawl: the sitemap pre-pass needs
+	// InScope, and its robots.txt fetch must already know the seed host so credentials reach
+	// that host (and only that host).
+	seed, err = engine.SetSeed(seed)
 	if err != nil {
 		return nil, err
 	}
@@ -166,17 +171,36 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	// it isn't restricted to the seed's own host by default. The sitemap analyzer fetches
 	// whatever URL robots.txt's Sitemap: directive names, which is routinely a different host
 	// (a CDN, a separate subdomain) with no FollowExternal needed to reach it, so Basic Auth,
-	// the Cookie header, and custom headers must be restricted here explicitly. engine.Govern then puts those
-	// fetches under the crawl's rate limiter and robots.txt policy, so a probe can't hit a
-	// path the crawl was told to leave alone, or run unthrottled once the crawl is over.
+	// the Cookie header, and custom headers must be restricted here explicitly. engine.Govern
+	// then puts those fetches under the crawl's rate limiter and robots.txt policy, so a probe
+	// can't hit a path the crawl was told to leave alone, or run unthrottled.
 	analyzerFetcher := crawler.NewHTTPFetcher(opts)
 	if seedURL, perr := url.Parse(seed); perr == nil {
 		analyzerFetcher.RestrictCredentialsToHost(seedURL.Host, opts.AllowSubdomains)
 	}
-	reg := BuildRegistry(engine.Govern(analyzerFetcher), RegistryOptions{
+	governed := engine.Govern(analyzerFetcher)
+
+	// Sitemap pre-pass: read the sitemap once, before the crawl, so progress can be measured
+	// against it. The sitemap analyzer reuses the same set below. A missing or unreachable
+	// sitemap is an empty set, never an error.
+	sm := discoverSitemap(ctx, engine, governed, seed)
+
+	result, err := engine.Crawl(ctx, seed)
+	if err != nil {
+		return nil, err
+	}
+	if sm.found() {
+		result.Coverage.SitemapTotal = len(sm.inScope)
+		result.Coverage.SitemapFetched = sm.fetchedCount(result.Pages, engine.Normalize)
+	}
+
+	reg := BuildRegistry(governed, RegistryOptions{
 		Specialized:           cfg.Analyzers.Specialized,
 		SecurityAudit:         cfg.Analyzers.SecurityAudit,
 		IgnoreExternalTagging: cfg.Analyzers.IgnoreExternalTagging,
+		SitemapOptions: []sitemap.Option{
+			sitemap.WithURLs(sm.all.URLs, sm.all.Parsed, sm.all.InvalidDeclared, sm.all.TruncatedDeclared),
+		},
 	})
 	analyzers, skipped := planAnalyzers(reg, cfg.Analyzers, cfg.Crawl.StripQuery)
 	issues := analyze.Run(ctx, analyzers, result)
@@ -201,6 +225,9 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	}
 	if !result.Coverage.Complete {
 		rep.Notes = append(rep.Notes, coverageNote(result.Coverage))
+	}
+	if note := budgetNote(opts.MaxPages, result.Coverage.SitemapTotal); note != "" {
+		rep.Notes = append(rep.Notes, note)
 	}
 
 	// The crawled site is rendered as a tab in the HTML report (report.Build attaches it). When
