@@ -5,7 +5,7 @@ scope: "Running gocrawl as an MCP server, registering it with clients, and the `
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-28
+updated: 2026-10-13
 depends_on: ["analyzers.md", "configuration.md", "output.md", "roadmap.md"]
 sources: ["../internal/mcpserver/server.go", "../cmd/gocrawl/mcp.go", "../internal/config/config.go"]
 ---
@@ -123,6 +123,10 @@ Trimmed example response:
   }
 }
 ```
+
+The response's `coverage` omits `tape` and `tape_off` (the per-page crawl tape, one character
+per page, which only the web UI uses); the other [coverage fields](output.md#coverage) are
+included.
 
 ### `list_analyzers`
 

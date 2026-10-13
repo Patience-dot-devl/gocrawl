@@ -21,6 +21,11 @@ type Engine struct {
 	robots   *robotsManager
 	limiter  *AdaptiveLimiter
 	seedHost string
+
+	// progMu serializes OnProgress calls and guards lastProgress, the snapshot that
+	// state-only events (pause, resume) re-send with fresh live fields.
+	progMu       sync.Mutex
+	lastProgress Progress
 }
 
 // New creates an Engine. fetcher is used to retrieve pages (raw or headless); a separate
@@ -77,12 +82,10 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		defer cancel()
 	}
 
-	seed = normalizeURL(seed, e.opts.StripQuery)
-	su, err := url.Parse(seed)
+	seed, err := e.SetSeed(seed)
 	if err != nil {
 		return nil, err
 	}
-	e.seedHost = su.Host
 
 	rateDesc := "unlimited"
 	if e.opts.RatePerSecond > 0 {
@@ -102,6 +105,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		Opts:      e.opts,
 		index:     make(map[string]*Page),
 	}
+	e.progMu.Lock()
+	e.lastProgress = Progress{}
+	e.progMu.Unlock()
 
 	var (
 		mu        sync.Mutex // guards visited, result.Pages, result.index, notCrawled, limit flags
@@ -204,6 +210,18 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			// directly at it doesn't trigger a second fetch (and duplicate per-page
 			// issues) for content already covered by this page.
 			visited[finalNorm] = true
+		}
+		if e.opts.OnProgress != nil {
+			// Emitted under mu so events arrive in recording order: Fetched rises by exactly
+			// one per event, which is what lets a consumer append one tape tick per call.
+			e.emitPage(Progress{
+				Fetched:    len(result.Pages),
+				Queued:     fr.queued(),
+				CurrentURL: page.RequestedURL,
+				FinalURL:   page.FinalURL,
+				Status:     progressStatus(page),
+				DurationMS: page.Duration.Milliseconds(),
+			})
 		}
 		mu.Unlock()
 
@@ -312,6 +330,47 @@ func (e *Engine) crawlable(ctx context.Context, u *url.URL) bool {
 // seed's Authorization header to them.
 func (e *Engine) authHostAllowed(host string) bool {
 	return sameSite(e.seedHost, host, e.opts.AllowSubdomains)
+}
+
+// SetSeed normalizes seed and fixes the host scope that InScope, enqueue and the credential
+// guard check against. Crawl calls it itself; call it first only when something needs InScope
+// or RobotsFor before the crawl starts (runner.Run's sitemap pre-pass). It must not be called
+// while a crawl is running. It returns the normalized seed.
+func (e *Engine) SetSeed(seed string) (string, error) {
+	seed = normalizeURL(seed, e.opts.StripQuery)
+	su, err := url.Parse(seed)
+	if err != nil {
+		return "", err
+	}
+	e.seedHost = su.Host
+	return seed, nil
+}
+
+// InScope reports whether rawURL falls inside the crawl scope: the same scheme, host,
+// subdomain, include and exclude rules enqueue applies, after the same normalization. It does
+// not consult robots.txt or depth. Call SetSeed (or Crawl) first.
+func (e *Engine) InScope(rawURL string) bool {
+	u, err := url.Parse(normalizeURL(rawURL, e.opts.StripQuery))
+	if err != nil {
+		return false
+	}
+	return e.inScope(u)
+}
+
+// Normalize canonicalizes rawURL the way the crawl does for deduplication, so a URL from
+// outside the crawl (a sitemap <loc>) can be matched against recorded pages.
+func (e *Engine) Normalize(rawURL string) string {
+	return normalizeURL(rawURL, e.opts.StripQuery)
+}
+
+// RobotsFor returns the parsed robots.txt for rawURL's scheme and host, fetching and caching
+// it the way the crawl does (the crawl reuses the cached copy). Nil when rawURL has no host.
+func (e *Engine) RobotsFor(ctx context.Context, rawURL string) *RobotsData {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	return e.robots.get(ctx, u)
 }
 
 // inScope reports whether u should be crawled given host scope and include/exclude rules.

@@ -94,10 +94,6 @@ against the API below:
 - **Crawls** — every crawl saved to the store (`save: true` on start), reopen-able as a
   report. Its old address, `#/history`, still opens it.
 
-There is no live per-page progress in this version — `crawler.Engine` has no progress hook
-today, only a start/finish boundary, so the UI polls for `running` → `done` rather than
-streaming page-by-page.
-
 ## Look and feel
 
 The UI is dark by default. Color means HTTP status (2xx green, 3xx yellow, 4xx dark orange,
@@ -153,12 +149,36 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/analyzers` | List available analyzers (same as `list_analyzers` over MCP). |
 | `GET /api/explanations` | Every issue code's what/impact/fix explanation, keyed by code — the same text baked into the HTML report, used by the live report view. |
 | `POST /api/crawls` | Start a crawl. Body is JSON (`Content-Type: application/json` required) with the same field set as the [MCP `crawl` tool](mcp.md#crawl) (`url` required) plus `save: bool` to persist the report to the store when it finishes. Returns `202` with the job immediately; the crawl runs in the background. `429` when the running-crawl cap is reached. |
-| `GET /api/crawls` | List every job (in-memory, this process) merged with the store's saved history, newest first. |
-| `GET /api/crawls/{id}` | One job's status and, once finished, its full `Report` (see [Output reference](output.md)). Falls back to the store for an id that isn't a live job. |
+| `GET /api/crawls` | List every job (in-memory, this process) merged with the store's saved history, newest first. Each item also carries `status_classes` (pages per status class: `2`, `3`, `4`, `5`, `x`), `tape_preview` (the crawl tape shortened to at most 160 characters, each standing for a run of pages and showing the worst status among them) and, when known, `sitemap_total` / `sitemap_fetched`. List items never carry the full tape. |
+| `GET /api/crawls/{id}` | One job's status, its live `progress` (see [Live progress](#live-progress)) and, once finished, its full `Report` (see [Output reference](output.md)). `?tape_from=N` returns only the tape characters from index `N`; a negative or non-numeric `N` is a `400`. Falls back to the store for an id that isn't a live job; saved crawls have no `progress`, but their report's `coverage.tape` / `tape_off` hold the same tape. An id that is neither (for example a crawl that was running when the server restarted) is a `404`. |
 | `POST /api/crawls/{id}/cancel` | Cancel a running crawl. Like Ctrl-C on the CLI, this doesn't error the crawl — it stops early and still returns whatever was fetched as a partial report (`Report.Coverage.Interrupted`), tracked here as job status `canceled`. |
 | `GET /api/crawls/{id}/export?format=json\|csv\|html` | Download the finished report in any of the three formats gocrawl already writes, via `report.For(format)`. |
+| `POST /api/sitemap-preview` | Find a site's sitemap without crawling. JSON body `{url, include, exclude, allow_subdomains}`; returns `{found, total, sources, via_robots}`, where `total` counts only sitemap URLs inside that scope. Respects robots.txt and sends the crawl's default User-Agent. The preview sends no credentials (no Basic Auth, cookie or custom headers), so a site gated behind them may report no sitemap. |
 
 Job status is one of `running`, `done`, `error`, `canceled`.
+
+## Live progress
+
+While a crawl runs (and afterwards, until the server restarts) the job view carries a
+`progress` object. The UI polls it every 1.5 seconds, passing `tape_from` so each poll only
+transfers the new tape characters.
+
+| Field | Description |
+| --- | --- |
+| `phase` | `sitemap` (reading robots.txt and the sitemap before the crawl), `crawling`, or `analyzing`. |
+| `fetched` / `queued` | Pages recorded so far, and URLs waiting to be fetched. |
+| `current_url`, `final_url`, `status`, `duration_ms` | The page recorded last. `status` is the first redirect hop's status when the fetch was redirected, and `0` when it failed. |
+| `rate` | The request-rate limit in effect after any adaptive backoff (`0` = unlimited). |
+| `throttled` | HTTP 429 and 503 responses in the last 60 seconds. |
+| `sitemap_found`, `sitemap_total`, `sitemap_fetched`, `off_sitemap`, `in_sitemap` | Progress against the site's sitemap: in-scope sitemap URLs, how many of them were fetched, fetched pages the sitemap doesn't list, and whether `current_url` is in it. |
+| `max_pages` | The page budget (`0` = unlimited). |
+| `active_ms` | How long the crawl has been running. |
+| `tape`, `tape_off`, `tape_from` | One character per recorded page, in fetch order. `tape` holds the status class (`2`, `3`, `4`, `5`, or `x` for a failed fetch); `tape_off` holds `1` for a page the sitemap doesn't list (and `0` otherwise). `tape_from` is the index the returned slice starts at. |
+
+Before every crawl, CLI and MCP included, gocrawl reads the site's sitemap once: robots.txt
+`Sitemap:` lines, then `/sitemap.xml` and `/sitemap_index.xml`, following indexes. Only URLs
+inside the crawl scope count toward `sitemap_total`. The `sitemap` analyzer reuses the same
+set instead of fetching it again.
 
 ## Notes
 

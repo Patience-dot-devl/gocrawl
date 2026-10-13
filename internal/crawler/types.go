@@ -228,6 +228,18 @@ type Coverage struct {
 	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
 	MaxPages int `json:"max_pages,omitempty"`
 	MaxDepth int `json:"max_depth,omitempty"`
+	// SitemapTotal is the number of in-scope URLs the site's sitemap lists, found by
+	// runner.Run's pre-pass; SitemapFetched is how many of them this crawl fetched. Both are 0,
+	// and omitted, when no sitemap was found. Set by runner.Run, not by Engine.Crawl.
+	SitemapTotal   int `json:"sitemap_total,omitempty"`
+	SitemapFetched int `json:"sitemap_fetched,omitempty"`
+	// Tape is the crawl tape: one character per recorded page in recording order, '2'..'5' for
+	// the status class or 'x' for a failed fetch (see TapeChar; a redirected page reports its
+	// first hop). TapeOff has the same length when a sitemap was found: '1' where the page is
+	// not in its in-scope part, else '0'; without a sitemap it is empty. Set by runner.Run from
+	// the same progress events the live web tape is built from. Omitted when empty.
+	Tape    string `json:"tape,omitempty"`
+	TapeOff string `json:"tape_off,omitempty"`
 }
 
 // Page looks up a crawled page by URL (matched against requested and final URLs after
@@ -337,6 +349,11 @@ type Options struct {
 	// partial result (see Coverage.DurationLimitReached), the same way a canceled context
 	// (e.g. an operator's Ctrl-C) does.
 	MaxDuration time.Duration
+	// OnProgress, when non-nil, is called after each page is recorded with a snapshot of the
+	// crawl's progress. Calls are serialized and arrive in recording order, so Fetched rises by
+	// exactly one per page event. It runs on a worker goroutine while the engine holds its
+	// internal locks: it must return quickly and must never call back into the Engine.
+	OnProgress func(Progress)
 }
 
 // DefaultOptions returns conservative, polite defaults. By default the crawl is bounded by

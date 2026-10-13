@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -198,5 +199,93 @@ func TestAnalyzeEmitsSitemapTruncatedNotMissing(t *testing.T) {
 	}
 	if _, ok := find(issues, "sitemap-invalid"); ok {
 		t.Error("sitemap-invalid should not fire for a truncated (not malformed) sitemap")
+	}
+}
+
+// countingFetcher records every URL it is asked for and serves from inner.
+type countingFetcher struct {
+	inner fakeFetcher
+	mu    sync.Mutex
+	calls []string
+}
+
+func (c *countingFetcher) Fetch(ctx context.Context, rawURL string) (*crawler.Page, error) {
+	c.mu.Lock()
+	c.calls = append(c.calls, rawURL)
+	c.mu.Unlock()
+	return c.inner.Fetch(ctx, rawURL)
+}
+
+func TestDiscoverUsesRobotsDeclaredSitemap(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://cdn.example/sm.xml": {StatusCode: 200, ContentType: "application/xml", Body: []byte(validSitemap)},
+	}}
+	robots := map[string]*crawler.RobotsData{
+		"example.com": {Host: "example.com", Found: true, Sitemaps: []string{"https://cdn.example/sm.xml"}},
+	}
+	urls, parsed, invalid, truncated := sitemap.Discover(context.Background(), ff, "https://example.com/", robots)
+	if parsed != 1 || len(urls) != 2 || !urls["https://example.com/a"] || !urls["https://example.com/b"] {
+		t.Fatalf("Discover: parsed=%d urls=%v", parsed, urls)
+	}
+	if len(invalid) != 0 || len(truncated) != 0 {
+		t.Errorf("unexpected invalid=%v truncated=%v", invalid, truncated)
+	}
+}
+
+func TestDiscoverAllReportsSourcesAndRobotsOrigin(t *testing.T) {
+	declared := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://cdn.example/sm.xml": {StatusCode: 200, ContentType: "application/xml", Body: []byte(validSitemap)},
+	}}
+	robots := map[string]*crawler.RobotsData{"example.com": {Host: "example.com", Sitemaps: []string{"https://cdn.example/sm.xml"}}}
+	d := sitemap.DiscoverAll(context.Background(), declared, "https://example.com/", robots)
+	if !d.ViaRobots || len(d.Sources) != 1 || d.Sources[0] != "https://cdn.example/sm.xml" {
+		t.Errorf("declared sitemap: ViaRobots=%v Sources=%v", d.ViaRobots, d.Sources)
+	}
+
+	guessed := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://example.com/sitemap.xml": {StatusCode: 200, ContentType: "application/xml", Body: []byte(validSitemap)},
+	}}
+	g := sitemap.DiscoverAll(context.Background(), guessed, "https://example.com/", nil)
+	if g.ViaRobots || len(g.Sources) != 1 || g.Sources[0] != "https://example.com/sitemap.xml" {
+		t.Errorf("guessed sitemap: ViaRobots=%v Sources=%v", g.ViaRobots, g.Sources)
+	}
+}
+
+func TestDiscoverAllWithoutHostFindsNothing(t *testing.T) {
+	d := sitemap.DiscoverAll(context.Background(), fakeFetcher{}, "not a url", nil)
+	if d.Parsed != 0 || d.URLs == nil || len(d.URLs) != 0 {
+		t.Errorf("DiscoverAll on a host-less seed = %+v, want an empty, non-nil URL set", d)
+	}
+}
+
+func TestWithURLsSkipsFetching(t *testing.T) {
+	cf := &countingFetcher{inner: fakeFetcher{pages: map[string]*crawler.Page{}}}
+	urls := map[string]bool{"https://example.com/a": true, "https://example.com/b": true}
+	a := sitemap.New(cf, sitemap.WithURLs(urls, 1, nil, nil))
+	res := &crawler.Result{
+		Seed:  "https://example.com/",
+		Pages: []*crawler.Page{{FinalURL: "https://example.com/a", StatusCode: 200}},
+	}
+	issues := a.Analyze(context.Background(), res)
+	if len(cf.calls) != 0 {
+		t.Fatalf("analyzer fetched %v despite a pre-fetched sitemap", cf.calls)
+	}
+	cov, ok := find(issues, "sitemap-coverage")
+	if !ok {
+		t.Fatal("expected sitemap-coverage from the pre-fetched set")
+	}
+	if cov.Data["sitemap_urls"] != 2 || cov.Data["in_sitemap_not_crawled"] != 1 {
+		t.Errorf("coverage data = %v", cov.Data)
+	}
+}
+
+func TestWithURLsReportsPrefetchedProblems(t *testing.T) {
+	a := sitemap.New(&countingFetcher{}, sitemap.WithURLs(map[string]bool{}, 0, []string{"https://example.com/bad.xml"}, nil))
+	issues := a.Analyze(context.Background(), &crawler.Result{Seed: "https://example.com/"})
+	if _, ok := find(issues, "sitemap-invalid"); !ok {
+		t.Error("expected sitemap-invalid for the pre-fetched invalid declared sitemap")
+	}
+	if _, ok := find(issues, "sitemap-missing"); !ok {
+		t.Error("expected sitemap-missing when nothing parsed")
 	}
 }
