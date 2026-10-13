@@ -100,3 +100,16 @@
   color: var(--s5);
   font-weight: 600;
 }
+
+/* Finished view: the tape and the sitemap coverage line above the report. */
+.finished-tape {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.ft-coverage {
+  margin: 0;
+}
+.ft-coverage b {
+  font-variant-numeric: tabular-nums;
+}

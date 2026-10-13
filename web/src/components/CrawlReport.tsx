@@ -11,6 +11,7 @@ import ConfirmDialog from './ui/ConfirmDialog'
 import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
 import StatusCode from './ui/StatusCode'
+import FinishedTape from './progress/FinishedTape'
 import RunningCrawl from './progress/RunningCrawl'
 import { runPill } from './progress/runPill'
 import { isLive, useCrawlPoll } from './progress/useCrawlPoll'
@@ -348,6 +349,8 @@ export default function CrawlReport({ id }: { id: string }) {
 
       {report && (
         <>
+          <FinishedTape report={report} status={job.status} />
+
           {report.coverage && !report.coverage.complete && (
             <Notice tone="warning" role="alert">
               <p>

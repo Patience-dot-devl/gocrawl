@@ -89,10 +89,20 @@ function pages(count: number): string {
   return count === 1 ? 'page' : 'pages'
 }
 
+// Where the crawl stands, which decides what the slate outline ticks (sitemap pages not
+// fetched) are called: still to come while it runs, "not reached by links" once it finished
+// on its own, plain "not fetched" once it was stopped or cut short (links may exist to them).
+export type TapeState = 'live' | 'done' | 'stopped'
+
+export const OUTLINE_LABEL: Record<TapeState, string> = {
+  live: 'Not fetched yet',
+  done: 'Not reached by links',
+  stopped: 'Not fetched',
+}
+
 // describeTape is the tape's text alternative (its aria-label), and the sentence a view can
-// show under it: every count the tape draws, in words. finished switches the slate outline's
-// meaning from "not fetched yet" to "not reached by links".
-export function describeTape(counts: TapeCounts, notFetched = 0, pastBudget = 0, finished = false): string {
+// show under it: every count the tape draws, in words. state names the slate outline.
+export function describeTape(counts: TapeCounts, notFetched = 0, pastBudget = 0, state: TapeState = 'live'): string {
   const parts = STATUS_CLASSES.filter((k) => counts.byClass[k] > 0).map((k) => {
     const c = counts.byClass[k]
     return `${n(c)} ${PHRASE[k][c === 1 ? 0 : 1]}`
@@ -103,7 +113,7 @@ export function describeTape(counts: TapeCounts, notFetched = 0, pastBudget = 0,
   }
   const todo = whole(notFetched)
   if (todo > 0) {
-    text += ` ${n(todo)} sitemap ${pages(todo)} ${finished ? 'not reached by links' : 'not fetched yet'}.`
+    text += ` ${n(todo)} sitemap ${pages(todo)} ${OUTLINE_LABEL[state].toLowerCase()}.`
   }
   const cut = whole(pastBudget)
   if (cut > 0) {
