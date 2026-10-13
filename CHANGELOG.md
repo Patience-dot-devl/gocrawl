@@ -8,6 +8,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Crawl requests (web API and MCP `crawl` tool) accept `strip_query`, `adaptive_delay`, `follow_nofollow`, `timeout` and `bearer_token`; the CLI gains `--bearer-token` (`crawl.bearer_token`), and the web API gains `GET`/`PUT /api/settings` (stored in `~/.gocrawl/gui.json`, never with secrets) and `/api/header-profiles` to manage header profiles.
 - Every document under `docs/` carries frontmatter (`id`, `title`, `scope`, `topic`,
   `status`, `superseded_by`, `updated`, `depends_on`, `sources`), following the scheme used in
   conductor-playground. The index in `docs/README.md` is generated from it by `make docs` and
