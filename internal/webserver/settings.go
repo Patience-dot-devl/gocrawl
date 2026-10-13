@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
@@ -78,6 +79,11 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	var in GUISettings
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSettingsBody)).Decode(&in); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, fmt.Errorf("settings are larger than %d bytes", maxSettingsBody))
+			return
+		}
 		writeError(w, http.StatusBadRequest, fmt.Errorf("decoding request body: %w", err))
 		return
 	}
@@ -165,19 +171,27 @@ func stripSecrets(p crawlrequest.Params) crawlrequest.Params {
 	return p
 }
 
+// leadingScheme matches a URL scheme at the very start of a value. A "://" further in, such as
+// a redirect parameter in the query, doesn't make the value scheme-qualified.
+var leadingScheme = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
+
 // stripUserinfo removes user:pass@ from a URL, with or without a scheme. A value that has an
 // '@' but doesn't parse is dropped rather than risk storing a credential.
 func stripUserinfo(raw string) string {
 	if !strings.Contains(raw, "@") {
 		return raw
 	}
-	hasScheme := strings.Contains(raw, "://")
+	hasScheme := leadingScheme.MatchString(raw)
 	candidate := raw
 	if !hasScheme {
-		candidate = "http://" + raw
+		candidate = "http://" + strings.TrimPrefix(raw, "//") // also covers scheme-relative "//u:p@host"
 	}
 	u, err := url.Parse(candidate)
 	if err != nil {
+		return ""
+	}
+	if u.Opaque != "" {
+		// Not host-shaped (e.g. "u:p@host" read as scheme "u"): userinfo can't be told apart.
 		return ""
 	}
 	if u.User == nil {

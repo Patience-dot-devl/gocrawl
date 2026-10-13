@@ -240,3 +240,51 @@ func TestStripSecretsClassifiesEveryTextField(t *testing.T) {
 		}
 	}
 }
+
+func TestStripUserinfoNeverKeepsAPassword(t *testing.T) {
+	for _, raw := range []string{
+		"u:p@host/path?r=http://x",
+		"u:p@host",
+		"u:p@host:8080/a",
+		"https://u:p@host/x",
+		"//u:p@host/x",
+	} {
+		got := stripUserinfo(raw)
+		if strings.Contains(got, "u:p") || strings.Contains(got, ":p@") {
+			t.Errorf("stripUserinfo(%q) = %q, kept the password", raw, got)
+		}
+	}
+	if got := stripUserinfo("https://example.com/@x"); got != "https://example.com/@x" {
+		t.Errorf("an @ in the path changed the URL: %q", got)
+	}
+}
+
+func TestPutSettingsDropsSchemelessUserinfoFromFileAndResponse(t *testing.T) {
+	srv, path := newSettingsServer(t)
+	body := map[string]any{"theme": "dark", "crawl_defaults": map[string]any{
+		"url":     "u:p@host/path?r=http://x",
+		"proxy":   "u:p@host",
+		"proxies": []string{"u:p@host/path?r=http://x"},
+	}}
+	rec, _ := doJSON(t, srv, http.MethodPut, "/api/settings", body)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("status %d: %v", rec.Code, err)
+	}
+	for name, s := range map[string]string{"response": rec.Body.String(), "gui.json": string(data)} {
+		if strings.Contains(s, "u:p") || strings.Contains(s, ":p@") {
+			t.Errorf("%s holds the password: %s", name, s)
+		}
+	}
+}
+
+func TestPutSettingsTooLargeIs413(t *testing.T) {
+	srv, path := newSettingsServer(t)
+	big := `{"theme":"dark","crawl_defaults":{"url":"` + strings.Repeat("a", maxSettingsBody) + `"}}`
+	if rec := settingsRaw(t, srv, http.MethodPut, "/api/settings", "application/json", "", big); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want 413", rec.Code)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("gui.json was written by an oversized request")
+	}
+}
