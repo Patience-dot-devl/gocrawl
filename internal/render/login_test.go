@@ -8,10 +8,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/target"
+	"github.com/chromedp/chromedp"
 )
 
 func TestBrowserLocationsCoverEveryDesktopOS(t *testing.T) {
@@ -120,4 +124,87 @@ func TestLoginWindowReadsHTTPOnlyCookiesAndRemovesProfile(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Errorf("second Close: %v", err)
 	}
+}
+
+func TestRedactURLMasksPassword(t *testing.T) {
+	for _, raw := range []string{"https://user:hunter2@example.com/login", "http://user:hunter2@127.0.0.1:1/"} {
+		got := redactURL(raw)
+		if strings.Contains(got, "hunter2") {
+			t.Errorf("redactURL(%q) = %q leaks the password", raw, got)
+		}
+	}
+	if got := redactURL("https://example.com/a"); got != "https://example.com/a" {
+		t.Errorf("redactURL changed a plain URL: %q", got)
+	}
+	if got := redactURL("http://user:hunter2@exa mple.com/%zz"); strings.Contains(got, "hunter2") {
+		t.Errorf("redactURL leaks the password of an unparsable URL: %q", got)
+	}
+}
+
+func TestOpenLoginWindowErrorOmitsPassword(t *testing.T) {
+	if _, err := FindBrowser(); err != nil {
+		t.Skip("no Chromium-class browser available")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	// Port 1 has no listener, so the navigation fails after the browser has started.
+	w, err := openLoginWindow(ctx, "http://user:hunter2@127.0.0.1:1/", false)
+	if err == nil {
+		_ = w.Close()
+		t.Skip("navigation to a closed port unexpectedly succeeded")
+	}
+	if strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("error leaks the password: %v", err)
+	}
+}
+
+// openHeadlessWindow starts a headless login window on a trivial page, or skips.
+func openHeadlessWindow(t *testing.T) *LoginWindow {
+	t.Helper()
+	if _, err := FindBrowser(); err != nil {
+		t.Skip("no Chromium-class browser available")
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `<html><body>hi</body></html>`)
+	}))
+	t.Cleanup(ts.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	w, err := openLoginWindow(ctx, ts.URL, false)
+	if err != nil {
+		t.Skipf("could not launch the browser: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+	return w
+}
+
+func waitDone(t *testing.T, w *LoginWindow, what string) {
+	t.Helper()
+	select {
+	case <-w.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatalf("Done not closed after %s", what)
+	}
+}
+
+func TestLoginWindowDoneAfterTabClosed(t *testing.T) {
+	w := openHeadlessWindow(t)
+	c := chromedp.FromContext(w.tabCtx)
+	_, err := cdp.Call(w.tabCtx, c.Browser, target.CloseTarget, target.CloseTargetParams{TargetID: c.Target.TargetID})
+	if err != nil {
+		t.Fatalf("closing the target: %v", err)
+	}
+	waitDone(t, w, "the tab was closed")
+}
+
+func TestLoginWindowDoneAfterBrowserKilled(t *testing.T) {
+	w := openHeadlessWindow(t)
+	proc := chromedp.FromContext(w.tabCtx).Browser.Process()
+	if proc == nil {
+		t.Skip("browser process not available")
+	}
+	if err := proc.Kill(); err != nil {
+		t.Fatalf("killing the browser: %v", err)
+	}
+	waitDone(t, w, "the browser was killed")
 }

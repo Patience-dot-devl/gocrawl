@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -155,6 +156,10 @@ func openLoginWindow(ctx context.Context, rawURL string, visible bool) (*LoginWi
 			return nil, fmt.Errorf("launching the browser: %w", err)
 		}
 	case <-ctx.Done():
+		// Stop chromedp's launch and wait for it to return before Close deletes the profile,
+		// or the still-starting browser could recreate the directory after the delete.
+		w.tabCancel()
+		<-started
 		_ = w.Close()
 		return nil, fmt.Errorf("launching the browser: %w", ctx.Err())
 	}
@@ -168,9 +173,20 @@ func openLoginWindow(ctx context.Context, rawURL string, visible bool) (*LoginWi
 	defer stop()
 	if err := chromedp.Do(navCtx, chromedp.Navigate(rawURL)); err != nil {
 		_ = w.Close()
-		return nil, fmt.Errorf("opening %s: %w", rawURL, err)
+		return nil, fmt.Errorf("opening %s: %w", redactURL(rawURL), err)
 	}
 	return w, nil
+}
+
+// redactURL returns rawURL with any password in its userinfo masked, so a URL pasted as
+// https://user:pass@host never carries the password into an error message. An unparsable URL
+// is dropped entirely rather than echoed.
+func redactURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "the given URL"
+	}
+	return u.Redacted()
 }
 
 // watch closes done when the person quits the browser (lost connection) or closes the tab
