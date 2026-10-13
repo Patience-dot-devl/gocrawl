@@ -58,7 +58,18 @@
 
 .btn-go:hover:not(:disabled),
 .btn-stop:hover:not(:disabled),
-.btn-primary:hover:not(:disabled),
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
 .btn-pause:hover:not(:disabled) {
   border-color: var(--ink);
+}
+
+/* The keyboard focus ring stays the solid ink ring, so it differs from the hover ring. */
+.btn:focus-visible:not(:disabled) {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }

@@ -1,12 +1,22 @@
 // Shared fetch helpers for every API module (api/<feature>.ts). A non-2xx response throws an
 // Error carrying the server's {"error": "..."} message when there is one, so views can show
-// it as-is.
+// it as-is. ApiError also carries the HTTP status, for views that treat a 404 or 409 specially.
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new Error(body?.error || `${res.status} ${res.statusText}`)
+    throw new ApiError(body?.error || `${res.status} ${res.statusText}`, res.status)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>

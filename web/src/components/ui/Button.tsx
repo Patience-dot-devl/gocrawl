@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentProps } from 'react'
 import './Button.css'
 
 // go: Start crawl and Resume crawl (green fill). stop: Stop crawl (red fill). pause: Pause
@@ -7,7 +7,7 @@ import './Button.css'
 // use the same classes: className="btn btn-secondary".
 export type ButtonVariant = 'go' | 'stop' | 'pause' | 'primary' | 'secondary'
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }
+type ButtonProps = ComponentProps<'button'> & { variant?: ButtonVariant }
 
 export default function Button({ variant = 'secondary', className, type = 'button', ...rest }: ButtonProps) {
   const classes = className ? `btn btn-${variant} ${className}` : `btn btn-${variant}`

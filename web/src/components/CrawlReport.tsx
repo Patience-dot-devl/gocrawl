@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { cancelCrawl, exportURL, getCrawl, listExplanations } from '../api/crawls'
+import { ApiError } from '../api/client'
+import { href } from '../routes'
 import SiteMap from './SiteMap'
 import { useSort } from '../sort'
 import { STATUS_PILL } from '../crawlStatus'
 import type { Explanation, Issue, JobView } from '../types/crawls'
 import Button from './ui/Button'
+import ConfirmDialog from './ui/ConfirmDialog'
 import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
 import StatusCode from './ui/StatusCode'
@@ -20,6 +23,15 @@ interface ReviewState {
 }
 
 type IssueRow = Issue & { _key: number }
+
+function formatCount(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+// The noun in the right number: "1 error", "2 errors".
+function noun(n: number, singular: string): string {
+  return n === 1 ? singular : `${singular}s`
+}
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000))
@@ -55,7 +67,11 @@ function issueSortValue(row: IssueRow, key: string): string | number {
 
 export default function CrawlReport({ id }: { id: string }) {
   const [job, setJob] = useState<JobView | null>(null)
-  const [error, setError] = useState('')
+  // loadError replaces the whole view (nothing loaded, or the crawl does not exist); actionError
+  // is an inline notice above the report, for a failed action such as Stop crawl.
+  const [loadError, setLoadError] = useState<{ message: string; notFound: boolean } | null>(null)
+  const [actionError, setActionError] = useState('')
+  const [confirmStop, setConfirmStop] = useState(false)
   const [severityOn, setSeverityOn] = useState<Record<string, boolean>>({ error: true, warning: true, info: true })
   const [analyzerFilter, setAnalyzerFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -88,7 +104,11 @@ export default function CrawlReport({ id }: { id: string }) {
           timer.current = window.setTimeout(poll, POLL_MS)
         }
       } catch (err) {
-        if (!stopped) setError(err instanceof Error ? err.message : String(err))
+        if (stopped) return
+        setLoadError({
+          message: err instanceof Error ? err.message : String(err),
+          notFound: err instanceof ApiError && err.status === 404,
+        })
       }
     }
     poll()
@@ -157,7 +177,18 @@ export default function CrawlReport({ id }: { id: string }) {
     selectAllRef.current.indeterminate = selectedShownCount > 0 && selectedShownCount < sorted.length
   }, [selectedShownCount, sorted.length])
 
-  if (error) return <Notice tone="error">{error}</Notice>
+  if (loadError?.notFound) {
+    return (
+      <div className="cr">
+        <h1>Crawl not found</h1>
+        <p>It may have been removed, or it was never saved.</p>
+        <p>
+          <a href={href({ view: 'crawls' })}>Go to Crawls</a>
+        </p>
+      </div>
+    )
+  }
+  if (loadError) return <Notice tone="error">{loadError.message}</Notice>
   if (!job) return <p className="muted">Loading…</p>
 
   const emptyReview: ReviewState = { resolved: false, nonissue: false, note: '' }
@@ -241,6 +272,24 @@ export default function CrawlReport({ id }: { id: string }) {
 
   const pill = STATUS_PILL[job.status]
 
+  function stopCrawl() {
+    setConfirmStop(false)
+    setActionError('')
+    cancelCrawl(id).catch((err) => {
+      // A 404 or 409 means the crawl is no longer running, usually because it finished while the
+      // dialog was open. That is not a failure for the user: show the finished crawl.
+      if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+        getCrawl(id)
+          .then(setJob)
+          .catch(() => undefined)
+        return
+      }
+      setActionError(
+        `Could not stop the crawl: ${err instanceof Error ? err.message : String(err)}. Try Stop crawl again.`,
+      )
+    })
+  }
+
   return (
     <div className="cr">
       <header className="cr-head">
@@ -248,13 +297,7 @@ export default function CrawlReport({ id }: { id: string }) {
         <PhasePill phase={pill.phase}>{pill.label}</PhasePill>
         <div className="cr-actions">
           {job.status === 'running' && (
-            <Button
-              variant="stop"
-              onClick={() => {
-                if (!window.confirm('Stop this crawl? The report keeps the pages fetched so far.')) return
-                cancelCrawl(id).catch((e) => setError(e instanceof Error ? e.message : String(e)))
-              }}
-            >
+            <Button variant="stop" onClick={() => setConfirmStop(true)}>
               Stop crawl
             </Button>
           )}
@@ -277,6 +320,21 @@ export default function CrawlReport({ id }: { id: string }) {
         </div>
       </header>
       <p className="cr-seed mono">{job.seed}</p>
+
+      {confirmStop && (
+        <ConfirmDialog
+          title="Stop this crawl?"
+          confirmLabel="Stop crawl"
+          confirmVariant="stop"
+          cancelLabel="Keep crawling"
+          onConfirm={stopCrawl}
+          onCancel={() => setConfirmStop(false)}
+        >
+          <p>The report keeps the pages fetched so far.</p>
+        </ConfirmDialog>
+      )}
+
+      {actionError && <Notice tone="error">{actionError}</Notice>}
 
       {job.status === 'running' && job.started_at && (
         <div className="cr-stats">
@@ -309,21 +367,19 @@ export default function CrawlReport({ id }: { id: string }) {
                   </>
                 ) : (
                   <>
-                    {report.coverage.discovered_not_crawled ?? 0} in-scope URL
+                    {formatCount(report.coverage.discovered_not_crawled ?? 0)} in-scope URL
                     {report.coverage.discovered_not_crawled !== 1 ? 's were' : ' was'} discovered but not crawled
-                    {report.coverage.page_limit_reached && (
-                      <>
-                        , because the page limit (<code>--max-pages {report.coverage.max_pages}</code>) was reached
-                      </>
-                    )}
-                    {report.coverage.depth_limit_reached && (
-                      <>
-                        {report.coverage.page_limit_reached ? ' and' : ', because'} the depth limit (
-                        <code>--depth {report.coverage.max_depth}</code>) was reached
-                      </>
-                    )}
-                    . Page-level findings, broken links especially, may be incomplete. Crawl again with a higher
-                    limit (or <code>0</code> for no limit) for full coverage.
+                    {report.coverage.page_limit_reached &&
+                      `, because the page budget (${formatCount(report.coverage.max_pages ?? 0)}) was reached`}
+                    {report.coverage.depth_limit_reached &&
+                      `${report.coverage.page_limit_reached ? ' and' : ', because'} the depth limit (${formatCount(report.coverage.max_depth ?? 0)}) was reached`}
+                    . Page-level findings, broken links especially, may be incomplete. Raise{' '}
+                    {report.coverage.page_limit_reached && report.coverage.depth_limit_reached
+                      ? 'the page budget and the depth'
+                      : report.coverage.depth_limit_reached
+                        ? 'the depth'
+                        : 'the page budget'}
+                    , or leave it empty for no limit, and crawl again for full coverage.
                   </>
                 )}
               </p>
@@ -352,17 +408,21 @@ export default function CrawlReport({ id }: { id: string }) {
 
           <div className="cr-stats">
             <div className="cr-stat">
-              <b className="num">{report.pages_crawled.toLocaleString()}</b>
-              <span>pages crawled</span>
+              <b className="num">{formatCount(report.pages_crawled)}</b>
+              <span>{noun(report.pages_crawled, 'page')} crawled</span>
             </div>
             {(['error', 'warning', 'info'] as const)
-              .filter((sev) => report.summary.by_severity[sev] !== undefined)
-              .map((sev) => (
-                <div className="cr-stat" key={sev}>
-                  <b className={`num sev-${sev}`}>{report.summary.by_severity[sev].toLocaleString()}</b>
-                  <span>{sev === 'error' ? 'errors' : sev === 'warning' ? 'warnings' : 'info'}</span>
-                </div>
-              ))}
+              // Errors always show, even at 0, so the row keeps its shape between crawls.
+              .filter((sev) => sev === 'error' || report.summary.by_severity[sev] !== undefined)
+              .map((sev) => {
+                const count = report.summary.by_severity[sev] ?? 0
+                return (
+                  <div className="cr-stat" key={sev}>
+                    <b className={`num sev-${sev}`}>{formatCount(count)}</b>
+                    <span>{sev === 'info' ? 'info' : noun(count, sev)}</span>
+                  </div>
+                )
+              })}
           </div>
 
           <div className="cr-panels">
@@ -502,7 +562,7 @@ export default function CrawlReport({ id }: { id: string }) {
                   Hide non-issues
                 </label>
                 <span className="cr-count-line num muted">
-                  Showing {sorted.length.toLocaleString()} of {rows.length.toLocaleString()} issues
+                  Showing {formatCount(sorted.length)} of {formatCount(rows.length)} {noun(rows.length, 'issue')}
                 </span>
                 {filtersActive && <Button onClick={clearFilters}>Clear filters</Button>}
               </div>
