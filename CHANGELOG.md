@@ -22,6 +22,9 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Changed
 
+- In the web UI, the navigation entry and address for saved crawls changed from History
+  (`#/history`) to Crawls (`#/crawls`); `#/history` still opens it. The navigation also lists
+  Compare, Redirects, and Settings, which are placeholders for now.
 - Agent instructions moved from `CLAUDE.md` to `AGENTS.md`, so every coding agent reads the
   same file. `CLAUDE.md` now only imports it.
 

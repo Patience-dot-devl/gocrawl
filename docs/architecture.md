@@ -5,9 +5,9 @@ scope: "How the engine, analyzer pipeline, and report builder fit together; the 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-24
+updated: 2026-10-13
 depends_on: ["web.md", "configuration.md", "roadmap.md"]
-sources: ["../internal/runner/runner.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
+sources: ["../internal/runner/runner.go", "../internal/runner/options.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
 ---
 # Architecture & developer guide
 
@@ -43,10 +43,13 @@ seed URL + config
  JSON / CSV / HTML  (file, stdout, MCP response, or web API response)
 ```
 
-[`runner.Run`](../internal/runner/runner.go) is the single orchestration point used by both
-the CLI (`gocrawl crawl`) and the MCP server. It compiles the config into
+[`runner.Run`](../internal/runner/runner.go) is the single orchestration point used by the
+CLI (`gocrawl crawl`), the MCP server, and the web API. It compiles the config into
 `crawler.Options`, builds the engine and analyzer registry, runs the crawl, runs the selected
-analyzers over the result, and hands everything to the report builder.
+analyzers over the result, and hands everything to the report builder. A caller that needs
+more than the finished report passes `RunOption` values
+([`internal/runner/options.go`](../internal/runner/options.go)) instead of new parameters;
+the CLI and MCP server pass none.
 
 ## Package map
 

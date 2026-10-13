@@ -5,9 +5,9 @@ scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-28
+updated: 2026-10-13
 depends_on: ["mcp.md", "output.md"]
-sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web"]
+sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
 ---
 # Web UI guide
 
@@ -71,7 +71,9 @@ to `gocrawl serve` running on `:8080` for frontend development with hot reload.
 
 ## What the UI does
 
-Three views, all against the API below:
+The navigation lists New crawl, Crawls, Compare, Redirects, and Settings. Compare,
+Redirects, and Settings are placeholders until those features land. The working views, all
+against the API below:
 
 - **New crawl** — a form for the seed URL and every crawl option the interactive menu
   exposes: depth, page cap, concurrency, rate limit, max duration, render mode,
@@ -89,12 +91,34 @@ Three views, all against the API below:
   table (filterable by severity, analyzer, and free-text search) with each issue's
   what/impact/fix explanation and raw `data` expandable inline, any notes advisories, and
   export links.
-- **History** — every crawl saved to the store (`save: true` on start), reopen-able as a
-  report.
+- **Crawls** — every crawl saved to the store (`save: true` on start), reopen-able as a
+  report. Its old address, `#/history`, still opens it.
 
 There is no live per-page progress in this version — `crawler.Engine` has no progress hook
 today, only a start/finish boundary, so the UI polls for `running` → `done` rather than
 streaming page-by-page.
+
+## Source layout
+
+The frontend in [`web/src`](../web/src) is split so features can be added side by side:
+
+- [`routes.ts`](../web/src/routes.ts) is the hash router: `parseHash` and `href` convert
+  between `location.hash` and a `Route`. The addresses are `#/` (New crawl), `#/crawls`,
+  `#/crawl/<id>`, `#/compare?base=<ref>&current=<ref>`, `#/redirects`, `#/redirect/<id>`,
+  and `#/settings`.
+- [`api/client.ts`](../web/src/api/client.ts) holds the fetch helpers (`request`,
+  `postJSON`, `postForm`). Each feature has its own `api/<feature>.ts` and
+  `types/<feature>.ts`, starting with [`api/crawls.ts`](../web/src/api/crawls.ts) and
+  [`types/crawls.ts`](../web/src/types/crawls.ts).
+- `views/` holds one component per top-level view; `components/` holds the pieces views
+  share.
+
+The server side in [`internal/webserver`](../internal/webserver) follows the same split: each
+feature registers its routes from its own file (`crawls.go`, `sitemap.go`, `compare.go`,
+`import.go`, `redirects.go`, `settings.go`, `profiles.go`, `login.go`). Crawls run as jobs in
+a generic in-memory job manager ([`job.go`](../internal/webserver/job.go)) that later job
+kinds share, each kind with its own concurrency cap. A paused job keeps its slot under the
+cap.
 
 ## API
 
