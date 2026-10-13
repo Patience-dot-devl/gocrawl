@@ -40,7 +40,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	var opts []webserver.Option
+	opts := []webserver.Option{webserver.WithGUISettingsPath(webserver.DefaultGUISettingsPath())}
 	if !isLoopbackBind(addr) {
 		// The operator asked for a reachable server; the loopback Host check would only
 		// lock out the clients they just opened the door to.
