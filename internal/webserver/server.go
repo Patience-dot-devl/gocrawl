@@ -21,7 +21,7 @@ import (
 // Server serves the gocrawl web API and embedded frontend.
 type Server struct {
 	store        *store.Store
-	jobs         *jobManager
+	crawls       *jobManager[crawlJob]
 	mux          *http.ServeMux
 	allowAnyHost bool
 	maxRunning   int
@@ -33,7 +33,7 @@ type Server struct {
 func New(st *store.Store, opts ...Option) *Server {
 	s := &Server{
 		store:      st,
-		jobs:       newJobManager(),
+		crawls:     newJobManager[crawlJob](),
 		maxRunning: DefaultMaxRunning,
 	}
 	for _, o := range opts {
@@ -97,7 +97,7 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	job, ok := s.jobs.start(seed, cancel, s.maxRunning)
+	job, ok := s.crawls.start(crawlJob{Seed: seed}, cancel, s.maxRunning)
 	if !ok {
 		cancel()
 		writeError(w, http.StatusTooManyRequests, fmt.Errorf("%d crawls already running; wait for one to finish or cancel it", s.maxRunning))
@@ -107,26 +107,31 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer cancel()
 		rep, runErr := runner.Run(ctx, cfg, seed)
-		s.jobs.finish(job.ID, rep, runErr)
+		// Save before finishing, so a poller that sees the job finish also sees it persisted.
+		var storeID string
 		if runErr == nil && req.Save {
 			if id, saveErr := s.store.Save(rep); saveErr == nil {
-				s.jobs.setStoreID(job.ID, id)
+				storeID = id
 			}
 		}
+		s.crawls.finish(job.ID, runErr, func(d *crawlJob) {
+			d.Report = rep
+			d.StoreID = storeID
+		})
 	}()
 
 	writeJSON(w, http.StatusAccepted, jobView(job))
 }
 
 func (s *Server) handleListCrawls(w http.ResponseWriter, _ *http.Request) {
-	jobs := s.jobs.list()
+	jobs := s.crawls.list()
 	sort.Slice(jobs, func(i, k int) bool { return jobs[i].StartedAt.After(jobs[k].StartedAt) })
 
 	saved := make(map[string]bool, len(jobs))
 	items := make([]crawlListItem, 0, len(jobs))
 	for _, j := range jobs {
-		if j.StoreID != "" {
-			saved[j.StoreID] = true
+		if j.Data.StoreID != "" {
+			saved[j.Data.StoreID] = true
 		}
 		items = append(items, jobListItem(j))
 	}
@@ -156,7 +161,7 @@ func (s *Server) handleListCrawls(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleGetCrawl(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if job, ok := s.jobs.get(id); ok {
+	if job, ok := s.crawls.get(id); ok {
 		writeJSON(w, http.StatusOK, jobView(job))
 		return
 	}
@@ -176,7 +181,7 @@ func (s *Server) handleGetCrawl(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCancelCrawl(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if !s.jobs.cancel(id) {
+	if !s.crawls.cancel(id) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("no running crawl with id %q", id))
 		return
 	}
@@ -186,8 +191,8 @@ func (s *Server) handleCancelCrawl(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleExportCrawl(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var rep *report.Report
-	if job, ok := s.jobs.get(id); ok {
-		rep = job.Report
+	if job, ok := s.crawls.get(id); ok {
+		rep = job.Data.Report
 	}
 	if rep == nil {
 		loaded, err := s.store.Load(id)
