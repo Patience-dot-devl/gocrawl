@@ -185,3 +185,49 @@ func TestRunCountsOnlyInScopeSitemapURLs(t *testing.T) {
 		t.Errorf("tape %q / %q, want 2 / 1 (a sitemap was found; the page is not in its in-scope part)", rep.Coverage.Tape, rep.Coverage.TapeOff)
 	}
 }
+
+func TestPreviewSitemap(t *testing.T) {
+	var hits atomic.Int32
+	ts := sitemapSite(t, &hits)
+
+	got, err := PreviewSitemap(context.Background(), config.Default(), ts.URL)
+	if err != nil {
+		t.Fatalf("PreviewSitemap: %v", err)
+	}
+	if !got.Found || got.Total != 3 || !got.ViaRobots {
+		t.Errorf("preview = %+v, want found, 3 in scope, via robots.txt", got)
+	}
+	if len(got.Sources) != 1 || !strings.HasSuffix(got.Sources[0], "/sitemap.xml") {
+		t.Errorf("Sources = %v, want the /sitemap.xml robots.txt names", got.Sources)
+	}
+
+	cfg := config.Default()
+	cfg.Crawl.Exclude = []string{`/b$`}
+	scoped, err := PreviewSitemap(context.Background(), cfg, ts.URL)
+	if err != nil {
+		t.Fatalf("PreviewSitemap with exclude: %v", err)
+	}
+	if scoped.Total != 2 {
+		t.Errorf("Total with /b excluded = %d, want 2", scoped.Total)
+	}
+}
+
+func TestPreviewSitemapWithoutSitemap(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }))
+	defer ts.Close()
+	got, err := PreviewSitemap(context.Background(), config.Default(), ts.URL)
+	if err != nil {
+		t.Fatalf("PreviewSitemap: %v", err)
+	}
+	if got.Found || got.Total != 0 || got.Sources == nil || len(got.Sources) != 0 {
+		t.Errorf("preview = %+v, want not found with an empty (non-nil) source list", got)
+	}
+}
+
+func TestPreviewSitemapRejectsBadRegex(t *testing.T) {
+	cfg := config.Default()
+	cfg.Crawl.Exclude = []string{"("}
+	if _, err := PreviewSitemap(context.Background(), cfg, "https://example.com"); err == nil {
+		t.Error("expected an error for an invalid exclude regex")
+	}
+}

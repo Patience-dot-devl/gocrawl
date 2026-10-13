@@ -3,10 +3,12 @@ package runner
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/sitemap"
+	"github.com/Patience-dot-devl/gocrawl/internal/config"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
@@ -103,4 +105,43 @@ func groupThousands(n int) string {
 		b.WriteRune(r)
 	}
 	return sign + b.String()
+}
+
+// SitemapPreview is what the sitemap pre-pass would find for a crawl, without crawling.
+type SitemapPreview struct {
+	Found     bool     `json:"found"`
+	Total     int      `json:"total"`   // in-scope sitemap URLs
+	Sources   []string `json:"sources"` // sitemap files that parsed, sorted; never null
+	ViaRobots bool     `json:"via_robots"`
+}
+
+// PreviewSitemap runs only the sitemap discovery step for cfg and seed: the same robots.txt
+// handling, User-Agent, rate limit and scope rules a crawl would apply. Errors are config
+// errors (bad regex, bad seed); a missing sitemap is Found == false.
+func PreviewSitemap(ctx context.Context, cfg config.Config, seed string) (SitemapPreview, error) {
+	if seed == "" {
+		seed = cfg.Seed
+	}
+	if err := cfg.Validate(); err != nil {
+		return SitemapPreview{}, err
+	}
+	opts, err := cfg.ToOptions()
+	if err != nil {
+		return SitemapPreview{}, err
+	}
+	engine := crawler.New(opts, crawler.NewHTTPFetcher(opts))
+	seed, err = engine.SetSeed(seed)
+	if err != nil {
+		return SitemapPreview{}, err
+	}
+	f := crawler.NewHTTPFetcher(opts)
+	if u, perr := url.Parse(seed); perr == nil {
+		f.RestrictCredentialsToHost(u.Host, opts.AllowSubdomains)
+	}
+	sm := discoverSitemap(ctx, engine, engine.Govern(f), seed)
+	sources := sm.all.Sources
+	if sources == nil {
+		sources = []string{}
+	}
+	return SitemapPreview{Found: sm.found(), Total: len(sm.inScope), Sources: sources, ViaRobots: sm.all.ViaRobots}, nil
 }
