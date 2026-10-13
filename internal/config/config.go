@@ -458,7 +458,7 @@ func HeaderProfileDir() string {
 // HeaderProfilePath resolves a header profile name to <HeaderProfileDir>/<name>.headers.
 func HeaderProfilePath(name string) (string, error) {
 	if !headerProfileName.MatchString(name) {
-		return "", fmt.Errorf("invalid profile name %q (letters, digits, '.', '_' and '-' only, not starting with '.')", name)
+		return "", fmt.Errorf("%w: name %q (letters, digits, '.', '_' and '-' only, not starting with '.')", ErrInvalidHeaderProfile, name)
 	}
 	return filepath.Join(HeaderProfileDir(), name+".headers"), nil
 }
