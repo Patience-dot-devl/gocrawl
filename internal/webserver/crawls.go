@@ -57,6 +57,13 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	// Compile the options now, so a configuration the crawl would reject (a bearer token next
+	// to Basic Auth, a bad regex, a missing header profile) is a 400 here rather than a job
+	// that fails a moment later.
+	if _, err := cfg.ToOptions(); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	job, ok := s.crawls.start(crawlJob{Seed: seed}, cancel, s.maxRunning)
