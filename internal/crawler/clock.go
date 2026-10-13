@@ -7,13 +7,13 @@ import (
 
 // activeClock measures a crawl's active time (wall-clock time minus time spent paused) and
 // calls onLimit once that reaches limit (0 = no limit). It is the replacement for the
-// context.WithTimeout that MaxDuration is today, which keeps counting while a crawl sits
-// paused.
+// context.WithTimeout MaxDuration used to be, which kept counting while a crawl sat paused.
 //
-// Lock order: activeClock.mu is a leaf lock. Nothing is called while it is held, and onLimit
-// runs on a timer goroutine without it, so onLimit may take any other lock (Engine passes a
-// context cancel). stop and halt disarm the timer, but a callback already running when they
-// are called still completes, so onLimit must tolerate firing just after stop.
+// onLimit is called at most once over the clock's life, and no call starts after halt. Lock
+// order: activeClock.mu is a leaf lock. Nothing is called while it is held, and onLimit runs
+// on a timer goroutine without it, so onLimit may take any other lock (Engine passes a context
+// cancel). stop disarms the timer, but a timer that expired just before stop may still call
+// onLimit, so onLimit must tolerate firing just after stop.
 type activeClock struct {
 	limit   time.Duration
 	onLimit func()
@@ -23,6 +23,7 @@ type activeClock struct {
 	since  time.Time     // start of the current run; zero while stopped
 	timer  *time.Timer
 	halted bool
+	fired  bool // onLimit has been called (or is being called)
 }
 
 func newActiveClock(limit time.Duration, onLimit func()) *activeClock {
@@ -39,8 +40,21 @@ func (c *activeClock) start() {
 	c.since = time.Now()
 	if c.limit > 0 && c.onLimit != nil {
 		remaining := max(c.limit-c.acc, 0)
-		c.timer = time.AfterFunc(remaining, c.onLimit)
+		c.timer = time.AfterFunc(remaining, c.fire)
 	}
+}
+
+// fire calls onLimit unless it already ran or the clock was halted. A restart with the budget
+// already used up arms a zero timer, so without the fired flag onLimit would run again.
+func (c *activeClock) fire() {
+	c.mu.Lock()
+	if c.fired || c.halted {
+		c.mu.Unlock()
+		return
+	}
+	c.fired = true
+	c.mu.Unlock()
+	c.onLimit()
 }
 
 // stop pauses counting and disarms the limit timer.

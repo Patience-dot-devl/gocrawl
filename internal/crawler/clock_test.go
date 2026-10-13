@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -48,11 +49,32 @@ func TestActiveClockFiresOnlyOnActiveTime(t *testing.T) {
 }
 
 func TestActiveClockHaltIsFinal(t *testing.T) {
-	c := newActiveClock(0, nil)
+	c := newActiveClock(10*time.Millisecond, func() { t.Error("a halted clock fired") })
 	c.halt()
 	c.start()
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // well past the limit
 	if got := c.elapsed(); got != 0 {
 		t.Errorf("elapsed after halt then start = %v, want 0", got)
+	}
+}
+
+func TestActiveClockFiresAtMostOnce(t *testing.T) {
+	var fired atomic.Int32
+	c := newActiveClock(10*time.Millisecond, func() { fired.Add(1) })
+	c.start()
+	deadline := time.Now().Add(3 * time.Second)
+	for fired.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if fired.Load() == 0 {
+		t.Fatal("clock did not fire")
+	}
+	// Restarting with the budget already used up must not fire again.
+	c.stop()
+	c.start()
+	time.Sleep(100 * time.Millisecond)
+	c.halt()
+	if got := fired.Load(); got != 1 {
+		t.Errorf("onLimit called %d times, want exactly once", got)
 	}
 }
