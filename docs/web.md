@@ -6,7 +6,7 @@ topic: "reference"
 status: "current"
 superseded_by: []
 updated: 2026-10-13
-depends_on: ["mcp.md", "output.md"]
+depends_on: ["mcp.md", "output.md", "redirect-check.md"]
 sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
 ---
 # Web UI guide
@@ -48,6 +48,7 @@ machine, and a few guards keep it that way:
   from starting or cancelling crawls.
 - At most 4 crawls run at once; a fifth `POST /api/crawls` returns `429` until one finishes
   or is cancelled.
+- At most 2 redirect checks run at once; a third `POST /api/redirect-checks` returns `429`.
 
 Binding a non-loopback `--addr` (for example `:8080` or `0.0.0.0:8080`) switches the `Host`
 check off, prints a warning, and makes the API reachable by anyone on that network. A crawl
@@ -133,8 +134,15 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/crawls/{id}` | One job's status and, once finished, its full `Report` (see [Output reference](output.md)). Falls back to the store for an id that isn't a live job. |
 | `POST /api/crawls/{id}/cancel` | Cancel a running crawl. Like Ctrl-C on the CLI, this doesn't error the crawl — it stops early and still returns whatever was fetched as a partial report (`Report.Coverage.Interrupted`), tracked here as job status `canceled`. |
 | `GET /api/crawls/{id}/export?format=json\|csv\|html` | Download the finished report in any of the three formats gocrawl already writes, via `report.For(format)`. |
+| `GET /api/redirect-checks` | List the redirect checks started in this process, newest first, without their rows: `{"checks": [...]}`. |
+| `POST /api/redirect-checks` | Start a redirect-rule check, the same check as [`gocrawl check-redirects`](redirect-check.md). Multipart form: `file` (the HubSpot-format CSV, up to 10 MB), `domain` (required), and optionally `sitemap_url`, `concurrency` (1 to 16, default 4), `rate` (requests per second, default 0 = unlimited) and `adaptive_delay` (default `true`). The CSV is parsed before the job starts, so a wrong header is a `400` and not a failed job. `domain` must be a bare host name (a URL is reduced to its host); a value with a path or a user name or password is a `400`, and so is a `sitemap_url` that is not an `http` or `https` URL or that carries a user name or password. Returns `202` with the job. `413` over 10 MB, `415` when the request is not multipart, `429` when 2 checks are already running. |
+| `GET /api/redirect-checks/{id}` | One check: `status`, `done` and `total` rules, and, once the status is `done`, `rows`. Each row is the CSV columns (`original`, `target`, …, `note`) plus the result (`scope`, `source_status`, `source_final_url`, `source_matches_target`, `target_status`, `original_in_sitemap`, `target_in_sitemap`, `verdict`, `notes`). When no sitemap is found, the status is `error` with the reason; a sitemap URL you supplied is replaced by "the sitemap URL" in that message. |
+| `POST /api/redirect-checks/{id}/cancel` | Stop a running check; returns `204`. A canceled check keeps no rows. `404` for an unknown id, `409` when the check is not running. |
+| `GET /api/redirect-checks/{id}/export` | Download the result CSV as an attachment: the input columns plus the verdict columns. `404` for an unknown id, `409` until the check is `done`. |
 
-Job status is one of `running`, `done`, `error`, `canceled`.
+Job status is one of `running`, `done`, `error`, `canceled`. The redirect-check endpoints use
+fixed error messages that never repeat the id, the domain, or a sitemap URL you sent, so a
+token in a sitemap URL cannot leak through an error.
 
 ## Notes
 
@@ -142,3 +150,4 @@ Job status is one of `running`, `done`, `error`, `canceled`.
   in-flight/unsaved jobs (saved ones are still in the store and show up in history).
 - The web API builds its config from `config.Default()` plus the fields in the request body —
   like the MCP tool, it does not read a YAML config file or `GOCRAWL_*` environment variables.
+- Redirect-check results live in memory only, like unsaved crawls.

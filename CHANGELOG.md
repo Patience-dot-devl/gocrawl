@@ -8,6 +8,9 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Web API: redirect-rule checks run as background jobs under `/api/redirect-checks`: upload
+  the CSV, poll progress, cancel, and export the result CSV. It is the same check as
+  `gocrawl check-redirects`.
 - Every document under `docs/` carries frontmatter (`id`, `title`, `scope`, `topic`,
   `status`, `superseded_by`, `updated`, `depends_on`, `sources`), following the scheme used in
   conductor-playground. The index in `docs/README.md` is generated from it by `make docs` and
