@@ -104,6 +104,10 @@ func TestRunWithoutSitemapLeavesCoverageSitemapFieldsZero(t *testing.T) {
 	if rep.Coverage.SitemapTotal != 0 || rep.Coverage.SitemapFetched != 0 {
 		t.Errorf("Coverage = %+v, want zero sitemap fields without a sitemap", rep.Coverage)
 	}
+	// No sitemap means no page can be off it: tape_off is left empty, not a run of '0'.
+	if rep.Coverage.Tape != "2" || rep.Coverage.TapeOff != "" {
+		t.Errorf("tape %q / %q, want 2 and an empty tape_off without a sitemap", rep.Coverage.Tape, rep.Coverage.TapeOff)
+	}
 }
 
 func TestBudgetNote(t *testing.T) {

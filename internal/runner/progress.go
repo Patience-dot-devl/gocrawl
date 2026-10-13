@@ -99,10 +99,14 @@ func (r *progressReporter) emitLocked() {
 	})
 }
 
-// tapes returns the tape recorded so far.
+// tapes returns the tape recorded so far. The off-sitemap tape is empty when no sitemap was
+// found: without one no page can be off it, so there is nothing to record.
 func (r *progressReporter) tapes() (tape, off string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if !r.set.found() {
+		return string(r.tape), ""
+	}
 	return string(r.tape), string(r.tapeOff)
 }
 

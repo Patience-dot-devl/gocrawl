@@ -133,6 +133,11 @@ func decode(t *testing.T, structured any, into any) {
 // carry them (they grow with the page count and are noise to an agent).
 func TestCrawlToolOmitsTheTape(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/sitemap.xml" {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://%[1]s/</loc></url></urlset>`, r.Host)
+			return
+		}
 		fmt.Fprint(w, `<html><head><title>x</title></head><body><a href="/about">about</a></body></html>`)
 	}))
 	defer ts.Close()

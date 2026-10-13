@@ -26,6 +26,12 @@ func TestTapePreview(t *testing.T) {
 			t.Errorf("TapePreview(%q, 1) = %q, want %q", in, got, want)
 		}
 	}
+	// An unknown character ranks as a failed fetch ('x'): worse than 4xx, better than 5xx.
+	for in, want := range map[string]string{"4?": "?", "?4": "?", "?5": "5", "5?": "5", "?2": "?"} {
+		if got := TapePreview(in, 1); got != want {
+			t.Errorf("TapePreview(%q, 1) = %q, want %q", in, got, want)
+		}
+	}
 	// 301 pages, at most 160 ticks: runs of 2, so 151 ticks, the last one the lone 5xx.
 	got := TapePreview(strings.Repeat("2", 300)+"5", TapePreviewLen)
 	if len(got) != 151 || got[150] != '5' || strings.Count(got, "5") != 1 {

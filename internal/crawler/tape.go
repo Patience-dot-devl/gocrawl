@@ -26,21 +26,20 @@ func TapeChar(status int) byte {
 }
 
 // tapeRank orders tape characters worst first, the rule the UI's Tape component uses when one
-// tick stands for several pages: 5xx, then failed fetches, then 4xx, 3xx, 2xx.
+// tick stands for several pages: 5xx, then failed fetches, then 4xx, 3xx, 2xx. An unknown
+// character ranks as a failed fetch ('x'), as the UI's charKind does.
 func tapeRank(c byte) int {
 	switch c {
 	case '5':
 		return 5
-	case 'x':
-		return 4
 	case '4':
 		return 3
 	case '3':
 		return 2
 	case '2':
 		return 1
-	default:
-		return 0
+	default: // 'x' and anything unknown
+		return 4
 	}
 }
 
