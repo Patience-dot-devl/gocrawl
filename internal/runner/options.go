@@ -13,8 +13,9 @@ type runSettings struct {
 	progress func(Progress)
 }
 
-// WithProgress makes Run report progress to fn: one call per phase change and one per page
-// the crawl records, serialized and in order. fn runs on crawl goroutines while the engine
+// WithProgress makes Run report progress to fn: one call per phase change, one per page the
+// crawl records, and one per pause or resume, serialized and in order. fn runs on crawl
+// goroutines (or, for a pause or resume, on the goroutine that asked for it) while the engine
 // holds its locks, so it must return quickly and must not call a Control method.
 func WithProgress(fn func(Progress)) RunOption {
 	return func(s *runSettings) { s.progress = fn }

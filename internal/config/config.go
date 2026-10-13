@@ -75,8 +75,9 @@ type CrawlConfig struct {
 	// BasicAuth or a custom Authorization header, which set the same header.
 	BearerToken string        `mapstructure:"bearer_token"`
 	Timeout     time.Duration `mapstructure:"timeout"`
-	// MaxDuration bounds the crawl's total wall-clock time (0 = unlimited). When it elapses,
-	// the crawl stops early and still produces a report from whatever was fetched so far.
+	// MaxDuration bounds the crawl's active time, excluding time spent paused (0 = unlimited).
+	// When it elapses, the crawl stops early and still produces a report from whatever was
+	// fetched so far.
 	MaxDuration     time.Duration `mapstructure:"max_duration"`
 	MaxBodyBytes    int64         `mapstructure:"max_body_bytes"`
 	RespectRobots   bool          `mapstructure:"respect_robots"`

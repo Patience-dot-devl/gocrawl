@@ -166,3 +166,23 @@ func TestAdaptiveLimiterEffectiveRate(t *testing.T) {
 		t.Fatalf("EffectiveRate after one backoff = %v, want 2", got)
 	}
 }
+
+func TestAdaptiveLimiterSetRateAndResetRecent(t *testing.T) {
+	l := NewAdaptiveLimiter(0, true)
+	l.OnResponse(http.StatusTooManyRequests, nil)
+	l.SetRate(0.25)
+	if got := l.EffectiveRate(); got != 0.25 {
+		t.Fatalf("EffectiveRate = %v, want 0.25", got)
+	}
+	if got := float64(l.limiter.Limit()); got != 0.25 {
+		t.Fatalf("limit = %v, want 0.25", got)
+	}
+	l.SetRate(0) // ignored
+	if got := l.EffectiveRate(); got != 0.25 {
+		t.Fatalf("SetRate(0) changed the rate to %v", got)
+	}
+	l.ResetRecent()
+	if got := l.RecentThrottled(); got != 0 {
+		t.Fatalf("RecentThrottled after ResetRecent = %d, want 0", got)
+	}
+}

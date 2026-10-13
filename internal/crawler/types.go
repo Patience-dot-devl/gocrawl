@@ -221,9 +221,10 @@ type Coverage struct {
 	// be far less covered than DiscoveredNotCrawled reflects, since much of it may never have
 	// been discovered at all.
 	Interrupted bool `json:"interrupted,omitempty"`
-	// DurationLimitReached is true when the crawl stopped because it hit its --max-duration
-	// wall-clock budget rather than being interrupted externally. Also implies Interrupted,
-	// since the same context-cancellation path stops the crawl either way.
+	// DurationLimitReached is true when the crawl stopped because it used up its --max-duration
+	// budget of active time (time spent paused doesn't count) rather than being interrupted
+	// externally. Also implies Interrupted, since the same context-cancellation path stops the
+	// crawl either way.
 	DurationLimitReached bool `json:"duration_limit_reached,omitempty"`
 	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
 	MaxPages int `json:"max_pages,omitempty"`
@@ -344,15 +345,19 @@ type Options struct {
 	// AdaptiveDelay automatically slows the crawl (halving requests-per-second, honoring any
 	// Retry-After header) when the server responds with HTTP 429 or 503.
 	AdaptiveDelay bool
-	// MaxDuration bounds the crawl's total wall-clock time. Zero means unlimited. When it
-	// elapses, the crawl stops early and still returns everything fetched so far as a
-	// partial result (see Coverage.DurationLimitReached), the same way a canceled context
-	// (e.g. an operator's Ctrl-C) does.
+	// MaxDuration bounds the crawl's active time: wall-clock time minus time spent paused.
+	// Zero means unlimited. When it elapses, the crawl stops early and still returns
+	// everything fetched so far as a partial result (see Coverage.DurationLimitReached), the
+	// same way a canceled context (e.g. an operator's Ctrl-C) does.
 	MaxDuration time.Duration
-	// OnProgress, when non-nil, is called after each page is recorded with a snapshot of the
-	// crawl's progress. Calls are serialized and arrive in recording order, so Fetched rises by
-	// exactly one per page event. It runs on a worker goroutine while the engine holds its
-	// internal locks: it must return quickly and must never call back into the Engine.
+	// OnProgress, when non-nil, is called with a snapshot of the crawl's progress after each
+	// page is recorded and on every pause and resume (Engine.Pause, Engine.Resume). Calls are
+	// serialized and arrive in recording order: Fetched rises by exactly one per page event,
+	// and a pause or resume event repeats the last page's Fetched with fresh Paused, Rate and
+	// Throttled fields. Page events run on a worker goroutine, pause and resume events on the
+	// goroutine that called Pause or Resume (or the crawl's own, when it ends while paused),
+	// in both cases while the engine holds internal locks: it must return quickly and must
+	// never call back into the Engine, Pause and Resume included.
 	OnProgress func(Progress)
 }
 

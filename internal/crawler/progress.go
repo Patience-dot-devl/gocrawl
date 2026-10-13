@@ -1,7 +1,7 @@
 package crawler
 
 // Progress is a snapshot of a running crawl, delivered through Options.OnProgress after each
-// page is recorded (and, from the pause track on, on every pause and resume).
+// page is recorded and on every pause and resume.
 type Progress struct {
 	// Fetched is the number of pages recorded so far, including this one.
 	Fetched int `json:"fetched"`
@@ -48,8 +48,27 @@ func (e *Engine) emitPage(p Progress) {
 	e.opts.OnProgress(p)
 }
 
-// fillLive copies the fields that change between pages: the rate limit and recent throttling.
+// fillLive copies the fields that change between pages: rate limit, recent throttling, and
+// pause state. Takes the limiter's lock and ps.mu in turn, never together.
 func (e *Engine) fillLive(p *Progress) {
 	p.Rate = e.limiter.EffectiveRate()
 	p.Throttled = e.limiter.RecentThrottled()
+	e.ps.mu.Lock()
+	p.Paused, p.PauseReason, p.RetryAfterSeconds = e.ps.paused, e.ps.reason, e.ps.retryAfter
+	e.ps.mu.Unlock()
+}
+
+// emitState re-sends the last page snapshot with fresh live fields after a pause or resume.
+// Fetched does not change, so consumers add no tape tick. Callers must not hold ps.mu or any
+// leaf lock: emitState takes progMu, which comes before them in the engine's lock order.
+func (e *Engine) emitState() {
+	if e.opts.OnProgress == nil {
+		return
+	}
+	e.progMu.Lock()
+	defer e.progMu.Unlock()
+	p := e.lastProgress
+	e.fillLive(&p)
+	e.lastProgress = p
+	e.opts.OnProgress(p)
 }

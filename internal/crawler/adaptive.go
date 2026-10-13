@@ -223,3 +223,23 @@ func (f *AdaptiveFetcher) Fetch(ctx context.Context, rawURL string) (*Page, erro
 	}
 	return page, err
 }
+
+// SetRate replaces the current rate (an operator resuming at a chosen speed). r <= 0 is
+// ignored. Later 429/503s halve from the new rate.
+func (a *AdaptiveLimiter) SetRate(r float64) {
+	if r <= 0 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.curRate = r
+	a.limiter.SetLimit(rate.Limit(r))
+}
+
+// ResetRecent forgets the recent 429/503 window, so a resumed crawl gets a fresh minute before
+// auto-pause can trigger again.
+func (a *AdaptiveLimiter) ResetRecent() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.recent = nil
+}

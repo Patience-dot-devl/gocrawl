@@ -15,6 +15,14 @@ import (
 )
 
 // Engine crawls a website concurrently within the configured scope.
+//
+// Lock order, outermost first: Crawl's result mutex → progMu → ps.mu → the leaf locks
+// (frontier.mu, activeClock.mu, and the AdaptiveLimiter's mutex and its rate.Limiter's).
+// A lock may skip levels (the result mutex reads frontier.queued directly; progMu takes the
+// limiter's lock and ps.mu in turn, never together) but is never taken while a later one is
+// held. OnProgress runs with progMu held, plus the result mutex for page events; ps.mu and
+// the leaf locks are never held across it, and the activeClock's onLimit runs on a timer
+// goroutine holding nothing.
 type Engine struct {
 	opts     Options
 	fetcher  Fetcher
@@ -26,6 +34,9 @@ type Engine struct {
 	// state-only events (pause, resume) re-send with fresh live fields.
 	progMu       sync.Mutex
 	lastProgress Progress
+
+	// ps is the pause state shared by Pause/Resume and the running crawl.
+	ps pauseState
 }
 
 // New creates an Engine. fetcher is used to retrieve pages (raw or headless); a separate
@@ -76,11 +87,11 @@ type task struct {
 
 // Crawl walks the site starting at seed and returns the collected Result.
 func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
-	if e.opts.MaxDuration > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, e.opts.MaxDuration)
-		defer cancel()
-	}
+	// MaxDuration counts active time only: the clock stops while the crawl is paused and
+	// cancels the crawl with errMaxDuration once the budget is used up.
+	ctx, cancelRun := context.WithCancelCause(ctx)
+	defer cancelRun(nil)
+	clock := newActiveClock(e.opts.MaxDuration, func() { cancelRun(errMaxDuration) })
 
 	seed, err := e.SetSeed(seed)
 	if err != nil {
@@ -125,6 +136,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	fr := newFrontier()
 	stopWatching := fr.watchCancellation(ctx)
 	defer stopWatching()
+	e.beginRun(fr, clock)
 
 	// enqueue applies dedup, scope/robots, and the page-budget check, then pushes an eligible
 	// task onto the frontier for a worker to pick up. Called for the seed and for every link
@@ -164,6 +176,13 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		defer fr.taskDone()
 
 		if err := e.limiter.Wait(ctx); err != nil {
+			return
+		}
+		if e.Paused() {
+			// Paused while this task waited for the rate limiter: hand it back so it is the
+			// first fetch after Resume, instead of sending one more request to a server that
+			// may just have asked us to stop.
+			fr.pushFront(t)
 			return
 		}
 
@@ -274,6 +293,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	}
 
 	wg.Wait()
+	if e.endRun() {
+		e.emitState() // the crawl ended while paused: report it as no longer paused
+	}
 
 	result.ThrottleEvents = e.limiter.ThrottleCount()
 	result.FinalRate = e.limiter.CurrentRate()
@@ -288,9 +310,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		}
 	}
 	interrupted := ctx.Err() != nil
-	// A deadline (--max-duration) and an external cancellation (e.g. Ctrl-C) both stop the
-	// crawl via the same context-cancellation path, but are worth reporting distinctly.
-	durationLimitReached := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	// The duration limit (--max-duration) and an external cancellation (e.g. Ctrl-C) both stop
+	// the crawl via the same context-cancellation path, but are worth reporting distinctly.
+	durationLimitReached := errors.Is(context.Cause(ctx), errMaxDuration)
 	result.Coverage = Coverage{
 		Complete:             uncrawled == 0 && !interrupted,
 		DiscoveredNotCrawled: uncrawled,
