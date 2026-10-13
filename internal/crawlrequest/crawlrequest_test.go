@@ -1,6 +1,11 @@
 package crawlrequest
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/Patience-dot-devl/gocrawl/internal/config"
+)
 
 func TestToConfig_RequiresURL(t *testing.T) {
 	_, _, err := Params{}.ToConfig()
@@ -164,5 +169,61 @@ func TestToConfig_IgnoreExternalTaggingOverride(t *testing.T) {
 	}
 	if cfg.Analyzers.IgnoreExternalTagging {
 		t.Error("IgnoreExternalTagging = true, want false (explicit override)")
+	}
+}
+
+func TestToConfig_MapsCrawlBehaviorParams(t *testing.T) {
+	adaptive := false
+	cfg, _, err := Params{
+		URL:            "https://example.com",
+		StripQuery:     true,
+		AdaptiveDelay:  &adaptive,
+		FollowNofollow: true,
+		Timeout:        " 7s ",
+		BearerToken:    " tok-123 ",
+	}.ToConfig()
+	if err != nil {
+		t.Fatalf("ToConfig: %v", err)
+	}
+	if !cfg.Crawl.StripQuery {
+		t.Error("StripQuery = false, want true")
+	}
+	if cfg.Crawl.AdaptiveDelay {
+		t.Error("AdaptiveDelay = true, want false (explicit override)")
+	}
+	if !cfg.Crawl.FollowNofollow {
+		t.Error("FollowNofollow = false, want true")
+	}
+	if cfg.Crawl.Timeout != 7*time.Second {
+		t.Errorf("Timeout = %v, want 7s", cfg.Crawl.Timeout)
+	}
+	if cfg.Crawl.BearerToken != "tok-123" {
+		t.Errorf("BearerToken = %q, want tok-123 (trimmed)", cfg.Crawl.BearerToken)
+	}
+}
+
+func TestToConfig_CrawlBehaviorDefaults(t *testing.T) {
+	cfg, _, err := Params{URL: "https://example.com"}.ToConfig()
+	if err != nil {
+		t.Fatalf("ToConfig: %v", err)
+	}
+	d := config.Default()
+	if !cfg.Crawl.AdaptiveDelay || cfg.Crawl.AdaptiveDelay != d.Crawl.AdaptiveDelay {
+		t.Error("AdaptiveDelay should default to the config default (true)")
+	}
+	if cfg.Crawl.Timeout != d.Crawl.Timeout {
+		t.Errorf("Timeout = %v, want the default %v", cfg.Crawl.Timeout, d.Crawl.Timeout)
+	}
+	if cfg.Crawl.StripQuery || cfg.Crawl.FollowNofollow || cfg.Crawl.BearerToken != "" {
+		t.Errorf("unexpected non-default: strip_query=%v follow_nofollow=%v bearer set=%v",
+			cfg.Crawl.StripQuery, cfg.Crawl.FollowNofollow, cfg.Crawl.BearerToken != "")
+	}
+}
+
+func TestToConfig_InvalidTimeout(t *testing.T) {
+	for _, v := range []string{"soon", "-1s", "0s"} {
+		if _, _, err := (Params{URL: "https://example.com", Timeout: v}).ToConfig(); err == nil {
+			t.Errorf("timeout %q: expected an error", v)
+		}
 	}
 }

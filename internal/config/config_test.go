@@ -167,3 +167,14 @@ func equalSlices(a, b []string) bool {
 	}
 	return true
 }
+
+func TestLoadReadsBearerTokenFromEnv(t *testing.T) {
+	t.Setenv("GOCRAWL_CRAWL_BEARER_TOKEN", "env-token")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Crawl.BearerToken != "env-token" {
+		t.Errorf("Crawl.BearerToken = %q, want env-token", cfg.Crawl.BearerToken)
+	}
+}

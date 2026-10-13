@@ -33,29 +33,31 @@ var reservedHeaders = map[string]string{
 // file. A name given twice keeps the later value — so an inline --header can override one
 // from a file — rather than sending the header twice. Names and values are validated as HTTP
 // field syntax (which rules out CR/LF header injection), and names net/http manages itself or
-// that have a dedicated option are refused; see reservedHeaders.
+// that have a dedicated option are refused; see reservedHeaders. Errors name the 1-based line
+// number and never quote the line, since a header value can be a credential.
 func ParseHeaderLines(lines []string) (http.Header, error) {
 	h := http.Header{}
-	for _, line := range lines {
+	for i, line := range lines {
+		n := i + 1
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		name, value, ok := strings.Cut(line, ":")
 		if !ok {
-			return nil, fmt.Errorf(`header %q: want "Name: value"`, line)
+			return nil, fmt.Errorf(`header on line %d: want "Name: value"`, n)
 		}
 		name = strings.TrimSpace(name)
 		value = strings.TrimSpace(value)
 		if !httpguts.ValidHeaderFieldName(name) {
-			return nil, fmt.Errorf("header name %q is not a valid HTTP field name", name)
+			return nil, fmt.Errorf("header on line %d: the name is not a valid HTTP field name", n)
 		}
 		if !httpguts.ValidHeaderFieldValue(value) {
-			return nil, fmt.Errorf("header %s: value contains characters not allowed in an HTTP header", name)
+			return nil, fmt.Errorf("header on line %d: the value contains characters not allowed in an HTTP header", n)
 		}
 		canonical := http.CanonicalHeaderKey(name)
 		if why, reserved := reservedHeaders[canonical]; reserved {
-			return nil, fmt.Errorf("header %s can't be set as a custom header: %s", canonical, why)
+			return nil, fmt.Errorf("header %s (line %d) can't be set as a custom header: %s", canonical, n, why)
 		}
 		h.Set(canonical, value)
 	}

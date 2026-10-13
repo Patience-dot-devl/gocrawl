@@ -46,6 +46,7 @@ func newCrawlCmd() *cobra.Command {
 	f.StringArray("header", nil, `extra request header as "Name: value" (repeatable), sent only to the seed host like --cookie`)
 	f.String("header-file", "", `file of extra request headers, one "Name: value" per line ('#' comments allowed)`)
 	f.String("header-profile", "", "named header file at ~/.gocrawl/headers/<name>.headers")
+	f.String("bearer-token", "", `token sent as "Authorization: Bearer <token>", only to the seed host like --cookie (a flag value lands in shell history; GOCRAWL_CRAWL_BEARER_TOKEN doesn't)`)
 	f.Bool("respect-robots", true, "obey robots.txt while crawling")
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
@@ -179,6 +180,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("header-profile") {
 		cfg.Crawl.HeaderProfile, _ = f.GetString("header-profile")
+	}
+	if f.Changed("bearer-token") {
+		cfg.Crawl.BearerToken, _ = f.GetString("bearer-token")
 	}
 	if f.Changed("respect-robots") {
 		cfg.Crawl.RespectRobots, _ = f.GetBool("respect-robots")

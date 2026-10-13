@@ -142,3 +142,138 @@ func TestLoadReadsHeadersListFromYAML(t *testing.T) {
 		t.Errorf("Crawl.Headers = %q, want %q", cfg.Crawl.Headers, want)
 	}
 }
+
+// A bearer token becomes an Authorization header on the custom-headers path, so it inherits
+// that path's host restriction (crawler.HTTPFetcher.authHostAllowed). A pasted "Bearer "
+// prefix is accepted rather than doubled.
+func TestToOptionsBearerTokenSetsAuthorization(t *testing.T) {
+	for _, token := range []string{"tok-123", "  tok-123  ", "Bearer tok-123", "bearer tok-123"} {
+		c := Default()
+		c.Crawl.BearerToken = token
+		o, err := c.ToOptions()
+		if err != nil {
+			t.Fatalf("ToOptions(%q): %v", token, err)
+		}
+		if got := o.Headers.Get("Authorization"); got != "Bearer tok-123" {
+			t.Errorf("BearerToken %q: Authorization = %q, want %q", token, got, "Bearer tok-123")
+		}
+	}
+}
+
+func TestToOptionsBearerTokenKeepsOtherHeaders(t *testing.T) {
+	c := Default()
+	c.Crawl.BearerToken = "tok"
+	c.Crawl.Headers = []string{"X-Store: uk"}
+	o, err := c.ToOptions()
+	if err != nil {
+		t.Fatalf("ToOptions: %v", err)
+	}
+	if o.Headers.Get("X-Store") != "uk" || o.Headers.Get("Authorization") != "Bearer tok" {
+		t.Errorf("Headers = %v, want X-Store and the bearer Authorization", o.Headers)
+	}
+}
+
+// Basic Auth and a custom Authorization header set the same header as the bearer token, so
+// the combination is an error. The error must never echo the token: it reaches the CLI, MCP
+// tool errors, and web API responses.
+func TestToOptionsBearerTokenConflicts(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeFile(t, filepath.Join(home, ".gocrawl", "headers", "auth.headers"), "Authorization: Basic eDp5\n")
+	const token = "very-secret-token"
+	cases := []struct {
+		name string
+		set  func(*Config)
+	}{
+		{"basic_auth", func(c *Config) { c.Crawl.BasicAuth = "alice:pw" }},
+		{"inline Authorization header", func(c *Config) { c.Crawl.Headers = []string{"Authorization: Token abc"} }},
+		{"Authorization from a header profile", func(c *Config) { c.Crawl.HeaderProfile = "auth" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Default()
+			c.Crawl.BearerToken = token
+			tc.set(&c)
+			_, err := c.ToOptions()
+			if err == nil {
+				t.Fatal("ToOptions succeeded, want a conflict error")
+			}
+			if !strings.Contains(err.Error(), "bearer_token") {
+				t.Errorf("error %q doesn't name bearer_token", err)
+			}
+			if strings.Contains(err.Error(), token) {
+				t.Errorf("error %q leaks the token", err)
+			}
+		})
+	}
+}
+
+func TestToOptionsBearerTokenRejectsHeaderInjection(t *testing.T) {
+	c := Default()
+	c.Crawl.BearerToken = "zq9-secret\r\nX-Evil: 1"
+	_, err := c.ToOptions()
+	if err == nil {
+		t.Fatal("ToOptions accepted a token containing CR/LF")
+	}
+	if strings.Contains(err.Error(), "X-Evil") || strings.Contains(err.Error(), "zq9-secret") {
+		t.Errorf("error %q echoes the token", err)
+	}
+}
+
+// A token that is only the "Bearer " prefix would send "Authorization: Bearer " with nothing
+// after it, which is never what was meant.
+func TestToOptionsBearerTokenRejectsEmptyAfterPrefix(t *testing.T) {
+	for _, token := range []string{"Bearer ", "bearer", "Bearer    "} {
+		c := Default()
+		c.Crawl.BearerToken = token
+		_, err := c.ToOptions()
+		if err == nil {
+			t.Fatalf("ToOptions(%q) succeeded, want an error", token)
+		}
+		if !strings.Contains(err.Error(), "bearer_token") {
+			t.Errorf("error %q doesn't name bearer_token", err)
+		}
+	}
+}
+
+// Credentials reach errors that travel to the CLI, MCP results and web API responses, so no
+// config error may quote the secret it is rejecting.
+func TestToOptionsErrorsNeverEchoSecrets(t *testing.T) {
+	const secret = "s3cr3t-value"
+	cases := []struct {
+		name string
+		set  func(*Config)
+	}{
+		{"basic_auth without a colon", func(c *Config) { c.Crawl.BasicAuth = secret }},
+		{"proxy with credentials, bad scheme", func(c *Config) { c.Crawl.Proxy = "ftp://user:" + secret + "@proxy.example:21" }},
+		{"proxy with credentials, no host", func(c *Config) { c.Crawl.Proxy = "http://user:" + secret + "@" }},
+		{"proxy with credentials, unparsable", func(c *Config) { c.Crawl.Proxy = "http://user:" + secret + "@proxy.example:notaport" }},
+		{"proxy in the pool", func(c *Config) { c.Crawl.Proxies = []string{"ftp://user:" + secret + "@proxy.example:21"} }},
+		{"inline header without a colon", func(c *Config) { c.Crawl.Headers = []string{"Authorization " + secret} }},
+		{"inline header with a bad name", func(c *Config) { c.Crawl.Headers = []string{"X Bad " + secret + ": v"} }},
+		{"inline header with a bad value", func(c *Config) { c.Crawl.Headers = []string{"X-Token: " + secret + "\r\nX-Evil: 1"} }},
+		{"inline reserved header", func(c *Config) { c.Crawl.Headers = []string{"Cookie: " + secret} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Default()
+			tc.set(&c)
+			_, err := c.ToOptions()
+			if err == nil {
+				t.Fatal("ToOptions succeeded, want an error")
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("error %q leaks the secret", err)
+			}
+		})
+	}
+}
+
+func TestToOptionsHeaderErrorNamesTheLineNumber(t *testing.T) {
+	c := Default()
+	c.Crawl.Headers = []string{"X-One: 1", "no colon here"}
+	_, err := c.ToOptions()
+	if err == nil || !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("err = %v, want it to name line 2", err)
+	}
+}

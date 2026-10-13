@@ -187,3 +187,38 @@ func TestCrawlToolOmitsTheTape(t *testing.T) {
 		}
 	}
 }
+
+// CrawlInput is crawlrequest.Params, so new crawl parameters reach MCP through the generated
+// input schema. login_session is web-only and must not.
+func TestCrawlToolSchemaListsCrawlParams(t *testing.T) {
+	cs := connect(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name != "crawl" {
+			continue
+		}
+		raw, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		if err := json.Unmarshal(raw, &schema); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"strip_query", "adaptive_delay", "follow_nofollow", "timeout", "bearer_token"} {
+			if _, ok := schema.Properties[name]; !ok {
+				t.Errorf("crawl input schema has no %q property", name)
+			}
+		}
+		if _, ok := schema.Properties["login_session"]; ok {
+			t.Error("crawl input schema exposes login_session, which is web-only")
+		}
+		return
+	}
+	t.Fatal("no crawl tool listed")
+}

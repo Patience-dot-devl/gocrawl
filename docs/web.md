@@ -53,7 +53,9 @@ Binding a non-loopback `--addr` (for example `:8080` or `0.0.0.0:8080`) switches
 check off, prints a warning, and makes the API reachable by anyone on that network. A crawl
 runs from this machine with whatever proxy, Basic Auth, cookie, or custom headers the request
 supplies, and can name any header profile stored on it, so only do this behind something that
-authenticates (a reverse proxy, VPN, or SSH tunnel).
+authenticates (a reverse proxy, VPN, or SSH tunnel). The same goes for the stored data: anyone
+on that network can also read and overwrite header-profile bodies (which hold secrets) and the
+GUI settings.
 
 ## Building the real UI into the binary
 
@@ -154,6 +156,12 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `POST /api/crawls/{id}/cancel` | Cancel a running crawl. Like Ctrl-C on the CLI, this doesn't error the crawl — it stops early and still returns whatever was fetched as a partial report (`Report.Coverage.Interrupted`), tracked here as job status `canceled`. |
 | `GET /api/crawls/{id}/export?format=json\|csv\|html` | Download the finished report in any of the three formats gocrawl already writes, via `report.For(format)`. |
 | `POST /api/sitemap-preview` | Find a site's sitemap without crawling. JSON body `{url, include, exclude, allow_subdomains}`; returns `{found, total, sources, via_robots}`, where `total` counts only sitemap URLs inside that scope. Respects robots.txt and sends the crawl's default User-Agent. The preview sends no credentials (no Basic Auth, cookie or custom headers), so a site gated behind them may report no sitemap. |
+| `GET /api/settings` | The UI's saved settings: `theme` (`dark`, `light` or `system`), `crawl_defaults` (a crawl request body that pre-fills the New crawl form), and the read-only `store_dir`. |
+| `PUT /api/settings` | Save `theme` and `crawl_defaults` (JSON). Written atomically to `~/.gocrawl/gui.json` with mode `0600`. `bearer_token`, `basic_auth`, `cookie`, inline `headers`, and user:password in the URL or proxy URLs are stripped before saving. `400` for an unknown theme or an unusable default. |
+| `GET /api/header-profiles` | `{"profiles": [...]}`: the names in `~/.gocrawl/headers/`. |
+| `GET /api/header-profiles/{name}` | `{"name", "body"}` of one profile; the body is returned as-is, header values included. `404` when it doesn't exist, `400` for an invalid name. |
+| `PUT /api/header-profiles/{name}` | Create or replace a profile from JSON `{"body": "Name: value\n…"}`, validated like `--header-file`. `204`; `400` with the parser's message when invalid. |
+| `DELETE /api/header-profiles/{name}` | Delete a profile. `204`, or `404`. |
 
 Job status is one of `running`, `done`, `error`, `canceled`.
 
@@ -184,5 +192,15 @@ set instead of fetching it again.
 
 - Jobs live in memory for the life of the `gocrawl serve` process; restarting it drops
   in-flight/unsaved jobs (saved ones are still in the store and show up in history).
-- The web API builds its config from `config.Default()` plus the fields in the request body —
-  like the MCP tool, it does not read a YAML config file or `GOCRAWL_*` environment variables.
+- The web API builds each crawl's config from `config.Default()` plus the request body — like
+  the MCP tool, it does not read a YAML config file or `GOCRAWL_*` environment variables. The
+  UI's own defaults live in `~/.gocrawl/gui.json` and are applied by the form, not the server. A
+  start request whose options can't compile (a bad regex, a bearer token next to Basic Auth, a
+  missing header profile) is a `400`.
+- Secrets stay out of errors and storage. Error messages from the settings and header-profile
+  routes never contain a secret value, and `gui.json` never stores `bearer_token`,
+  `basic_auth`, `cookie`, inline `headers`, or credentials embedded in a URL. Header profiles are
+  the exception by design: they are the place for secrets, and `GET /api/header-profiles/{name}`
+  returns a body as-is.
+- The Settings view that edits all of this lands with the GUI settings view; until then these
+  routes are the interface.

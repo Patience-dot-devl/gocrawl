@@ -5,8 +5,8 @@ scope: "Every option, flag, env var, and default; config layering; analyzer sele
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-28
-depends_on: ["output.md", "analyzers.md", "storage.md", "mcp.md"]
+updated: 2026-10-13
+depends_on: ["output.md", "web.md", "analyzers.md", "storage.md", "mcp.md"]
 sources: ["../internal/config/config.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../configs/example.yaml"]
 ---
 # Configuration reference
@@ -52,6 +52,7 @@ default** (the value used when you set nothing).
 | `crawl.headers` | `--header` (repeatable) | list of string | *(none)* | Extra request headers as `"Name: value"`, sent only to the crawled host. See [Custom request headers](#custom-request-headers-eg-shopify-crawler-access-signatures). |
 | `crawl.header_file` | `--header-file` | string | *(none)* | Path to a file of `Name: value` lines, merged into `headers`. |
 | `crawl.header_profile` | `--header-profile` | string | *(none)* | Name of a header file stored at `~/.gocrawl/headers/<name>.headers`, merged into `headers`. The only header source the MCP server and web API accept besides inline `headers`. |
+| `crawl.bearer_token` | `--bearer-token` | string | *(none)* | Token sent as `Authorization: Bearer <token>`, scoped like `basic_auth`. Can't be combined with `basic_auth` or a custom `Authorization` header. See [Bearer tokens](#bearer-tokens). |
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
 | `crawl.max_duration` | `--max-duration` | duration | `0` (unlimited) | Wall-clock budget for the whole crawl (e.g. `"90m"`). On expiry the crawl stops early and still writes a report from whatever was fetched, flagged as **partial coverage** (see [Output](output.md#coverage)) — the same mechanism a Ctrl-C interruption uses. |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
@@ -269,6 +270,11 @@ directly inside `~/.gocrawl/headers/`, and passing the name keeps the signature 
 the agent's conversation and logs. One profile per domain (`uk`, `de`, …) matches how Shopify
 issues signatures.
 
+The web UI's Settings view lists, creates, edits and deletes profiles; it validates each one with
+the same parser a crawl uses and writes the file with mode `0600`. The view lands with the GUI
+settings work; the same operations are already available as the `/api/header-profiles` routes of
+the [web API](web.md#api). Error messages about a profile never contain a header value.
+
 **Precedence.** Sources merge as profile, then file, then inline `--header`; for a header name
 set more than once the later source wins, so an inline `--header` can override a single value
 from a file. From the environment, use `GOCRAWL_CRAWL_HEADER_FILE` or
@@ -293,6 +299,24 @@ With a valid Shopify signature the crawl should no longer need the slow, single-
 otherwise used to stay under Shopify's rate limits. Keep `adaptive_delay` on regardless, and if
 the store still answers with 429s, check the signature: Shopify treats a rate-limited signed
 crawler as one whose signature isn't valid (expired, or created for a different domain).
+
+### Bearer tokens
+
+Staging sites and APIs behind an OAuth-style gateway often expect
+`Authorization: Bearer <token>`. Pass the token with `--bearer-token`, `crawl.bearer_token`, or
+`GOCRAWL_CRAWL_BEARER_TOKEN` (the environment keeps it out of shell history and `ps`):
+
+```sh
+GOCRAWL_CRAWL_BEARER_TOKEN="$STAGING_TOKEN" gocrawl crawl https://staging.example.com
+```
+
+The token travels the custom-headers path, so it gets exactly the same scoping: only the seed
+host (plus subdomains under `--subdomains`), never over an https → http downgrade, re-checked on
+every redirect hop, and not supported with `--render headless`. A pasted `Bearer ` prefix is
+accepted. Combining it with `--basic-auth` or a custom `Authorization` header (inline, from a
+header file, or from a profile) is an error, because all of them set the same header; the error
+never repeats the token. The MCP `crawl` tool and the web API take it as `bearer_token`; the web
+UI never saves it.
 
 ## Selecting analyzers
 
@@ -421,6 +445,7 @@ replaced by underscores. They override the YAML file and are overridden by CLI f
 | `crawl.respect_robots` | `GOCRAWL_CRAWL_RESPECT_ROBOTS` |
 | `crawl.header_file` | `GOCRAWL_CRAWL_HEADER_FILE` |
 | `crawl.header_profile` | `GOCRAWL_CRAWL_HEADER_PROFILE` |
+| `crawl.bearer_token` | `GOCRAWL_CRAWL_BEARER_TOKEN` |
 | `render` | `GOCRAWL_RENDER` |
 | `output.format` | `GOCRAWL_OUTPUT_FORMAT` |
 | `store.dir` | `GOCRAWL_STORE_DIR` |
@@ -497,6 +522,11 @@ crawl:
   headers: []
   header_file: ""
   header_profile: ""
+  # Token sent as "Authorization: Bearer <token>", scoped and leak-guarded the same way as
+  # basic_auth, and not supported with render: "headless". Can't be combined with basic_auth
+  # or a custom Authorization header. Prefer GOCRAWL_CRAWL_BEARER_TOKEN or --bearer-token to
+  # writing the token into this file.
+  bearer_token: ""
   timeout: "15s"        # per-request timeout
   max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report
