@@ -130,8 +130,11 @@ func newFetcher(cfg config.Config, opts crawler.Options) (crawler.Fetcher, error
 }
 
 // Run performs a full crawl + analysis for the given config and seed, returning a Report.
-// The seed argument overrides cfg.Seed when non-empty.
-func Run(ctx context.Context, cfg config.Config, seed string) (*report.Report, error) {
+// The seed argument overrides cfg.Seed when non-empty. runOpts customize this one call (see
+// RunOption); the CLI and MCP server pass none.
+func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOption) (*report.Report, error) {
+	settings := newRunSettings(runOpts)
+	_ = settings // read by the progress and pause features once they add their fields
 	if seed == "" {
 		seed = cfg.Seed
 	}
