@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -217,5 +218,23 @@ func TestStartCrawlRejectsEmptyURL(t *testing.T) {
 	rec, _ := doJSON(t, srv, http.MethodPost, "/api/crawls", map[string]any{"url": ""})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestGetCrawlUnknownIDIsNotFoundWithoutLeaks(t *testing.T) {
+	root := t.TempDir()
+	srv := New(store.New(root))
+	rec, out := doJSON(t, srv, http.MethodGet, "/api/crawls/doesnotexist", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if out["error"] != "crawl not found" {
+		t.Fatalf("error = %v, want %q", out["error"], "crawl not found")
+	}
+	body := rec.Body.String()
+	for _, leak := range []string{root, "doesnotexist"} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("body %q leaks %q", body, leak)
+		}
 	}
 }

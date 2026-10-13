@@ -142,6 +142,8 @@ func (s *Server) handleListCrawls(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"crawls": items})
 }
 
+var errCrawlNotFound = errors.New("crawl not found")
+
 func (s *Server) handleGetCrawl(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	tapeFrom, err := parseTapeFrom(r.URL.Query().Get("tape_from"))
@@ -155,7 +157,8 @@ func (s *Server) handleGetCrawl(w http.ResponseWriter, r *http.Request) {
 	}
 	rep, err := s.store.Load(id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err)
+		// The store error names the server's store path and the id; neither belongs in a response.
+		writeError(w, http.StatusNotFound, errCrawlNotFound)
 		return
 	}
 	writeJSON(w, http.StatusOK, JobView{
@@ -185,7 +188,7 @@ func (s *Server) handleExportCrawl(w http.ResponseWriter, r *http.Request) {
 	if rep == nil {
 		loaded, err := s.store.Load(id)
 		if err != nil {
-			writeError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, errCrawlNotFound)
 			return
 		}
 		rep = loaded
