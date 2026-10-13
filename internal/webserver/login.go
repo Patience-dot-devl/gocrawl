@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"golang.org/x/net/http/httpguts"
+	"golang.org/x/net/idna"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/config"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/render"
 )
@@ -577,11 +579,14 @@ func (s *Server) handleDeleteLogin(w http.ResponseWriter, r *http.Request) {
 
 func loginErrStatus(err error) int {
 	var stateErr *loginStateError
+	var reqErr *loginRequestError
 	switch {
 	case errors.Is(err, errLoginNotFound):
 		return http.StatusNotFound
 	case errors.As(err, &stateErr):
 		return http.StatusConflict
+	case errors.As(err, &reqErr):
+		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
 	}
@@ -603,5 +608,45 @@ func loginTarget(raw string) (target, host string, err error) {
 		// Don't echo the input: it may carry credentials.
 		return "", "", errors.New("url must be an http or https URL with a host")
 	}
-	return u.String(), strings.ToLower(u.Hostname()), nil
+	return u.String(), asciiHost(u.Hostname()), nil
+}
+
+// asciiHost is the lower-case ASCII (punycode) form of a host name, the form browsers store
+// cookie domains in, so "bücher.example" and "xn--bcher-kva.example" compare equal. A host the
+// IDNA lookup rules reject (an underscore, say) is compared as typed, lower-cased.
+func asciiHost(host string) string {
+	if a, err := idna.Lookup.ToASCII(host); err == nil && a != "" {
+		return strings.ToLower(a)
+	}
+	return strings.ToLower(host)
+}
+
+// loginRequestError is a crawl request that can't use its login session as asked (HTTP 400).
+type loginRequestError struct{ msg string }
+
+func (e *loginRequestError) Error() string { return e.msg }
+
+// applyLoginSession turns a captured login into the crawl's Cookie header. From there the
+// existing cookie path applies: sent only to the seed host (plus subdomains when asked), never
+// over an https -> http downgrade, and refused by headless rendering. Errors never carry a
+// cookie value or the seed URL (which may hold credentials).
+func (s *Server) applyLoginSession(cfg *config.Config, seed, id, cookie string) error {
+	if strings.TrimSpace(cookie) != "" {
+		return &loginRequestError{"login_session and cookie can't be combined: the login session supplies the Cookie header"}
+	}
+	if cfg.Render == "headless" {
+		return &loginRequestError{`login_session needs render "raw": headless Chromium can't keep the session cookie on the seed host`}
+	}
+	header, host, err := s.logins.cookieHeader(id)
+	if err != nil {
+		return err
+	}
+	// Hostname() is the host without port or userinfo; compare it in ASCII form, as the
+	// session's host was recorded.
+	u, err := url.Parse(seed)
+	if err != nil || asciiHost(u.Hostname()) != host {
+		return &loginRequestError{fmt.Sprintf("this login session is for %s, not for the crawl's seed host; log in again for that site", host)}
+	}
+	cfg.Crawl.Cookie = header
+	return nil
 }

@@ -41,6 +41,10 @@ func (s *Server) handleListExplanations(w http.ResponseWriter, _ *http.Request) 
 type startCrawlRequest struct {
 	crawlrequest.Params
 	Save bool `json:"save"`
+	// LoginSession names a captured browser login (POST /api/login-sessions); its cookies
+	// become the crawl's Cookie header. Web-only: not in crawlrequest.Params, so the MCP
+	// tool never sees it.
+	LoginSession string `json:"login_session,omitempty"`
 }
 
 func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +60,12 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	if req.LoginSession != "" {
+		if err := s.applyLoginSession(&cfg, seed, req.LoginSession, req.Cookie); err != nil {
+			writeError(w, loginErrStatus(err), err)
+			return
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
