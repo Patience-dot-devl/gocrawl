@@ -52,3 +52,19 @@ func TestTapePreviewLargeCrawl(t *testing.T) {
 		t.Errorf("preview %q lost the single 4xx", got)
 	}
 }
+
+func TestTapeClasses(t *testing.T) {
+	if got := TapeClasses(""); got != nil {
+		t.Errorf("TapeClasses(\"\") = %v, want nil", got)
+	}
+	got := TapeClasses("22x35")
+	want := map[string]int{"2": 2, "x": 1, "3": 1, "5": 1}
+	if len(got) != len(want) {
+		t.Fatalf("TapeClasses = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("TapeClasses[%q] = %d, want %d", k, got[k], v)
+		}
+	}
+}

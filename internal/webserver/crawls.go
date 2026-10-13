@@ -59,7 +59,7 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	job, ok := s.crawls.start(crawlJob{Seed: seed}, cancel, s.maxRunning)
+	job, ok := s.crawls.start(crawlJob{Seed: seed, MaxPages: cfg.Crawl.MaxPages}, cancel, s.maxRunning)
 	if !ok {
 		cancel()
 		writeError(w, http.StatusTooManyRequests, fmt.Errorf("%d crawls already running; wait for one to finish or cancel it", s.maxRunning))
@@ -68,7 +68,7 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer cancel()
-		rep, runErr := runner.Run(ctx, cfg, seed)
+		rep, runErr := runner.Run(ctx, cfg, seed, s.crawlRunOptions(job.ID)...)
 		// Save before finishing, so a poller that sees the job finish also sees it persisted.
 		var storeID string
 		if runErr == nil && req.Save {
@@ -108,13 +108,17 @@ func (s *Server) handleListCrawls(w http.ResponseWriter, _ *http.Request) {
 			continue
 		}
 		items = append(items, crawlListItem{
-			ID:           e.ID,
-			Seed:         e.Seed,
-			Status:       string(StatusDone),
-			FinishedAt:   e.FinishedAt,
-			PagesCrawled: e.PagesCrawled,
-			BySeverity:   e.BySeverity,
-			Persisted:    true,
+			ID:             e.ID,
+			Seed:           e.Seed,
+			Status:         string(StatusDone),
+			FinishedAt:     e.FinishedAt,
+			PagesCrawled:   e.PagesCrawled,
+			BySeverity:     e.BySeverity,
+			Persisted:      true,
+			StatusClasses:  savedClasses(e),
+			SitemapTotal:   e.SitemapTotal,
+			SitemapFetched: e.SitemapFetched,
+			TapePreview:    e.TapePreview,
 		})
 	}
 
@@ -123,8 +127,13 @@ func (s *Server) handleListCrawls(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleGetCrawl(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if job, ok := s.crawls.get(id); ok {
-		writeJSON(w, http.StatusOK, jobView(job))
+	tapeFrom, err := parseTapeFrom(r.URL.Query().Get("tape_from"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if view, ok := s.crawlView(id, tapeFrom); ok {
+		writeJSON(w, http.StatusOK, view)
 		return
 	}
 	rep, err := s.store.Load(id)

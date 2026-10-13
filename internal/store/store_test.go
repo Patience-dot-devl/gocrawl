@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 )
 
@@ -176,4 +178,44 @@ func writeJSON(path string, r *report.Report) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+func TestListCarriesStatusCountsAndSitemapCoverage(t *testing.T) {
+	s := New(t.TempDir())
+	r := rep("https://example.com/", "2026-10-13T10:00:00Z", 3)
+	r.Summary.ByStatus = map[string]int{"200": 2, "404": 1}
+	r.Coverage = &crawler.Coverage{Complete: true, SitemapTotal: 5, SitemapFetched: 2, Tape: strings.Repeat("2", 300) + "5"}
+	if _, err := s.Save(r); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	entries, err := s.List("")
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("List: %v entries, err %v", len(entries), err)
+	}
+	e := entries[0]
+	if e.ByStatus["200"] != 2 || e.ByStatus["404"] != 1 {
+		t.Errorf("ByStatus = %v", e.ByStatus)
+	}
+	if e.SitemapTotal != 5 || e.SitemapFetched != 2 {
+		t.Errorf("sitemap = %d/%d, want 2/5", e.SitemapFetched, e.SitemapTotal)
+	}
+	if len(e.TapePreview) != 151 || !strings.HasSuffix(e.TapePreview, "5") {
+		t.Errorf("TapePreview = %q, want 151 chars ending in the 5xx (crawler.TapePreview of the saved tape)", e.TapePreview)
+	}
+	if e.StatusClasses["2"] != 300 || e.StatusClasses["5"] != 1 || len(e.StatusClasses) != 2 {
+		t.Errorf("StatusClasses = %v, want the tape's counts {2: 300, 5: 1}, not pages_by_status", e.StatusClasses)
+	}
+}
+
+func TestListWithoutTapeHasNoStatusClasses(t *testing.T) {
+	s := New(t.TempDir())
+	r := rep("https://example.com/", "2026-10-13T10:00:00Z", 1)
+	r.Summary.ByStatus = map[string]int{"200": 1}
+	if _, err := s.Save(r); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	entries, _ := s.List("")
+	if len(entries) != 1 || entries[0].StatusClasses != nil || entries[0].TapePreview != "" {
+		t.Errorf("entry = %+v, want no status classes or preview for a report without a tape", entries[0])
+	}
 }

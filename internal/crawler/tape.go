@@ -43,6 +43,19 @@ func tapeRank(c byte) int {
 	}
 }
 
+// TapeClasses counts tape characters per status class ('2', '3', '4', '5', 'x'). It returns
+// nil for an empty tape.
+func TapeClasses(tape string) map[string]int {
+	if tape == "" {
+		return nil
+	}
+	out := map[string]int{}
+	for i := 0; i < len(tape); i++ {
+		out[tape[i:i+1]]++
+	}
+	return out
+}
+
 // TapePreview shortens tape to at most limit characters for a crawl list. Each output
 // character stands for a run of ceil(len/limit) consecutive pages and takes the worst status
 // among them, so a single 5xx in a long crawl still shows. A tape that already fits is
