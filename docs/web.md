@@ -6,7 +6,7 @@ topic: "reference"
 status: "current"
 superseded_by: []
 updated: 2026-10-13
-depends_on: ["mcp.md", "output.md"]
+depends_on: ["mcp.md", "output.md", "redirect-check.md"]
 sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
 ---
 # Web UI guide
@@ -48,6 +48,7 @@ machine, and a few guards keep it that way:
   from starting or cancelling crawls.
 - At most 4 crawls run at once; a fifth `POST /api/crawls` returns `429` until one finishes
   or is cancelled.
+- At most 2 redirect checks run at once; a third `POST /api/redirect-checks` returns `429`.
 
 Binding a non-loopback `--addr` (for example `:8080` or `0.0.0.0:8080`) switches the `Host`
 check off, prints a warning, and makes the API reachable by anyone on that network. A crawl
@@ -168,12 +169,19 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/login-sessions/{id}` | `{"id", "state", "host", "cookie_names", "cookie_count", "expires_at"?}`. `state` is `waiting`, `captured`, `closed` (window closed before capture) or `expired` (after one hour). `expires_at` is the earliest cookie expiry, omitted when all are session cookies. Never cookie values. `404` for an unknown id. |
 | `POST /api/login-sessions/{id}/capture` | Read the browser's cookies (HttpOnly included), keep those a browser would send to the session's host, close the window and delete its profile. `404` unknown id; `409` when the window is gone, already captured, expired, or has no cookie for the host yet (the window then stays open). |
 | `DELETE /api/login-sessions/{id}` | Close the window and forget the session and its cookies. `204`; `404` for an unknown id. |
+| `GET /api/redirect-checks` | List the redirect checks started in this process, newest first, without their rows: `{"checks": [...]}`. |
+| `POST /api/redirect-checks` | Start a redirect-rule check, the same check as [`gocrawl check-redirects`](redirect-check.md). Multipart form: `file` (the HubSpot-format CSV, up to 10 MB), `domain` (required), and optionally `sitemap_url`, `concurrency` (1 to 16, default 4), `rate` (requests per second, default 0 = unlimited) and `adaptive_delay` (default `true`). The CSV is parsed before the job starts, so a wrong header is a `400` and not a failed job. `domain` must be a bare host name (a URL is reduced to its host); a value with a path or a user name or password is a `400`, and so is a `sitemap_url` that is not an `http` or `https` URL or that carries a user name or password. Returns `202` with the job. `413` over 10 MB, `415` when the request is not multipart, `429` when 2 checks are already running. |
+| `GET /api/redirect-checks/{id}` | One check: `status`, `done` and `total` rules, and, once the status is `done`, `rows`. Each row is the CSV columns (`original`, `target`, …, `note`) plus the result (`scope`, `source_status`, `source_final_url`, `source_matches_target`, `target_status`, `original_in_sitemap`, `target_in_sitemap`, `verdict`, `notes`). When no sitemap is found, the status is `error` with the reason; a sitemap URL you supplied is replaced by "the sitemap URL" in that message. |
+| `POST /api/redirect-checks/{id}/cancel` | Stop a running check; returns `204`. A canceled check keeps no rows. `404` for an unknown id, `409` when the check is not running. |
+| `GET /api/redirect-checks/{id}/export` | Download the result CSV as an attachment: the input columns plus the verdict columns. `404` for an unknown id, `409` until the check is `done`. |
 | `GET /api/compare?base=<ref>&current=<ref>` | Diff two crawls, `base` being the earlier one. The response is the same JSON as `gocrawl compare --format json`: new, resolved and persisting issues, summary deltas, and added and removed pages. A ref is a crawl ID from `GET /api/crawls` (a live job or a saved crawl), a host such as `example.com` (its newest saved crawl), or `latest`. File paths are not accepted. `400` when a ref is missing, `404` when one does not resolve, `409` when one names a crawl that is still running or paused. |
 | `POST /api/reports/import` | Save a gocrawl JSON report to the store, the web equivalent of `gocrawl render`. Multipart form with the report in the field `file`, up to 64 MB. Returns `201` with `{"id": "<host>/<timestamp>"}`; the crawl then appears in the crawl list and works with export and compare. `400` when the file is not a report or its `seed` is not an http(s) URL with a usable host, `413` when it is too large, `415` when the request is not `multipart/form-data`. An import with the same host and start time as a saved crawl replaces it. |
 
-Job status is one of `running`, `done`, `error`, `canceled`.
+Job status is one of `running`, `done`, `error`, `canceled`. The redirect-check endpoints use
+fixed error messages that never repeat the id, the domain, or a sitemap URL you sent, so a
+token in a sitemap URL cannot leak through an error.
 
-Details of the two endpoints above:
+Details of the compare and import endpoints:
 
 - **Compare refs.** A live job ID wins over a stored ID of the same text. A crawl that was
   canceled still has its partial report, so it can be compared; a job that ended in `error`
@@ -272,3 +280,4 @@ capture, or when it is deleted.
   returns a body as-is.
 - The Settings view that edits all of this lands with the GUI settings view; until then these
   routes are the interface.
+- Redirect-check results live in memory only, like unsaved crawls.
