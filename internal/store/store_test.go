@@ -219,3 +219,37 @@ func TestListWithoutTapeHasNoStatusClasses(t *testing.T) {
 		t.Errorf("entry = %+v, want no status classes or preview for a report without a tape", entries[0])
 	}
 }
+
+func TestResolveStoredNeverReadsFilePaths(t *testing.T) {
+	dir := t.TempDir()
+	s := New(filepath.Join(dir, "store"))
+	id := mustSave(t, s, rep("https://example.com/", "2026-10-13T10:00:00Z", 3))
+
+	outside := filepath.Join(dir, "outside.json")
+	if err := writeJSON(outside, rep("https://elsewhere.example/", "2026-10-13T11:00:00Z", 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	// The CLI form keeps loading files.
+	if _, _, err := s.Resolve(outside); err != nil {
+		t.Fatalf("Resolve(file path) = %v, want the file loaded", err)
+	}
+	// The store-only form must not.
+	if got, _, err := s.ResolveStored(outside); err == nil {
+		t.Fatalf("ResolveStored(file path) loaded %q from outside the store", got.Seed)
+	}
+	for _, ref := range []string{"latest", "example.com", id} {
+		got, gotID, err := s.ResolveStored(ref)
+		if err != nil {
+			t.Fatalf("ResolveStored(%q): %v", ref, err)
+		}
+		if got.PagesCrawled != 3 || gotID != id {
+			t.Errorf("ResolveStored(%q) = %d pages, id %q; want 3, %q", ref, got.PagesCrawled, gotID, id)
+		}
+	}
+	for _, ref := range []string{"", "nope.example", "example.com/19000101T000000Z", "../outside"} {
+		if _, _, err := s.ResolveStored(ref); err == nil {
+			t.Errorf("ResolveStored(%q) succeeded, want an error", ref)
+		}
+	}
+}

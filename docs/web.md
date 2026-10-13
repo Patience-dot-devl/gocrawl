@@ -44,7 +44,7 @@ machine, and a few guards keep it that way:
   `127.0.0.1` under their own hostname.
 - Non-`GET` API requests with an `Origin` header must come from the same origin as the
   server (`403` otherwise), and `POST /api/crawls` insists on `Content-Type:
-  application/json` (`415` otherwise). Together these stop any other web page you have open
+  application/json` and upload routes on `multipart/form-data` (`415` otherwise). Together these stop any other web page you have open
   from starting or cancelling crawls.
 - At most 4 crawls run at once; a fifth `POST /api/crawls` returns `429` until one finishes
   or is cancelled.
@@ -74,8 +74,9 @@ to `gocrawl serve` running on `:8080` for frontend development with hot reload.
 ## What the UI does
 
 The navigation lists New crawl, Crawls, Compare, Redirects, and Settings. Compare,
-Redirects, and Settings are placeholders until those features land. The working views, all
-against the API below:
+Redirects, and Settings are placeholders until those features land; the Compare view and the
+report import form arrive with the GUI views, on top of the compare and import endpoints
+already in the API below. The working views, all against the API below:
 
 - **New crawl** — a form for the seed URL and every crawl option the interactive menu
   exposes: depth, page cap, concurrency, rate limit, max duration, render mode,
@@ -167,8 +168,23 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/login-sessions/{id}` | `{"id", "state", "host", "cookie_names", "cookie_count", "expires_at"?}`. `state` is `waiting`, `captured`, `closed` (window closed before capture) or `expired` (after one hour). `expires_at` is the earliest cookie expiry, omitted when all are session cookies. Never cookie values. `404` for an unknown id. |
 | `POST /api/login-sessions/{id}/capture` | Read the browser's cookies (HttpOnly included), keep those a browser would send to the session's host, close the window and delete its profile. `404` unknown id; `409` when the window is gone, already captured, expired, or has no cookie for the host yet (the window then stays open). |
 | `DELETE /api/login-sessions/{id}` | Close the window and forget the session and its cookies. `204`; `404` for an unknown id. |
+| `GET /api/compare?base=<ref>&current=<ref>` | Diff two crawls, `base` being the earlier one. The response is the same JSON as `gocrawl compare --format json`: new, resolved and persisting issues, summary deltas, and added and removed pages. A ref is a crawl ID from `GET /api/crawls` (a live job or a saved crawl), a host such as `example.com` (its newest saved crawl), or `latest`. File paths are not accepted. `400` when a ref is missing, `404` when one does not resolve, `409` when one names a crawl that is still running or paused. |
+| `POST /api/reports/import` | Save a gocrawl JSON report to the store, the web equivalent of `gocrawl render`. Multipart form with the report in the field `file`, up to 64 MB. Returns `201` with `{"id": "<host>/<timestamp>"}`; the crawl then appears in the crawl list and works with export and compare. `400` when the file is not a report or its `seed` is not an http(s) URL with a usable host, `413` when it is too large, `415` when the request is not `multipart/form-data`. An import with the same host and start time as a saved crawl replaces it. |
 
 Job status is one of `running`, `done`, `error`, `canceled`.
+
+Details of the two endpoints above:
+
+- **Compare refs.** A live job ID wins over a stored ID of the same text. A crawl that was
+  canceled still has its partial report, so it can be compared; a job that ended in `error`
+  has no report and returns `404`. A ref the store cannot resolve returns a generic "not
+  found" message rather than the store's own error, which names its directory.
+- **Import.** The seed must be an `http` or `https` URL whose host is not empty or made of
+  dots alone. Unicode hosts and `xn--` (punycode) hosts are accepted, and a port is dropped
+  from the filing host. A missing `started_at` or `finished_at` is filled from the other one,
+  or with the import time when both are missing, because the store files a crawl under its
+  start time. That ID has one-second resolution, so two imports with the same host that start
+  in the same second replace each other.
 
 ## Live progress
 

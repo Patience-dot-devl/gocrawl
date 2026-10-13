@@ -171,6 +171,17 @@ func (s *Store) Resolve(ref string) (*report.Report, string, error) {
 		rep, rerr := readReport(ref)
 		return rep, "", rerr
 	}
+	return s.ResolveStored(ref)
+}
+
+// ResolveStored resolves ref the way Resolve does, but only inside the store: "latest", a
+// bare host, or a crawl ID. It never reads a file path. Callers that take refs from the
+// network (the web API's compare endpoint) use it, so a request cannot make the server read
+// an arbitrary JSON file from disk.
+func (s *Store) ResolveStored(ref string) (*report.Report, string, error) {
+	if ref == "" {
+		return nil, "", fmt.Errorf("empty crawl reference")
+	}
 	if strings.EqualFold(ref, "latest") {
 		return s.latest("")
 	}
