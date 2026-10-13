@@ -51,7 +51,7 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
   useEffect(() => {
     listCrawls()
       .then((r) => setItems(r.crawls))
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoaded(true))
   }, [])
 

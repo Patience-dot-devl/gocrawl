@@ -183,19 +183,24 @@ func (s *Server) handleExportCrawl(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var rep *report.Report
 	if job, ok := s.crawls.get(id); ok {
+		// A live job answers for itself: it never falls through to the store, where its id
+		// would look like an unknown crawl.
 		rep = job.Data.Report
-	}
-	if rep == nil {
+		if rep == nil {
+			if job.Status == StatusError {
+				writeError(w, http.StatusConflict, errors.New("crawl failed, so there is no report to export"))
+			} else {
+				writeError(w, http.StatusConflict, errors.New("crawl has not finished yet"))
+			}
+			return
+		}
+	} else {
 		loaded, err := s.store.Load(id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, errCrawlNotFound)
 			return
 		}
 		rep = loaded
-	}
-	if rep == nil {
-		writeError(w, http.StatusConflict, errors.New("crawl has not finished yet"))
-		return
 	}
 
 	format := r.URL.Query().Get("format")

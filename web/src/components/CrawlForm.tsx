@@ -287,7 +287,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
           </label>
           <label className="cf-field">
             <span className="cf-label">Basic Auth password</span>
-            <input name="basic_auth_password" type="password" autoComplete="off" value={basicAuthPass} onChange={(e) => setBasicAuthPass(e.target.value)} />
+            <input name="basic_auth_password" type="password" autoComplete="new-password" value={basicAuthPass} onChange={(e) => setBasicAuthPass(e.target.value)} />
           </label>
         </div>
 

@@ -3,6 +3,7 @@ package webserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -236,5 +237,44 @@ func TestGetCrawlUnknownIDIsNotFoundWithoutLeaks(t *testing.T) {
 		if strings.Contains(body, leak) {
 			t.Fatalf("body %q leaks %q", body, leak)
 		}
+	}
+}
+
+func TestExportUnknownIDIsNotFoundWithoutLeaks(t *testing.T) {
+	root := t.TempDir()
+	srv := New(store.New(root))
+	rec, out := doJSON(t, srv, http.MethodGet, "/api/crawls/doesnotexist/export", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if out["error"] != "crawl not found" {
+		t.Fatalf("error = %v, want %q", out["error"], "crawl not found")
+	}
+	for _, leak := range []string{root, "doesnotexist"} {
+		if strings.Contains(rec.Body.String(), leak) {
+			t.Fatalf("body %q leaks %q", rec.Body.String(), leak)
+		}
+	}
+}
+
+func TestExportLiveJobWithoutReportIsConflict(t *testing.T) {
+	srv := newTestServer(t)
+	running, ok := srv.crawls.start(crawlJob{Seed: "https://example.com/"}, func() {}, srv.maxRunning)
+	if !ok {
+		t.Fatal("could not start a job")
+	}
+	rec, out := doJSON(t, srv, http.MethodGet, "/api/crawls/"+running.ID+"/export", nil)
+	if rec.Code != http.StatusConflict || out["error"] != "crawl has not finished yet" {
+		t.Fatalf("running job: status = %d, body = %s, want 409 not finished", rec.Code, rec.Body)
+	}
+
+	failed, ok := srv.crawls.start(crawlJob{Seed: "https://example.com/"}, func() {}, srv.maxRunning)
+	if !ok {
+		t.Fatal("could not start a job")
+	}
+	srv.crawls.finish(failed.ID, errors.New("boom"), nil)
+	rec, out = doJSON(t, srv, http.MethodGet, "/api/crawls/"+failed.ID+"/export", nil)
+	if rec.Code != http.StatusConflict || out["error"] != "crawl failed, so there is no report to export" {
+		t.Fatalf("failed job: status = %d, body = %s, want 409 failed", rec.Code, rec.Body)
 	}
 }

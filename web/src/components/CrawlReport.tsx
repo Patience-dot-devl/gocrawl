@@ -33,6 +33,11 @@ function noun(n: number, singular: string): string {
   return n === 1 ? singular : `${singular}s`
 }
 
+// An error message without its final full stop, so a sentence can follow it cleanly.
+function trimEnd(message: string): string {
+  return message.replace(/[.\s]+$/, '')
+}
+
 function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000))
   const m = Math.floor(totalSec / 60)
@@ -71,7 +76,10 @@ export default function CrawlReport({ id }: { id: string }) {
   // is an inline notice above the report, for a failed action such as Stop crawl.
   const [loadError, setLoadError] = useState<{ message: string; notFound: boolean } | null>(null)
   const [actionError, setActionError] = useState('')
+  const [pollError, setPollError] = useState('')
   const [confirmStop, setConfirmStop] = useState(false)
+  const [headingFocus, setHeadingFocus] = useState(0)
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const [severityOn, setSeverityOn] = useState<Record<string, boolean>>({ error: true, warning: true, info: true })
   const [analyzerFilter, setAnalyzerFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -95,20 +103,29 @@ export default function CrawlReport({ id }: { id: string }) {
 
   useEffect(() => {
     let stopped = false
+    let wasRunning = false
+    let loaded = false
     async function poll() {
       try {
         const j = await getCrawl(id)
         if (stopped) return
+        loaded = true
+        wasRunning = j.status === 'running'
         setJob(j)
-        if (j.status === 'running') {
+        setPollError('')
+        if (wasRunning) {
           timer.current = window.setTimeout(poll, POLL_MS)
         }
       } catch (err) {
         if (stopped) return
-        setLoadError({
-          message: err instanceof Error ? err.message : String(err),
-          notFound: err instanceof ApiError && err.status === 404,
-        })
+        const message = err instanceof Error ? err.message : String(err)
+        if (loaded) {
+          // A report is already on screen: keep it, say what happened, and try again.
+          setPollError(`Could not refresh this crawl: ${trimEnd(message)}. Trying again.`)
+          if (wasRunning) timer.current = window.setTimeout(poll, POLL_MS)
+          return
+        }
+        setLoadError({ message, notFound: err instanceof ApiError && err.status === 404 })
       }
     }
     poll()
@@ -170,6 +187,21 @@ export default function CrawlReport({ id }: { id: string }) {
   }, [rows, severityOn, analyzerFilter, codeOn, search, hideResolved, hideNonissue, review])
 
   const { sorted, toggle, dirFor } = useSort(filtered, issueSortValue, { key: 'severity' })
+
+  // The dialog is only meaningful while the crawl runs: if the crawl finishes while it is open,
+  // it goes away, and the Stop crawl button that opened it goes with it. Focus then has nowhere
+  // to return to, so it moves to the report heading. Stopping the crawl moves it there too.
+  const dialogOpen = confirmStop && job?.status === 'running'
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (wasOpen.current && !dialogOpen && (!document.activeElement || document.activeElement === document.body)) {
+      headingRef.current?.focus()
+    }
+    wasOpen.current = dialogOpen
+  }, [dialogOpen])
+  useEffect(() => {
+    if (headingFocus > 0) headingRef.current?.focus()
+  }, [headingFocus])
 
   const selectedShownCount = sorted.filter((r) => selected.has(r._key)).length
   useEffect(() => {
@@ -274,6 +306,7 @@ export default function CrawlReport({ id }: { id: string }) {
 
   function stopCrawl() {
     setConfirmStop(false)
+    setHeadingFocus((n) => n + 1)
     setActionError('')
     cancelCrawl(id).catch((err) => {
       // A 404 or 409 means the crawl is no longer running, usually because it finished while the
@@ -285,7 +318,7 @@ export default function CrawlReport({ id }: { id: string }) {
         return
       }
       setActionError(
-        `Could not stop the crawl: ${err instanceof Error ? err.message : String(err)}. Try Stop crawl again.`,
+        `Could not stop the crawl: ${trimEnd(err instanceof Error ? err.message : String(err))}. Try Stop crawl again.`,
       )
     })
   }
@@ -293,8 +326,10 @@ export default function CrawlReport({ id }: { id: string }) {
   return (
     <div className="cr">
       <header className="cr-head">
-        <h1>{hostOf(job.seed)}</h1>
-        <PhasePill phase={pill.phase}>{pill.label}</PhasePill>
+        <h1 ref={headingRef} tabIndex={-1}>
+          {hostOf(job.seed)}
+        </h1>
+        <PhasePill phase={pill.phase} live>{pill.label}</PhasePill>
         <div className="cr-actions">
           {job.status === 'running' && (
             <Button variant="stop" onClick={() => setConfirmStop(true)}>
@@ -321,7 +356,7 @@ export default function CrawlReport({ id }: { id: string }) {
       </header>
       <p className="cr-seed mono">{job.seed}</p>
 
-      {confirmStop && (
+      {dialogOpen && (
         <ConfirmDialog
           title="Stop this crawl?"
           confirmLabel="Stop crawl"
@@ -335,6 +370,7 @@ export default function CrawlReport({ id }: { id: string }) {
       )}
 
       {actionError && <Notice tone="error">{actionError}</Notice>}
+      {pollError && <Notice tone="warning">{pollError}</Notice>}
 
       {job.status === 'running' && job.started_at && (
         <div className="cr-stats">
@@ -373,13 +409,13 @@ export default function CrawlReport({ id }: { id: string }) {
                       `, because the page budget (${formatCount(report.coverage.max_pages ?? 0)}) was reached`}
                     {report.coverage.depth_limit_reached &&
                       `${report.coverage.page_limit_reached ? ' and' : ', because'} the depth limit (${formatCount(report.coverage.max_depth ?? 0)}) was reached`}
-                    . Page-level findings, broken links especially, may be incomplete. Raise{' '}
+                    . Page-level findings, broken links especially, may be incomplete.{' '}
                     {report.coverage.page_limit_reached && report.coverage.depth_limit_reached
-                      ? 'the page budget and the depth'
+                      ? 'Raise the page budget and the depth, or leave them empty for no limit,'
                       : report.coverage.depth_limit_reached
-                        ? 'the depth'
-                        : 'the page budget'}
-                    , or leave it empty for no limit, and crawl again for full coverage.
+                        ? 'Raise the depth, or leave it empty for no limit,'
+                        : 'Raise the page budget, or leave it empty for no limit,'}{' '}
+                    and crawl again for full coverage.
                   </>
                 )}
               </p>
