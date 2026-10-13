@@ -10,6 +10,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 - Live crawl progress in the web API: `GET /api/crawls/{id}` returns a `progress` object (phase, pages against the site's sitemap, rate, recent 429/503s, and a per-page status tape sliced with `?tape_from=N`), and `POST /api/sitemap-preview` finds a site's sitemap before crawling. Every crawl now reads the sitemap once up front, reports `coverage.sitemap_total` / `sitemap_fetched`, saves the per-page tape in `coverage.tape` / `tape_off`, and adds a note when the page budget is below the sitemap total.
 - Crawl requests (web API and MCP `crawl` tool) accept `strip_query`, `adaptive_delay`, `follow_nofollow`, `timeout` and `bearer_token`; the CLI gains `--bearer-token` (`crawl.bearer_token`), and the web API gains `GET`/`PUT /api/settings` (stored in `~/.gocrawl/gui.json`, never with secrets) and `/api/header-profiles` to manage header profiles.
+- Web API: interactive browser login. `POST /api/login-sessions` opens a visible Chromium window in a throwaway profile, `…/capture` keeps the seed host's cookies (HttpOnly included) in memory for an hour, and `POST /api/crawls` accepts `login_session` to crawl with them.
 - Every document under `docs/` carries frontmatter (`id`, `title`, `scope`, `topic`,
   `status`, `superseded_by`, `updated`, `depends_on`, `sources`), following the scheme used in
   conductor-playground. The index in `docs/README.md` is generated from it by `make docs` and

@@ -150,7 +150,7 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | --- | --- |
 | `GET /api/analyzers` | List available analyzers (same as `list_analyzers` over MCP). |
 | `GET /api/explanations` | Every issue code's what/impact/fix explanation, keyed by code — the same text baked into the HTML report, used by the live report view. |
-| `POST /api/crawls` | Start a crawl. Body is JSON (`Content-Type: application/json` required) with the same field set as the [MCP `crawl` tool](mcp.md#crawl) (`url` required) plus `save: bool` to persist the report to the store when it finishes. Returns `202` with the job immediately; the crawl runs in the background. `429` when the running-crawl cap is reached. |
+| `POST /api/crawls` | Start a crawl. Body is JSON (`Content-Type: application/json` required) with the same field set as the [MCP `crawl` tool](mcp.md#crawl) (`url` required) plus `save: bool` to persist the report to the store when it finishes. Returns `202` with the job immediately; the crawl runs in the background. `429` when the running-crawl cap is reached. Optional `login_session` (web only, not MCP) names a captured browser login ([below](#logging-in-with-a-browser)) whose cookies become the crawl's `Cookie` header; `400` together with `cookie`, with `render: headless`, or for a different host than the seed, `404` for an unknown id, `409` when it isn't captured (or its cookies have expired). |
 | `GET /api/crawls` | List every job (in-memory, this process) merged with the store's saved history, newest first. Each item also carries `status_classes` (pages per status class: `2`, `3`, `4`, `5`, `x`), `tape_preview` (the crawl tape shortened to at most 160 characters, each standing for a run of pages and showing the worst status among them) and, when known, `sitemap_total` / `sitemap_fetched`. List items never carry the full tape. |
 | `GET /api/crawls/{id}` | One job's status, its live `progress` (see [Live progress](#live-progress)) and, once finished, its full `Report` (see [Output reference](output.md)). `?tape_from=N` returns only the tape characters from index `N`; a negative or non-numeric `N` is a `400`. Falls back to the store for an id that isn't a live job; saved crawls have no `progress`, but their report's `coverage.tape` / `tape_off` hold the same tape. An id that is neither (for example a crawl that was running when the server restarted) is a `404`. |
 | `POST /api/crawls/{id}/cancel` | Cancel a running crawl. Like Ctrl-C on the CLI, this doesn't error the crawl — it stops early and still returns whatever was fetched as a partial report (`Report.Coverage.Interrupted`), tracked here as job status `canceled`. |
@@ -162,6 +162,11 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/header-profiles/{name}` | `{"name", "body"}` of one profile; the body is returned as-is, header values included. `404` when it doesn't exist, `400` for an invalid name. |
 | `PUT /api/header-profiles/{name}` | Create or replace a profile from JSON `{"body": "Name: value\n…"}`, validated like `--header-file`. `204`; `400` with the parser's message when invalid. |
 | `DELETE /api/header-profiles/{name}` | Delete a profile. `204`, or `404`. |
+| `GET /api/login-sessions/available` | `{"available": bool, "reason"?: string}`: whether a Chromium-class browser (and, on Linux, a display) is there to log in with. |
+| `POST /api/login-sessions` | JSON `{"url"}`: open a visible browser window on that URL in a throwaway profile. `202` with the session; `400` for a URL that isn't http(s) with a host; `429` when two login windows are already waiting; `503` "no Chromium-class browser found" (also when the browser fails to start or the server is shutting down). |
+| `GET /api/login-sessions/{id}` | `{"id", "state", "host", "cookie_names", "cookie_count", "expires_at"?}`. `state` is `waiting`, `captured`, `closed` (window closed before capture) or `expired` (after one hour). `expires_at` is the earliest cookie expiry, omitted when all are session cookies. Never cookie values. `404` for an unknown id. |
+| `POST /api/login-sessions/{id}/capture` | Read the browser's cookies (HttpOnly included), keep those a browser would send to the session's host, close the window and delete its profile. `404` unknown id; `409` when the window is gone, already captured, expired, or has no cookie for the host yet (the window then stays open). |
+| `DELETE /api/login-sessions/{id}` | Close the window and forget the session and its cookies. `204`; `404` for an unknown id. |
 
 Job status is one of `running`, `done`, `error`, `canceled`.
 
@@ -187,6 +192,53 @@ Before every crawl, CLI and MCP included, gocrawl reads the site's sitemap once:
 `Sitemap:` lines, then `/sitemap.xml` and `/sitemap_index.xml`, following indexes. Only URLs
 inside the crawl scope count toward `sitemap_total`. The `sitemap` analyzer reuses the same
 set instead of fetching it again.
+
+## Logging in with a browser
+
+For sites behind a login form (staging, member areas, a Shopify password page), the UI can
+borrow a real browser session: gocrawl opens a normal Chrome, Chromium or Edge window on the
+site in a fresh, temporary profile, you log in there (SSO, two-factor and CAPTCHAs work), and
+gocrawl reads that window's cookies when you say you're done. It keeps only the cookies a
+browser would send to the site's host, closes the window, and deletes the profile. The login
+UI lands with the GUI views; the API above is what it will call.
+
+The flow, over the API:
+
+1. `POST /api/login-sessions` with the site's URL. At most 2 sessions can be waiting for a
+   login at once. The session id is 128 random bits and is the only thing that refers to the
+   captured cookies.
+2. The person logs in in the window.
+3. `POST /api/login-sessions/{id}/capture`. This only succeeds once the site has set a cookie
+   for its host; until then it returns `409` and leaves the window open so they can finish.
+4. `POST /api/crawls` with `"login_session": "<id>"`. The login URL's host must equal the
+   crawl seed's host (compared in ASCII/punycode form, port ignored), or the request is a `400`.
+
+A session ends after one hour whether or not it was captured, when its window is closed before
+capture, or when it is deleted.
+
+- Cookies stay in the server's memory: never written to disk, never returned by the API
+  (only names, the count and the earliest expiry), never logged, dropped after one hour or when
+  `gocrawl serve` stops.
+- `login_session` can't be combined with `cookie` (`400`), and it needs `render: raw`, the
+  default: headless rendering refuses cookies because it can't keep them on the seed host.
+- The crawl sends the captured cookies as one `Cookie` header with the same scoping as
+  `--cookie`: the seed host only (plus subdomains when `subdomains` is on), never over an
+  `https` to `http` downgrade. That header is built from name and value alone, so each
+  cookie's `Path` and `Secure` attributes are ignored, and a host-only cookie may reach the
+  subdomains too when `subdomains` is on.
+- The API does not add a logout exclusion. The UI adds the exclude pattern
+  `(?i)(log|sign)-?out` to the crawl form (it lands with the GUI views), so the crawl doesn't
+  follow a logout link and end the session. It stays visible in the exclude field; remove it
+  if you need those pages. API clients should add their own `exclude`.
+- Each login window uses a temporary browser profile named `gocrawl-login-*` in the system
+  temp directory. It is deleted when the window closes. If the server was killed before it
+  could clean up, `gocrawl serve` removes profiles older than one hour from the temp
+  directory when it starts.
+- `gocrawl serve` shuts down gracefully on Ctrl-C and on SIGTERM: it stops the HTTP server,
+  then closes any open login windows and deletes their profiles.
+- Web only; the MCP `crawl` tool has no equivalent. Some identity providers (Google among
+  them) may refuse to sign in from a browser that is being remote-controlled; use a cookie or
+  a bearer token for those.
 
 ## Notes
 

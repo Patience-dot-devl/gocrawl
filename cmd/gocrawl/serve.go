@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -40,6 +43,9 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Browser profiles of login windows an earlier, killed server never cleaned up.
+	go webserver.SweepStaleLoginProfiles(os.TempDir(), webserver.StaleLoginProfileAge)
+
 	opts := []webserver.Option{webserver.WithGUISettingsPath(webserver.DefaultGUISettingsPath())}
 	if !isLoopbackBind(addr) {
 		// The operator asked for a reachable server; the loopback Host check would only
@@ -47,9 +53,16 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		opts = append(opts, webserver.AllowAnyHost())
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: --addr %s is not loopback; the web API has no authentication and anyone who can reach it can start crawls from this machine\n", addr)
 	}
-	srv := newHTTPServer(addr, webserver.New(st, opts...).Handler())
+	web := webserver.New(st, opts...)
+	// Closes login browser windows (and deletes their temporary profiles). Deferred, so it runs
+	// after the HTTP server below has shut down and no request can open a new window.
+	defer web.Close()
+	srv := newHTTPServer(addr, web.Handler())
 
-	ctx := cmd.Context()
+	// Ctrl-C (already in cmd.Context) or SIGTERM, e.g. from a service manager or the desktop
+	// shell, shuts down gracefully.
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
@@ -66,7 +79,13 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 		defer cancel()
-		return srv.Shutdown(shutdownCtx)
+		err := srv.Shutdown(shutdownCtx)
+		if err != nil {
+			// Grace expired with requests still running: drop them so none can outlive
+			// web.Close and open a login window.
+			_ = srv.Close()
+		}
+		return err
 	}
 }
 
