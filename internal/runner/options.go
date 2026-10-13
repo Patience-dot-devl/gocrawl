@@ -8,7 +8,17 @@ type RunOption func(*runSettings)
 // runSettings collects the RunOption values for one Run call. Each feature adds its own
 // field here together with the RunOption constructor that sets it, never a new positional
 // parameter on Run.
-type runSettings struct{}
+type runSettings struct {
+	// progress receives a Progress snapshot per recorded page and per phase change.
+	progress func(Progress)
+}
+
+// WithProgress makes Run report progress to fn: one call per phase change and one per page
+// the crawl records, serialized and in order. fn runs on crawl goroutines while the engine
+// holds its locks, so it must return quickly and must not call a Control method.
+func WithProgress(fn func(Progress)) RunOption {
+	return func(s *runSettings) { s.progress = fn }
+}
 
 // newRunSettings applies opts in order, skipping nil entries so a caller can pass an
 // optional option without a branch.

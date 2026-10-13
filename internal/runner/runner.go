@@ -137,7 +137,6 @@ func newFetcher(cfg config.Config, opts crawler.Options) (crawler.Fetcher, error
 // (progress reporting, pause control) for callers that need it; the CLI passes none.
 func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOption) (*report.Report, error) {
 	settings := newRunSettings(runOpts)
-	_ = settings // read by WithProgress (W1-PROG-6) and the pause options (W2-PAUSE-5)
 	if seed == "" {
 		seed = cfg.Seed
 	}
@@ -147,6 +146,10 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	opts, err := cfg.ToOptions()
 	if err != nil {
 		return nil, err
+	}
+	progress := newProgressReporter(settings.progress)
+	if progress != nil {
+		opts.OnProgress = progress.onEngine
 	}
 
 	fetcher, err := newFetcher(cfg, opts)
@@ -183,12 +186,16 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	// Sitemap pre-pass: read the sitemap once, before the crawl, so progress can be measured
 	// against it. The sitemap analyzer reuses the same set below. A missing or unreachable
 	// sitemap is an empty set, never an error.
+	progress.setPhase(PhaseSitemap)
 	sm := discoverSitemap(ctx, engine, governed, seed)
+	progress.setSitemap(sm, engine.Normalize)
+	progress.setPhase(PhaseCrawling)
 
 	result, err := engine.Crawl(ctx, seed)
 	if err != nil {
 		return nil, err
 	}
+	progress.setPhase(PhaseAnalyzing)
 	if sm.found() {
 		result.Coverage.SitemapTotal = len(sm.inScope)
 		result.Coverage.SitemapFetched = sm.fetchedCount(result.Pages, engine.Normalize)
