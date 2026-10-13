@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { listAnalyzers, startCrawl } from '../api'
-import type { AnalyzerInfo, StartCrawlParams } from '../types'
+import { listAnalyzers, startCrawl } from '../api/crawls'
+import type { AnalyzerInfo, StartCrawlParams } from '../types/crawls'
 
 export default function CrawlForm({ onStarted }: { onStarted: (id: string) => void }) {
   const [analyzers, setAnalyzers] = useState<AnalyzerInfo[]>([])

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PageIssue, SevCounts, SiteMap as SiteMapData, SiteMapNode } from '../types'
+import type { PageIssue, SevCounts, SiteMap as SiteMapData, SiteMapNode } from '../types/crawls'
 
 function statusClass(status?: number): string {
   if (!status) return 'st-none'

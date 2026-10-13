@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { listCrawls } from '../api'
+import { listCrawls } from '../api/crawls'
 import { useSort } from '../sort'
-import type { CrawlListItem } from '../types'
+import type { CrawlListItem } from '../types/crawls'
 
 function historySortValue(item: CrawlListItem, key: string): string | number {
   switch (key) {

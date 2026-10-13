@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { cancelCrawl, exportURL, getCrawl, listExplanations } from '../api'
+import { cancelCrawl, exportURL, getCrawl, listExplanations } from '../api/crawls'
 import SiteMap from './SiteMap'
 import { useSort } from '../sort'
-import type { Explanation, Issue, JobView } from '../types'
+import type { Explanation, Issue, JobView } from '../types/crawls'
 
 const POLL_MS = 1500
 const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 }
