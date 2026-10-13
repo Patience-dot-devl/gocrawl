@@ -44,6 +44,7 @@ func runInteractive(cmd *cobra.Command) error {
 
 		basicAuthUser, basicAuthPass, _ = strings.Cut(cfg.Crawl.BasicAuth, ":")
 		cookie                          = cfg.Crawl.Cookie
+		bearerToken                     = cfg.Crawl.BearerToken
 		headerFile                      = cfg.Crawl.HeaderFile
 
 		render     = cfg.Render
@@ -142,6 +143,11 @@ func runInteractive(cmd *cobra.Command) error {
 				EchoMode(huh.EchoModePassword).
 				Value(&cookie),
 			huh.NewInput().
+				Title("Bearer token").
+				Description("Sent as \"Authorization: Bearer <token>\", only to the crawled host. Can't be combined with Basic Auth. Raw mode only. Leave blank otherwise.").
+				EchoMode(huh.EchoModePassword).
+				Value(&bearerToken),
+			huh.NewInput().
 				Title("Header file").
 				Description("Path to a file of extra request headers, one \"Name: value\" per line (e.g. a Shopify crawler access signature). Sent only to the crawled host; raw mode only. Leave blank otherwise.").
 				Value(&headerFile),
@@ -196,6 +202,7 @@ func runInteractive(cmd *cobra.Command) error {
 		cfg.Crawl.BasicAuth = ""
 	}
 	cfg.Crawl.Cookie = strings.TrimSpace(cookie)
+	cfg.Crawl.BearerToken = strings.TrimSpace(bearerToken)
 	cfg.Crawl.HeaderFile = strings.TrimSpace(headerFile)
 	cfg.Render = render
 	cfg.Output.Format = format
