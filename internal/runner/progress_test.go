@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
 func TestRunWithProgressReportsPhasesAndSitemapCounts(t *testing.T) {
@@ -72,5 +73,56 @@ func TestRunWithoutProgressOptionSendsNothing(t *testing.T) {
 	// Nothing to assert beyond "no panic on the nil reporter": the CLI path.
 	if _, err := Run(context.Background(), config.Default(), ts.URL); err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+}
+
+// TestRunSavesTheLiveTapeInCoverage: the tape Run saves is the one a WithProgress consumer
+// builds live (one character per page event, crawler.TapeChar and Progress.TapeOffChar, the
+// web server's rule), so a reopened crawl shows the same tape, notches included.
+func TestRunSavesTheLiveTapeInCoverage(t *testing.T) {
+	var hits atomic.Int32
+	ts := sitemapSite(t, &hits)
+
+	var (
+		mu        sync.Mutex
+		tape, off []byte
+		lastPage  int
+	)
+	rep, err := Run(context.Background(), config.Default(), ts.URL, WithProgress(func(p Progress) {
+		mu.Lock()
+		defer mu.Unlock()
+		if p.Fetched > lastPage {
+			lastPage = p.Fetched
+			tape = append(tape, crawler.TapeChar(p.Status))
+			off = append(off, p.TapeOffChar())
+		}
+	}))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	cov := rep.Coverage
+	if cov.Tape != string(tape) || cov.TapeOff != string(off) {
+		t.Errorf("saved tape %q / %q, live tape %q / %q: they must match", cov.Tape, cov.TapeOff, tape, off)
+	}
+	if len(cov.Tape) != rep.PagesCrawled || len(cov.TapeOff) != rep.PagesCrawled {
+		t.Errorf("tape lengths %d / %d, want one character per page (%d)", len(cov.Tape), len(cov.TapeOff), rep.PagesCrawled)
+	}
+	if cov.Tape != "2222" || strings.Count(cov.TapeOff, "1") != 1 {
+		t.Errorf("tape %q / %q, want 2222 with exactly one off-sitemap page (/off)", cov.Tape, cov.TapeOff)
+	}
+}
+
+// The CLI and MCP pass no WithProgress; their reports carry the tape too.
+func TestRunSavesTheTapeWithoutProgressOption(t *testing.T) {
+	var hits atomic.Int32
+	ts := sitemapSite(t, &hits)
+	rep, err := Run(context.Background(), config.Default(), ts.URL)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Coverage.Tape != "2222" || len(rep.Coverage.TapeOff) != 4 {
+		t.Errorf("tape %q / %q, want 2222 and four tape_off characters", rep.Coverage.Tape, rep.Coverage.TapeOff)
 	}
 }

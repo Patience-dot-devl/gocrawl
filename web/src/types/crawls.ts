@@ -25,6 +25,10 @@ export interface Coverage {
   duration_limit_reached?: boolean
   max_pages?: number
   max_depth?: number
+  sitemap_total?: number
+  sitemap_fetched?: number
+  tape?: string
+  tape_off?: string
 }
 
 export interface PageIssue {

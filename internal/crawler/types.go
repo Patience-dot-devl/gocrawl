@@ -233,6 +233,13 @@ type Coverage struct {
 	// and omitted, when no sitemap was found. Set by runner.Run, not by Engine.Crawl.
 	SitemapTotal   int `json:"sitemap_total,omitempty"`
 	SitemapFetched int `json:"sitemap_fetched,omitempty"`
+	// Tape is the crawl tape: one character per recorded page in recording order, '2'..'5' for
+	// the status class or 'x' for a failed fetch (see TapeChar; a redirected page reports its
+	// first hop). TapeOff has the same length: '1' where a sitemap was found and the page is
+	// not in its in-scope part, else '0'. Set by runner.Run from the same progress events the
+	// live web tape is built from. Omitted when no page was recorded.
+	Tape    string `json:"tape,omitempty"`
+	TapeOff string `json:"tape_off,omitempty"`
 }
 
 // Page looks up a crawled page by URL (matched against requested and final URLs after

@@ -147,10 +147,10 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	if err != nil {
 		return nil, err
 	}
+	// Always on: besides feeding WithProgress, the reporter records the crawl tape saved in
+	// Coverage.Tape, so a saved report's tape matches the one the web UI showed live.
 	progress := newProgressReporter(settings.progress)
-	if progress != nil {
-		opts.OnProgress = progress.onEngine
-	}
+	opts.OnProgress = progress.onEngine
 
 	fetcher, err := newFetcher(cfg, opts)
 	if err != nil {
@@ -200,6 +200,7 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 		result.Coverage.SitemapTotal = len(sm.inScope)
 		result.Coverage.SitemapFetched = sm.fetchedCount(result.Pages, engine.Normalize)
 	}
+	result.Coverage.Tape, result.Coverage.TapeOff = progress.tapes()
 
 	reg := BuildRegistry(governed, RegistryOptions{
 		Specialized:           cfg.Analyzers.Specialized,

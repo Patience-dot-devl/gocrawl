@@ -73,6 +73,14 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 	if err != nil {
 		return nil, CrawlOutput{}, err
 	}
+	// The crawl tape is for the web UI; at one character per page (two strings) it would add up
+	// to ~200 KB of noise per 100k pages to an agent's context, so MCP responses drop it.
+	var cov *crawler.Coverage
+	if rep.Coverage != nil {
+		c := *rep.Coverage
+		c.Tape, c.TapeOff = "", ""
+		cov = &c
+	}
 	return nil, CrawlOutput{Report: CrawlReport{
 		Seed:         rep.Seed,
 		StartedAt:    rep.StartedAt,
@@ -81,7 +89,7 @@ func handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, in CrawlInput) (*m
 		Summary:      rep.Summary,
 		Issues:       rep.Issues,
 		Notes:        rep.Notes,
-		Coverage:     rep.Coverage,
+		Coverage:     cov,
 	}}, nil
 }
 

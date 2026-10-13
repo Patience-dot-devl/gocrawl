@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
 
 // connect wires a client to New's server over an in-memory transport, so the tools are
@@ -124,5 +126,59 @@ func decode(t *testing.T, structured any, into any) {
 	}
 	if err := json.Unmarshal(b, into); err != nil {
 		t.Fatalf("decode structured content %s: %v", b, err)
+	}
+}
+
+// Coverage.Tape / TapeOff are for the web UI: the report keeps them, the MCP response must not
+// carry them (they grow with the page count and are noise to an agent).
+func TestCrawlToolOmitsTheTape(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<html><head><title>x</title></head><body><a href="/about">about</a></body></html>`)
+	}))
+	defer ts.Close()
+
+	maxPages := 5
+	cfg, seed, err := (CrawlInput{URL: ts.URL, MaxPages: &maxPages, Analyzers: []string{"seo"}}).ToConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := runner.Run(context.Background(), cfg, seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Coverage == nil || rep.Coverage.Tape == "" || rep.Coverage.TapeOff == "" {
+		t.Fatalf("report coverage = %+v, want the tape saved in the report itself", rep.Coverage)
+	}
+
+	cs := connect(t)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "crawl",
+		Arguments: map[string]any{"url": ts.URL, "max_pages": 5, "analyzers": []string{"seo"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("tool error: %v", res.Content)
+	}
+	b, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Report struct {
+			Coverage map[string]any `json:"coverage"`
+		} `json:"report"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw.Report.Coverage == nil {
+		t.Fatalf("MCP response has no coverage: %s", b)
+	}
+	for _, key := range []string{"tape", "tape_off"} {
+		if _, ok := raw.Report.Coverage[key]; ok {
+			t.Errorf("MCP coverage carries %q: %s", key, b)
+		}
 	}
 }

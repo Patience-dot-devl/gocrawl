@@ -153,3 +153,31 @@ func TestDiscoverSitemapSkipsWhenContextCanceled(t *testing.T) {
 		t.Errorf("sitemap fetched %d times with a canceled context, want 0", hits.Load())
 	}
 }
+
+// A sitemap that only lists URLs outside the crawl scope (a www. host for an apex seed, a CDN
+// mirror) is found but counts no in-scope pages: Coverage has no sitemap totals, and every
+// fetched page is "not in the sitemap" on the tape.
+func TestRunCountsOnlyInScopeSitemapURLs(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sitemap.xml":
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://www.other.example/</loc></url><url><loc>https://www.other.example/a</loc></url></urlset>`)
+		case "/":
+			fmt.Fprint(w, `<html><head><title>Home</title></head><body>hi</body></html>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+	rep, err := Run(context.Background(), config.Default(), ts.URL)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Coverage.SitemapTotal != 0 || rep.Coverage.SitemapFetched != 0 {
+		t.Errorf("Coverage = %+v, want no in-scope sitemap URLs counted", rep.Coverage)
+	}
+	if rep.Coverage.Tape != "2" || rep.Coverage.TapeOff != "1" {
+		t.Errorf("tape %q / %q, want 2 / 1 (a sitemap was found; the page is not in its in-scope part)", rep.Coverage.Tape, rep.Coverage.TapeOff)
+	}
+}
