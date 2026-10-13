@@ -248,7 +248,7 @@ func TestSweepStaleLoginProfiles(t *testing.T) {
 	oldLookalike := mk("not-gocrawl-login-333", 5*time.Hour, true)
 	oldFile := mk("gocrawl-login-file", 5*time.Hour, false)
 
-	sweepStaleLoginProfiles(dir, time.Hour, now)
+	SweepStaleLoginProfiles(dir, time.Hour)
 
 	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
 	if exists(oldProfile) {
@@ -260,5 +260,37 @@ func TestSweepStaleLoginProfiles(t *testing.T) {
 		}
 	}
 	// A missing directory is not an error.
-	sweepStaleLoginProfiles(filepath.Join(dir, "missing"), time.Hour, now)
+	SweepStaleLoginProfiles(filepath.Join(dir, "missing"), time.Hour)
+}
+
+// A prefixed symlink to a directory elsewhere is not a login profile: the sweep leaves both
+// the link and its target alone. A negative maxAge makes every entry count as stale, so only
+// the entry's type can save the link (os.Chtimes follows symlinks, so a link can't be aged).
+func TestSweepStaleLoginProfilesLeavesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	outsideDir := t.TempDir()
+	keep := filepath.Join(outsideDir, "precious.txt")
+	if err := os.WriteFile(keep, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, render.LoginProfilePrefix+"link")
+	if err := os.Symlink(outsideDir, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	realProfile := filepath.Join(dir, render.LoginProfilePrefix+"real")
+	if err := os.Mkdir(realProfile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	SweepStaleLoginProfiles(dir, -time.Hour)
+
+	if _, err := os.Lstat(link); err != nil {
+		t.Errorf("the symlink was removed: %v", err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Errorf("the symlink target was touched: %v", err)
+	}
+	if _, err := os.Stat(realProfile); err == nil {
+		t.Error("a real stale profile next to the symlink was not removed")
+	}
 }

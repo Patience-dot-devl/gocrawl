@@ -20,6 +20,10 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+// LoginProfilePrefix is the temp-directory name prefix of a login window's throwaway browser
+// profile; webserver.SweepStaleLoginProfiles recognizes leftovers by it.
+const LoginProfilePrefix = "gocrawl-login-"
+
 var (
 	// ErrNoBrowser means no Chromium-class browser is installed where gocrawl looks.
 	ErrNoBrowser = errors.New("no Chromium-class browser found (install Google Chrome, Chromium or Microsoft Edge)")
@@ -121,7 +125,7 @@ func openLoginWindow(ctx context.Context, rawURL string, visible bool) (*LoginWi
 	if err != nil {
 		return nil, err
 	}
-	dir, err := os.MkdirTemp("", "gocrawl-login-")
+	dir, err := os.MkdirTemp("", LoginProfilePrefix)
 	if err != nil {
 		return nil, fmt.Errorf("creating a temporary browser profile: %w", err)
 	}

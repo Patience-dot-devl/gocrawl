@@ -460,22 +460,25 @@ const (
 	loginOpenTimeout    = 45 * time.Second
 	loginCaptureTimeout = 30 * time.Second
 
-	// loginProfilePrefix is the temp-directory prefix internal/render gives a login window's
-	// throwaway browser profile; staleLoginProfileAge is how old one must be to be swept.
-	loginProfilePrefix   = "gocrawl-login-"
-	staleLoginProfileAge = time.Hour
+	// StaleLoginProfileAge is how long a login window's throwaway browser profile must have
+	// been untouched before SweepStaleLoginProfiles removes it.
+	StaleLoginProfileAge = time.Hour
 )
 
-// sweepStaleLoginProfiles removes gocrawl-login-* directories in dir that were last modified
-// more than maxAge before now: profiles a killed server (SIGKILL, crash) never got to delete.
-// Nothing else in dir is touched. Errors are ignored; this is housekeeping.
-func sweepStaleLoginProfiles(dir string, maxAge time.Duration, now time.Time) {
+// SweepStaleLoginProfiles removes login-window profile directories (render.LoginProfilePrefix)
+// in dir that were last modified more than maxAge ago: profiles a killed server (SIGKILL,
+// crash) never got to delete. Only real directories are removed: a symlink with the prefix is
+// left alone, and so is whatever it points at. Nothing else in dir is touched. Errors are
+// ignored; this is housekeeping. gocrawl serve calls it once at startup, not New, so tests
+// and embedders never sweep a temp directory they didn't ask about.
+func SweepStaleLoginProfiles(dir string, maxAge time.Duration) {
+	now := time.Now()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), loginProfilePrefix) {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), render.LoginProfilePrefix) {
 			continue
 		}
 		info, err := e.Info()

@@ -43,6 +43,9 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Browser profiles of login windows an earlier, killed server never cleaned up.
+	go webserver.SweepStaleLoginProfiles(os.TempDir(), webserver.StaleLoginProfileAge)
+
 	var opts []webserver.Option
 	if !isLoopbackBind(addr) {
 		// The operator asked for a reachable server; the loopback Host check would only
