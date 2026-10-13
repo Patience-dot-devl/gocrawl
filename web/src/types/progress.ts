@@ -2,7 +2,8 @@
 // preview response. Keep in sync with the Go side by hand.
 import type { CrawlListItem, JobView } from './crawls'
 
-export type Phase = 'sitemap' | 'crawling' | 'analyzing'
+/** Where a running crawl is: reading the sitemap, fetching pages, or analyzing them. */
+export type RunPhase = 'sitemap' | 'crawling' | 'analyzing'
 export type PauseReason = 'user' | 'rate_limited'
 
 export interface ProgressView {
@@ -17,7 +18,7 @@ export interface ProgressView {
   paused: boolean
   pause_reason?: PauseReason
   retry_after_seconds?: number
-  phase: Phase
+  phase: RunPhase
   sitemap_found: boolean
   sitemap_total: number
   sitemap_fetched: number

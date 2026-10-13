@@ -1,0 +1,105 @@
+/* Running crawl body: tape, counts, recent fetches. Colors come from styles/tokens.css. */
+.running-crawl {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+.rc-sub {
+  color: var(--ink-2);
+  margin: 0;
+}
+.rc-stats {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.rc-stat b {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.rc-stat span {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.rc-stat b.rc-warn {
+  color: var(--s3);
+}
+.rc-classes {
+  list-style: none;
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 0;
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.rc-classes b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.rc-swatch {
+  display: inline-block;
+  width: 4px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  background: var(--s2);
+}
+.rc-class-3 .rc-swatch {
+  background: var(--s3);
+}
+.rc-class-4 .rc-swatch {
+  background: var(--s4);
+}
+.rc-class-5 .rc-swatch {
+  background: var(--s5);
+}
+.rc-class-x .rc-swatch {
+  background: var(--ink-2);
+}
+.rc-h2 {
+  font-size: 16px;
+  margin: 0;
+}
+.rc-recent {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  font-size: 14px;
+}
+.rc-recent th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-2);
+  padding: 6px 12px;
+}
+.rc-recent td {
+  padding: 6px 12px;
+  border-top: 1px solid var(--rule);
+}
+.rc-url {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+.rc-off {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.rc-recent .rc-ms {
+  width: 80px;
+  text-align: right;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.rc-failed {
+  color: var(--s5);
+  font-weight: 600;
+}

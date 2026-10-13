@@ -27,12 +27,6 @@ function isClass(c: string): c is TapeClass {
   return c === '2' || c === '3' || c === '4' || c === '5' || c === 'x'
 }
 
-export function countClasses(tape: string): ClassCounts {
-  const counts = emptyCounts()
-  for (const ch of tape) if (isClass(ch)) counts[ch] += 1
-  return counts
-}
-
 /** Counts from a list item's status_classes ("2" -> n). */
 export function countsFromRecord(rec?: Record<string, number>): ClassCounts {
   const counts = emptyCounts()

@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { cancelCrawl, exportURL, getCrawl, listExplanations } from '../api/crawls'
+import { cancelCrawl, exportURL, listExplanations } from '../api/crawls'
 import { ApiError } from '../api/client'
 import { href } from '../routes'
 import SiteMap from './SiteMap'
 import { useSort } from '../sort'
 import { STATUS_PILL } from '../crawlStatus'
-import type { Explanation, Issue, JobView } from '../types/crawls'
+import type { Explanation, Issue } from '../types/crawls'
 import Button from './ui/Button'
 import ConfirmDialog from './ui/ConfirmDialog'
 import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
 import StatusCode from './ui/StatusCode'
+import RunningCrawl from './progress/RunningCrawl'
+import RunPhasePill from './progress/RunPhasePill'
+import { isLive, useCrawlPoll } from './progress/useCrawlPoll'
 import './CrawlReport.css'
 
-const POLL_MS = 1500
 const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 }
 
 interface ReviewState {
@@ -36,13 +38,6 @@ function noun(n: number, singular: string): string {
 // An error message without its final full stop, so a sentence can follow it cleanly.
 function trimEnd(message: string): string {
   return message.replace(/[.\s]+$/, '')
-}
-
-function formatElapsed(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 function hostOf(seed: string): string {
@@ -71,12 +66,11 @@ function issueSortValue(row: IssueRow, key: string): string | number {
 }
 
 export default function CrawlReport({ id }: { id: string }) {
-  const [job, setJob] = useState<JobView | null>(null)
-  // loadError replaces the whole view (nothing loaded, or the crawl does not exist); actionError
-  // is an inline notice above the report, for a failed action such as Stop crawl.
-  const [loadError, setLoadError] = useState<{ message: string; notFound: boolean } | null>(null)
+  // loadError replaces the whole view (nothing loaded, or the crawl does not exist); pollError
+  // is an inline notice above the report (a refresh failed, polling goes on); actionError is an
+  // inline notice for a failed action such as Stop crawl.
+  const { job, progress, tape, tapeOff, recent, receivedAt, loadError, pollError, refresh } = useCrawlPoll(id)
   const [actionError, setActionError] = useState('')
-  const [pollError, setPollError] = useState('')
   const [confirmStop, setConfirmStop] = useState(false)
   const [headingFocus, setHeadingFocus] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -90,9 +84,7 @@ export default function CrawlReport({ id }: { id: string }) {
   const [review, setReview] = useState<Record<number, ReviewState>>({})
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [tab, setTab] = useState<'issues' | 'sitemap'>('issues')
-  const [now, setNow] = useState(() => Date.now())
   const [explanations, setExplanations] = useState<Record<string, Explanation>>({})
-  const timer = useRef<number | undefined>(undefined)
   const selectAllRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -101,50 +93,10 @@ export default function CrawlReport({ id }: { id: string }) {
       .catch(() => undefined)
   }, [])
 
-  useEffect(() => {
-    let stopped = false
-    let wasRunning = false
-    let loaded = false
-    async function poll() {
-      try {
-        const j = await getCrawl(id)
-        if (stopped) return
-        loaded = true
-        wasRunning = j.status === 'running'
-        setJob(j)
-        setPollError('')
-        if (wasRunning) {
-          timer.current = window.setTimeout(poll, POLL_MS)
-        }
-      } catch (err) {
-        if (stopped) return
-        const message = err instanceof Error ? err.message : String(err)
-        if (loaded) {
-          // A report is already on screen: keep it, say what happened, and try again.
-          setPollError(`Could not refresh this crawl: ${trimEnd(message)}. Trying again.`)
-          if (wasRunning) timer.current = window.setTimeout(poll, POLL_MS)
-          return
-        }
-        setLoadError({ message, notFound: err instanceof ApiError && err.status === 404 })
-      }
-    }
-    poll()
-    return () => {
-      stopped = true
-      window.clearTimeout(timer.current)
-    }
-  }, [id])
-
   // The server attaches the report once, when the crawl finishes, and App keys this component
   // by crawl id, so the report-derived UI state below starts fresh for every report without a
   // reset effect. A code missing from codeOn counts as shown.
   const report = job?.report
-
-  useEffect(() => {
-    if (job?.status !== 'running') return
-    const t = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(t)
-  }, [job?.status])
 
   useEffect(() => {
     if (!codeMenuOpen) return
@@ -191,7 +143,8 @@ export default function CrawlReport({ id }: { id: string }) {
   // The dialog is only meaningful while the crawl runs: if the crawl finishes while it is open,
   // it goes away, and the Stop crawl button that opened it goes with it. Focus then has nowhere
   // to return to, so it moves to the report heading. Stopping the crawl moves it there too.
-  const dialogOpen = confirmStop && job?.status === 'running'
+  const live = isLive(job?.status)
+  const dialogOpen = confirmStop && live
   const wasOpen = useRef(false)
   useEffect(() => {
     if (wasOpen.current && !dialogOpen && (!document.activeElement || document.activeElement === document.body)) {
@@ -308,19 +261,19 @@ export default function CrawlReport({ id }: { id: string }) {
     setConfirmStop(false)
     setHeadingFocus((n) => n + 1)
     setActionError('')
-    cancelCrawl(id).catch((err) => {
-      // A 404 or 409 means the crawl is no longer running, usually because it finished while the
-      // dialog was open. That is not a failure for the user: show the finished crawl.
-      if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
-        getCrawl(id)
-          .then(setJob)
-          .catch(() => undefined)
-        return
-      }
-      setActionError(
-        `Could not stop the crawl: ${trimEnd(err instanceof Error ? err.message : String(err))}. Try Stop crawl again.`,
-      )
-    })
+    cancelCrawl(id)
+      .then(refresh)
+      .catch((err) => {
+        // A 404 or 409 means the crawl is no longer running, usually because it finished while the
+        // dialog was open. That is not a failure for the user: show the finished crawl.
+        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+          refresh()
+          return
+        }
+        setActionError(
+          `Could not stop the crawl: ${trimEnd(err instanceof Error ? err.message : String(err))}. Try Stop crawl again.`,
+        )
+      })
   }
 
   return (
@@ -329,9 +282,15 @@ export default function CrawlReport({ id }: { id: string }) {
         <h1 ref={headingRef} tabIndex={-1}>
           {hostOf(job.seed)}
         </h1>
-        <PhasePill phase={pill.phase} live>{pill.label}</PhasePill>
+        {job.status === 'running' ? (
+          <RunPhasePill phase={progress?.phase} live />
+        ) : (
+          <PhasePill phase={pill.phase} live>
+            {pill.label}
+          </PhasePill>
+        )}
         <div className="cr-actions">
-          {job.status === 'running' && (
+          {live && (
             <Button variant="stop" onClick={() => setConfirmStop(true)}>
               Stop crawl
             </Button>
@@ -370,15 +329,17 @@ export default function CrawlReport({ id }: { id: string }) {
       )}
 
       {actionError && <Notice tone="error">{actionError}</Notice>}
-      {pollError && <Notice tone="warning">{pollError}</Notice>}
+      {pollError && <Notice tone="warning">{`Could not refresh this crawl: ${trimEnd(pollError)}. Trying again.`}</Notice>}
 
-      {job.status === 'running' && job.started_at && (
-        <div className="cr-stats">
-          <div className="cr-stat">
-            <b className="num">{formatElapsed(now - Date.parse(job.started_at))}</b>
-            <span>elapsed</span>
-          </div>
-        </div>
+      {live && (
+        <RunningCrawl
+          job={job}
+          progress={progress}
+          tape={tape}
+          tapeOff={tapeOff}
+          recent={recent}
+          receivedAt={receivedAt}
+        />
       )}
 
       {job.error && <Notice tone="error">{job.error}</Notice>}
