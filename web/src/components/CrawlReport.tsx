@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { cancelCrawl, exportURL, getCrawl, listExplanations } from '../api/crawls'
 import SiteMap from './SiteMap'
 import { useSort } from '../sort'
+import { STATUS_PILL } from '../crawlStatus'
 import type { Explanation, Issue, JobView } from '../types/crawls'
+import Button from './ui/Button'
+import Notice from './ui/Notice'
+import PhasePill from './ui/PhasePill'
+import StatusCode from './ui/StatusCode'
+import './CrawlReport.css'
 
 const POLL_MS = 1500
 const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 }
@@ -20,6 +26,14 @@ function formatElapsed(ms: number): string {
   const m = Math.floor(totalSec / 60)
   const s = totalSec % 60
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function hostOf(seed: string): string {
+  try {
+    return new URL(seed).host
+  } catch {
+    return seed
+  }
 }
 
 function issueSortValue(row: IssueRow, key: string): string | number {
@@ -74,7 +88,7 @@ export default function CrawlReport({ id }: { id: string }) {
           timer.current = window.setTimeout(poll, POLL_MS)
         }
       } catch (err) {
-        if (!stopped) setError(String(err))
+        if (!stopped) setError(err instanceof Error ? err.message : String(err))
       }
     }
     poll()
@@ -143,8 +157,8 @@ export default function CrawlReport({ id }: { id: string }) {
     selectAllRef.current.indeterminate = selectedShownCount > 0 && selectedShownCount < sorted.length
   }, [selectedShownCount, sorted.length])
 
-  if (error) return <p className="error">{error}</p>
-  if (!job) return <p>Loading…</p>
+  if (error) return <Notice tone="error">{error}</Notice>
+  if (!job) return <p className="muted">Loading…</p>
 
   const emptyReview: ReviewState = { resolved: false, nonissue: false, note: '' }
 
@@ -225,182 +239,212 @@ export default function CrawlReport({ id }: { id: string }) {
     hideNonissue ||
     Object.values(severityOn).some((v) => v === false)
 
+  const pill = STATUS_PILL[job.status]
+
   return (
-    <div className="card">
-      <div className="report-header">
-        <div>
-          <h2>{job.seed}</h2>
-          <p className={`status status-${job.status}`}>{job.status}</p>
-          {job.status === 'running' && job.started_at && (
-            <div className="progress">
-              <span className="progress-elapsed">{formatElapsed(now - Date.parse(job.started_at))} elapsed</span>
-              <span className="progress-bar" role="progressbar" aria-label="Crawl in progress" />
-            </div>
+    <div className="cr">
+      <header className="cr-head">
+        <h1>{hostOf(job.seed)}</h1>
+        <PhasePill phase={pill.phase}>{pill.label}</PhasePill>
+        <div className="cr-actions">
+          {job.status === 'running' && (
+            <Button
+              variant="stop"
+              onClick={() => {
+                if (!window.confirm('Stop this crawl? The report keeps the pages fetched so far.')) return
+                cancelCrawl(id).catch((e) => setError(e instanceof Error ? e.message : String(e)))
+              }}
+            >
+              Stop crawl
+            </Button>
+          )}
+          {report && (
+            <>
+              <a className="btn btn-secondary" href={exportURL(id, 'json')}>
+                Export JSON
+              </a>
+              <a className="btn btn-secondary" href={exportURL(id, 'csv')}>
+                Export CSV
+              </a>
+              <a className="btn btn-secondary" href={exportURL(id, 'html')}>
+                Export HTML
+              </a>
+              <Button onClick={exportReviewed} title="Download this report with your review marks and comments merged in">
+                Export reviewed JSON
+              </Button>
+            </>
           )}
         </div>
-        {job.status === 'running' && (
-          <button
-            onClick={() => {
-              if (!window.confirm('Cancel this crawl? The report will only include pages already fetched.')) return
-              cancelCrawl(id).catch((e) => setError(String(e)))
-            }}
-          >
-            Cancel
-          </button>
-        )}
-        {report && (
-          <div className="export-buttons">
-            <a href={exportURL(id, 'json')}>Export JSON</a>
-            <a href={exportURL(id, 'csv')}>Export CSV</a>
-            <a href={exportURL(id, 'html')}>Export HTML</a>
-            <button type="button" onClick={exportReviewed} title="Download this report with your resolved/non-issue/comment state merged in">
-              Export reviewed (JSON)
-            </button>
-          </div>
-        )}
-      </div>
+      </header>
+      <p className="cr-seed mono">{job.seed}</p>
 
-      {job.error && <p className="error">{job.error}</p>}
+      {job.status === 'running' && job.started_at && (
+        <div className="cr-stats">
+          <div className="cr-stat">
+            <b className="num">{formatElapsed(now - Date.parse(job.started_at))}</b>
+            <span>elapsed</span>
+          </div>
+        </div>
+      )}
+
+      {job.error && <Notice tone="error">{job.error}</Notice>}
 
       {report && (
         <>
           {report.coverage && !report.coverage.complete && (
-            <div className="cov-banner" role="alert">
-              <strong>Partial coverage — this crawl did not reach the whole site.</strong>{' '}
-              {report.coverage.duration_limit_reached ? (
-                <>
-                  The crawl was stopped after reaching its max-duration time budget. Findings reflect only what was
-                  fetched within that window, and many in-scope pages may not have been discovered at all. Raise the
-                  max duration (or leave it unlimited) and re-run for full coverage.
-                </>
-              ) : report.coverage.interrupted ? (
-                <>
-                  The crawl was interrupted before it finished (e.g. the Cancel button). Findings reflect only what
-                  was fetched before the interruption, and many in-scope pages may not have been discovered at all.
-                  Re-run to completion for full coverage.
-                </>
-              ) : (
-                <>
-                  {report.coverage.discovered_not_crawled ?? 0} in-scope URL
-                  {report.coverage.discovered_not_crawled !== 1 ? 's were' : ' was'} discovered but not crawled
-                  {report.coverage.page_limit_reached && (
-                    <>
-                      , because the page limit (<code>--max-pages {report.coverage.max_pages}</code>) was reached
-                    </>
-                  )}
-                  {report.coverage.depth_limit_reached && (
-                    <>
-                      {report.coverage.page_limit_reached ? ' and' : ', because'} the depth limit (
-                      <code>--depth {report.coverage.max_depth}</code>) was reached
-                    </>
-                  )}
-                  . Page-level findings — <strong>broken links especially</strong> — may be incomplete. Re-crawl with
-                  a higher limit (or <code>0</code> for unlimited) for full coverage.
-                </>
-              )}
-            </div>
+            <Notice tone="warning" role="alert">
+              <p>
+                <strong>Partial coverage: this crawl did not reach the whole site.</strong>{' '}
+                {report.coverage.duration_limit_reached ? (
+                  <>
+                    The crawl stopped when it reached its max duration. Findings cover only what was fetched in that
+                    time, and many pages may not have been discovered at all. Raise the max duration (or leave it
+                    empty for no limit) and crawl again for full coverage.
+                  </>
+                ) : report.coverage.interrupted ? (
+                  <>
+                    The crawl was stopped before it finished (for example with Stop crawl). Findings cover only what
+                    was fetched before that, and many pages may not have been discovered at all. Crawl again and let
+                    it finish for full coverage.
+                  </>
+                ) : (
+                  <>
+                    {report.coverage.discovered_not_crawled ?? 0} in-scope URL
+                    {report.coverage.discovered_not_crawled !== 1 ? 's were' : ' was'} discovered but not crawled
+                    {report.coverage.page_limit_reached && (
+                      <>
+                        , because the page limit (<code>--max-pages {report.coverage.max_pages}</code>) was reached
+                      </>
+                    )}
+                    {report.coverage.depth_limit_reached && (
+                      <>
+                        {report.coverage.page_limit_reached ? ' and' : ', because'} the depth limit (
+                        <code>--depth {report.coverage.max_depth}</code>) was reached
+                      </>
+                    )}
+                    . Page-level findings, broken links especially, may be incomplete. Crawl again with a higher
+                    limit (or <code>0</code> for no limit) for full coverage.
+                  </>
+                )}
+              </p>
+            </Notice>
           )}
 
           {(() => {
             // runner.Run appends the same coverageNote() text to report.notes whenever
-            // coverage is incomplete — always prefixed "partial coverage: " — which the
-            // banner above already covers more richly. Filter it out here so the web view
+            // coverage is incomplete, always prefixed "partial coverage: ", which the
+            // notice above already covers more richly. Filter it out here so the web view
             // doesn't show it twice; report.html.tmpl never renders .notes at all, so this
             // duplication is specific to the live view.
             const otherNotes = (report.notes ?? []).filter((n) => !n.startsWith('partial coverage:'))
             return (
               otherNotes.length > 0 && (
-                <ul className="notes">
-                  {otherNotes.map((n, i) => (
-                    <li key={i}>{n}</li>
-                  ))}
-                </ul>
+                <Notice tone="info">
+                  <ul className="cr-notes">
+                    {otherNotes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
+                </Notice>
               )
             )
           })()}
 
-          <div className="summary-cards">
-            <div className="stat">
-              <span className="stat-value">{report.pages_crawled}</span>
-              <span className="stat-label">pages crawled</span>
+          <div className="cr-stats">
+            <div className="cr-stat">
+              <b className="num">{report.pages_crawled.toLocaleString()}</b>
+              <span>pages crawled</span>
             </div>
-            {Object.entries(report.summary.by_severity).map(([sev, count]) => (
-              <div className="stat" key={sev}>
-                <span className={`stat-value severity-${sev}`}>{count}</span>
-                <span className="stat-label">{sev}</span>
-              </div>
-            ))}
+            {(['error', 'warning', 'info'] as const)
+              .filter((sev) => report.summary.by_severity[sev] !== undefined)
+              .map((sev) => (
+                <div className="cr-stat" key={sev}>
+                  <b className={`num sev-${sev}`}>{report.summary.by_severity[sev].toLocaleString()}</b>
+                  <span>{sev === 'error' ? 'errors' : sev === 'warning' ? 'warnings' : 'info'}</span>
+                </div>
+              ))}
           </div>
 
-          <div className="subcards">
-            <div className="subcard">
-              <h3>By analyzer</h3>
+          <div className="cr-panels">
+            <section className="cr-panel">
+              <h2>By analyzer</h2>
               {Object.keys(report.summary.by_analyzer).length > 0 ? (
                 <table>
                   <tbody>
                     {Object.entries(report.summary.by_analyzer).map(([a, count]) => (
                       <tr key={a}>
-                        <td>{a}</td>
-                        <td>{count}</td>
+                        <td className="mono">{a}</td>
+                        <td className="num cr-count">{count}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <p className="empty">No analyzers reported.</p>
+                <p className="muted">No analyzer reported an issue.</p>
               )}
-            </div>
-            <div className="subcard">
-              <h3>Pages by status</h3>
+            </section>
+            <section className="cr-panel">
+              <h2>Pages by status</h2>
               {Object.keys(report.summary.pages_by_status).length > 0 ? (
                 <table>
                   <tbody>
                     {Object.entries(report.summary.pages_by_status).map(([s, count]) => (
                       <tr key={s}>
-                        <td>{s}</td>
-                        <td>{count}</td>
+                        <td>{/^\d+$/.test(s) ? <StatusCode code={Number(s)} /> : s}</td>
+                        <td className="num cr-count">{count}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <p className="empty">No pages crawled.</p>
+                <p className="muted">No pages were crawled.</p>
               )}
-            </div>
+            </section>
           </div>
 
           {report.site_map && (
-            <nav className="tabs">
-              <button type="button" className={`tab${tab === 'issues' ? ' active' : ''}`} onClick={() => setTab('issues')}>
-                Issues &amp; summary
+            <div className="cr-tabs">
+              <button
+                type="button"
+                className={`cr-tab${tab === 'issues' ? ' cr-tab-on' : ''}`}
+                aria-pressed={tab === 'issues'}
+                onClick={() => setTab('issues')}
+              >
+                Issues
               </button>
-              <button type="button" className={`tab${tab === 'sitemap' ? ' active' : ''}`} onClick={() => setTab('sitemap')}>
+              <button
+                type="button"
+                className={`cr-tab${tab === 'sitemap' ? ' cr-tab-on' : ''}`}
+                aria-pressed={tab === 'sitemap'}
+                onClick={() => setTab('sitemap')}
+              >
                 Site map
               </button>
-            </nav>
+            </div>
           )}
 
           {tab === 'sitemap' && report.site_map ? (
             <SiteMap siteMap={report.site_map} />
           ) : (
             <>
-              <div className="filters">
-                <div className="sevfilters">
+              <div className="cr-filters">
+                <div className="cr-sevs" role="group" aria-label="Severity">
                   {(['error', 'warning', 'info'] as const).map((sev) => (
                     <button
                       key={sev}
                       type="button"
-                      className={`sevbtn sev-${sev}${severityOn[sev] ? ' active' : ''}`}
+                      className={`cr-sev sev-${sev}`}
+                      aria-pressed={severityOn[sev]}
                       onClick={() => setSeverityOn((prev) => ({ ...prev, [sev]: !prev[sev] }))}
                     >
                       {sev.charAt(0).toUpperCase() + sev.slice(1)}
                     </button>
                   ))}
                 </div>
-                <label>
+                <label className="cr-inline">
                   Analyzer
                   <select value={analyzerFilter} onChange={(e) => setAnalyzerFilter(e.target.value)}>
-                    <option value="">all</option>
+                    <option value="">All</option>
                     {Object.keys(report.summary.by_analyzer).map((a) => (
                       <option key={a} value={a}>
                         {a}
@@ -408,9 +452,8 @@ export default function CrawlReport({ id }: { id: string }) {
                     ))}
                   </select>
                 </label>
-                <div className={`msel${hiddenCodeCount > 0 ? ' has-hidden' : ''}`}>
-                  <button
-                    type="button"
+                <div className={`cr-codes${hiddenCodeCount > 0 ? ' cr-codes-hidden' : ''}`}>
+                  <Button
                     aria-expanded={codeMenuOpen}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -418,85 +461,91 @@ export default function CrawlReport({ id }: { id: string }) {
                     }}
                   >
                     {hiddenCodeCount > 0 ? `Codes (${hiddenCodeCount} hidden)` : 'Codes'}
-                    <span className="caret">▾</span>
-                  </button>
-                  <div className="msel-panel" hidden={!codeMenuOpen} onClick={(e) => e.stopPropagation()}>
-                    <div className="msel-acts">
-                      <button type="button" onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, true])))}>
-                        Select all
-                      </button>
-                      <button type="button" onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, false])))}>
+                    <span aria-hidden="true">▾</span>
+                  </Button>
+                  <div className="cr-codes-panel" hidden={!codeMenuOpen} onClick={(e) => e.stopPropagation()}>
+                    <div className="cr-codes-actions">
+                      <Button onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, true])))}>
+                        Show all
+                      </Button>
+                      <Button onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, false])))}>
                         Hide all
-                      </button>
+                      </Button>
                     </div>
                     {codeList.map((c) => (
-                      <label key={c}>
+                      <label key={c} className="cr-code-option">
                         <input
                           type="checkbox"
                           checked={codeOn[c] !== false}
                           onChange={(e) => setCodeOn((prev) => ({ ...prev, [c]: e.target.checked }))}
                         />
                         <code>{c}</code>
-                        <span className="msel-n">{codeCounts[c]}</span>
+                        <span className="num muted">{codeCounts[c]}</span>
                       </label>
                     ))}
                   </div>
                 </div>
                 <input
                   type="search"
+                  className="cr-search"
                   placeholder="Search URL, message, code…"
+                  aria-label="Search issues"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-                <label>
+                <label className="cr-inline">
                   <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} />
                   Hide resolved
                 </label>
-                <label>
+                <label className="cr-inline">
                   <input type="checkbox" checked={hideNonissue} onChange={(e) => setHideNonissue(e.target.checked)} />
                   Hide non-issues
                 </label>
-                <span className="filter-count">
+                <span className="cr-count-line num muted">
                   Showing {sorted.length.toLocaleString()} of {rows.length.toLocaleString()} issues
                 </span>
-                {filtersActive && (
-                  <button type="button" className="filter-clear" onClick={clearFilters}>
-                    Clear filters
-                  </button>
-                )}
-                <div className="bulkbar">
-                  <label>
-                    <input
-                      ref={selectAllRef}
-                      type="checkbox"
-                      checked={sorted.length > 0 && selectedShownCount === sorted.length}
-                      onChange={(e) => selectShown(e.target.checked)}
-                    />
-                    Select shown
-                  </label>
-                  <button type="button" disabled={selected.size === 0} onClick={() => bulkApply('nonissue')}>
-                    → Non-issue
-                  </button>
-                  <button type="button" disabled={selected.size === 0} onClick={() => bulkApply('resolved')}>
-                    → Resolved
-                  </button>
-                  <button type="button" disabled={selected.size === 0} onClick={() => bulkApply('clear')}>
-                    Clear
-                  </button>
-                  {selected.size > 0 && <span className="seln">{selected.size} selected</span>}
-                </div>
+                {filtersActive && <Button onClick={clearFilters}>Clear filters</Button>}
               </div>
 
-              <div className="table-scroll">
-                <table className="issues">
+              <div className="cr-bulk">
+                <label className="cr-inline">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={sorted.length > 0 && selectedShownCount === sorted.length}
+                    onChange={(e) => selectShown(e.target.checked)}
+                  />
+                  Select shown
+                </label>
+                <Button disabled={selected.size === 0} onClick={() => bulkApply('nonissue')}>
+                  Mark as non-issue
+                </Button>
+                <Button disabled={selected.size === 0} onClick={() => bulkApply('resolved')}>
+                  Mark as resolved
+                </Button>
+                <Button disabled={selected.size === 0} onClick={() => bulkApply('clear')}>
+                  Clear review
+                </Button>
+                {selected.size > 0 && <span className="num muted">{selected.size} selected</span>}
+              </div>
+
+              <div className="cr-table-scroll">
+                <table className="cr-issues">
                   <thead>
                     <tr>
                       {(['severity', 'analyzer', 'code', 'url', 'message'] as const).map((col) => (
-                        <th key={col} className="sortable" onClick={() => toggle(col)} data-dir={dirFor(col)}>
-                          {col.charAt(0).toUpperCase() + col.slice(1)}
+                        <th
+                          key={col}
+                          className="cr-sortable"
+                          data-dir={dirFor(col)}
+                          aria-sort={dirFor(col) === 'asc' ? 'ascending' : dirFor(col) === 'desc' ? 'descending' : undefined}
+                        >
+                          <button type="button" onClick={() => toggle(col)}>
+                            {col === 'url' ? 'URL' : col.charAt(0).toUpperCase() + col.slice(1)}
+                          </button>
                         </th>
                       ))}
-                      <th className="nosort">Review</th>
+                      <th>Review</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -504,41 +553,43 @@ export default function CrawlReport({ id }: { id: string }) {
                       const explanation = explanations[i.code]
                       const r = review[i._key]
                       return (
-                        <tr key={i._key} className={r?.resolved || r?.nonissue ? 'reviewed' : undefined}>
-                          <td className={`severity-${i.severity}`}>{i.severity}</td>
-                          <td>{i.analyzer}</td>
-                          <td>{i.code}</td>
-                          <td className="url-cell" title={i.url}>
+                        <tr key={i._key} className={r?.resolved || r?.nonissue ? 'cr-reviewed' : undefined}>
+                          <td className={`sev-${i.severity}`}>{i.severity}</td>
+                          <td className="mono">{i.analyzer}</td>
+                          <td>
+                            <code>{i.code}</code>
+                          </td>
+                          <td className="cr-url mono" title={i.url}>
                             {i.url}
                           </td>
                           <td>
                             {i.message}
                             {explanation && (
-                              <details className="explain">
-                                <summary>what this means &amp; how to fix</summary>
+                              <details className="cr-explain">
+                                <summary>What this means and how to fix it</summary>
                                 <dl>
                                   <dt>What it is</dt>
                                   <dd>{explanation.what}</dd>
                                   <dt>Impact</dt>
                                   <dd>{explanation.impact}</dd>
-                                  <dt>How to fix</dt>
+                                  <dt>How to fix it</dt>
                                   <dd>{explanation.fix}</dd>
                                 </dl>
                               </details>
                             )}
                             {i.data && (
-                              <details>
-                                <summary>data</summary>
+                              <details className="cr-explain">
+                                <summary>Data</summary>
                                 <pre>{JSON.stringify(i.data, null, 2)}</pre>
                               </details>
                             )}
                           </td>
-                          <td className="review">
-                            <label>
+                          <td className="cr-review">
+                            <label className="cr-inline">
                               <input type="checkbox" checked={selected.has(i._key)} onChange={() => toggleSelected(i._key)} />
                               Select
                             </label>
-                            <label>
+                            <label className="cr-inline">
                               <input
                                 type="checkbox"
                                 checked={!!r?.resolved}
@@ -546,7 +597,7 @@ export default function CrawlReport({ id }: { id: string }) {
                               />
                               Resolved
                             </label>
-                            <label>
+                            <label className="cr-inline">
                               <input
                                 type="checkbox"
                                 checked={!!r?.nonissue}
@@ -557,6 +608,7 @@ export default function CrawlReport({ id }: { id: string }) {
                             <textarea
                               rows={2}
                               placeholder="Add a comment…"
+                              aria-label="Comment"
                               value={r?.note ?? ''}
                               onChange={(e) => setReviewFlag(i._key, { note: e.target.value })}
                             />

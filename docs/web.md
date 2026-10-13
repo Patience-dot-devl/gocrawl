@@ -7,7 +7,7 @@ status: "current"
 superseded_by: []
 updated: 2026-10-13
 depends_on: ["mcp.md", "output.md"]
-sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
+sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
 ---
 # Web UI guide
 
@@ -86,7 +86,7 @@ against the API below:
   crawler access signature). (A few CLI-only flags
   with no menu equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form
   either.) Starts a job and jumps to its report.
-- **Report** — polls the running job, then shows a partial-coverage banner when the crawl
+- **Report** — polls the running job (with a Stop crawl button while it runs), then shows a partial-coverage banner when the crawl
   didn't reach the whole site, summary counts by severity/analyzer/page-status, an issues
   table (filterable by severity, analyzer, and free-text search) with each issue's
   what/impact/fix explanation and raw `data` expandable inline, any notes advisories, and
@@ -97,6 +97,30 @@ against the API below:
 There is no live per-page progress in this version — `crawler.Engine` has no progress hook
 today, only a start/finish boundary, so the UI polls for `running` → `done` rather than
 streaming page-by-page.
+
+## Look and feel
+
+The UI is dark by default. Color means HTTP status (2xx green, 3xx yellow, 4xx dark orange,
+5xx red) and violet means interface: navigation, links, focus, and the main actions. Crawl
+controls are green to start or resume, yellow to pause, and red to stop. Text is set in
+Atkinson Hyperlegible Next and URLs and status codes in Atkinson Hyperlegible Mono, both
+bundled into the binary under the SIL Open Font License
+([`web/src/fonts/OFL.txt`](../web/src/fonts/OFL.txt)), so nothing loads from a CDN.
+
+For frontend work:
+
+- Colors come from the tokens in [`styles/tokens.css`](../web/src/styles/tokens.css), one
+  block per theme: dark, light, and system (follows the operating system).
+  [`theme.ts`](../web/src/theme.ts) switches theme by setting `data-theme` on `<html>`.
+- `npm run lint` runs oxlint and then [`scripts/contrast.mjs`](../web/scripts/contrast.mjs),
+  which fails when a text or control color in either theme drops below WCAG 2.2 AA against
+  the background it is used on (4.5:1 for text, 3:1 for input borders and outline ticks).
+- Shared building blocks live in `components/ui/` (`Button`, `Notice`, `StatusCode`,
+  `PhasePill`) and `components/tape/` (the crawl tape: one tick per page, its height and
+  color giving the status, so it reads without color too). Each component imports the
+  stylesheet next to it; global element styles and the page layout are in
+  [`styles/base.css`](../web/src/styles/base.css).
+- Sentence case throughout: no all-caps labels.
 
 ## Source layout
 

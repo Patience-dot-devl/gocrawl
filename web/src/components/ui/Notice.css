@@ -1,0 +1,43 @@
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 16px 0;
+  padding: 10px 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left-width: 4px;
+  border-radius: 5px;
+}
+
+.notice-body {
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
+.notice-body > :first-child {
+  margin-top: 0;
+}
+
+.notice-body > :last-child {
+  margin-bottom: 0;
+}
+
+.notice-action {
+  flex: none;
+}
+
+.notice-warning {
+  background: var(--notice-bg);
+  border-color: var(--s3);
+}
+
+.notice-error {
+  border-color: var(--s5);
+}
+
+.notice-info {
+  border-color: var(--violet);
+}

@@ -1,0 +1,72 @@
+/*
+ * Design tokens for the gocrawl web UI. Color means HTTP status (--s2..--s5); violet means
+ * "this is interface". Dark is the default: a bare :root (no data-theme yet) gets it too.
+ * theme.ts sets data-theme on <html>; 'system' follows prefers-color-scheme.
+ *
+ * scripts/contrast.mjs parses this file (npm run lint): it checks the WCAG 2.2 AA pairs from
+ * the design spec for both themes and that the 'system' light block matches the light block.
+ * Keep one declaration per line in the form `--name: #rrggbb;`.
+ */
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ground: #12161d;
+  --surface: #1a2029;
+  --raised: #212834;
+  --rule: #2c3542;
+  --field: #64728a;
+  --ink: #e6eaf0;
+  --ink-2: #9aa5b4;
+  --s2: #4fae6e;
+  --s3: #e3c13b;
+  --s4: #e07b24;
+  --s5: #f45d5a;
+  --violet: #a78bfa;
+  --on-fill: #12161d;
+  --todo: #6b7a8f;
+  --cut: #a27a1f;
+  --notice-bg: #241f12;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --ground: #f2f3f7;
+  --surface: #ffffff;
+  --raised: #eceaf6;
+  --rule: #d9dde4;
+  --field: #7b8696;
+  --ink: #1b2330;
+  --ink-2: #4f5a6b;
+  --s2: #1f7a3f;
+  --s3: #8a6a00;
+  --s4: #b4500c;
+  --s5: #c8221f;
+  --violet: #6d3fd6;
+  --on-fill: #ffffff;
+  --todo: #7b8696;
+  --cut: #8a6a00;
+  --notice-bg: #fff8e1;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme='system'] {
+    color-scheme: light;
+    --ground: #f2f3f7;
+    --surface: #ffffff;
+    --raised: #eceaf6;
+    --rule: #d9dde4;
+    --field: #7b8696;
+    --ink: #1b2330;
+    --ink-2: #4f5a6b;
+    --s2: #1f7a3f;
+    --s3: #8a6a00;
+    --s4: #b4500c;
+    --s5: #c8221f;
+    --violet: #6d3fd6;
+    --on-fill: #ffffff;
+    --todo: #7b8696;
+    --cut: #8a6a00;
+    --notice-bg: #fff8e1;
+  }
+}

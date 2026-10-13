@@ -22,6 +22,10 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Changed
 
+- The web UI has a new look: dark by default (light and system themes are built in), a
+  left navigation rail, bundled Atkinson Hyperlegible fonts, HTTP-status colors, and green,
+  yellow, and red crawl controls. Cancel is now Stop crawl. `npm run lint` in `web/` also
+  checks every color pair against WCAG 2.2 AA.
 - In the web UI, the navigation entry and address for saved crawls changed from History
   (`#/history`) to Crawls (`#/crawls`); `#/history` still opens it. The navigation also lists
   Compare, Redirects, and Settings, which are placeholders for now.

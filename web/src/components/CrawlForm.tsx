@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { listAnalyzers, startCrawl } from '../api/crawls'
 import type { AnalyzerInfo, StartCrawlParams } from '../types/crawls'
+import Button from './ui/Button'
+import Notice from './ui/Notice'
+import './CrawlForm.css'
 
 export default function CrawlForm({ onStarted }: { onStarted: (id: string) => void }) {
   const [analyzers, setAnalyzers] = useState<AnalyzerInfo[]>([])
@@ -40,7 +43,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   useEffect(() => {
     listAnalyzers()
       .then((r) => setAnalyzers(r.analyzers))
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [])
 
   // Newline-separated rather than comma-separated: a comma is a completely ordinary character
@@ -114,19 +117,20 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       const job = await startCrawl(params)
       onStarted(job.id)
     } catch (err) {
-      setError(String(err))
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <form className="card crawl-form" onSubmit={handleSubmit}>
-      <h2>New crawl</h2>
-      <label>
-        Seed URL
+    <form className="cf" onSubmit={handleSubmit}>
+      <h1>New crawl</h1>
+      <label className="cf-field cf-url">
+        <span className="cf-label">Site URL</span>
         <input
           type="text"
+          inputMode="url"
           placeholder="https://example.com"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
@@ -134,169 +138,171 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
         />
       </label>
 
-      <div className="form-section">
-        <p className="form-section-title">Crawl behavior</p>
-        <div className="grid">
-          <label>
-            Depth
-            <input type="number" min="0" placeholder="unlimited" value={depth} onChange={(e) => setDepth(e.target.value)} />
+      <fieldset className="cf-section">
+        <legend>Crawl behavior</legend>
+        <div className="cf-grid">
+          <label className="cf-field">
+            <span className="cf-label">Depth</span>
+            <input type="number" min="0" placeholder="Unlimited" value={depth} onChange={(e) => setDepth(e.target.value)} />
           </label>
-          <label>
-            Max pages
+          <label className="cf-field">
+            <span className="cf-label">Max pages</span>
             <input type="number" min="0" placeholder="500" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} />
           </label>
-          <label>
-            Concurrency
+          <label className="cf-field">
+            <span className="cf-label">Concurrency</span>
             <input type="number" min="1" placeholder="4" value={concurrency} onChange={(e) => setConcurrency(e.target.value)} />
           </label>
-          <label>
-            Rate limit
-            <input type="number" min="0" step="any" placeholder="unlimited" value={rate} onChange={(e) => setRate(e.target.value)} />
+          <label className="cf-field">
+            <span className="cf-label">Rate limit (requests per second)</span>
+            <input type="number" min="0" step="any" placeholder="Unlimited" value={rate} onChange={(e) => setRate(e.target.value)} />
           </label>
-          <label>
-            Max duration
-            <input type="text" placeholder="unlimited, e.g. 90m" value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} />
+          <label className="cf-field">
+            <span className="cf-label">Max duration</span>
+            <input type="text" placeholder="Unlimited, e.g. 90m" value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} />
           </label>
-          <label>
-            Render
+          <label className="cf-field">
+            <span className="cf-label">Render</span>
             <select value={render} onChange={(e) => setRender(e.target.value)}>
-              <option value="raw">raw</option>
-              <option value="headless">headless</option>
+              <option value="raw">Raw HTML</option>
+              <option value="headless">Headless browser</option>
             </select>
           </label>
         </div>
-        <label className="checkbox">
+        <label className="cf-check">
           <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-          Save to history when finished
+          Save to Crawls when finished
         </label>
-      </div>
+      </fieldset>
 
-      <div className="form-section">
-        <p className="form-section-title">Scope</p>
-        <label className="checkbox">
+      <fieldset className="cf-section">
+        <legend>Scope</legend>
+        <label className="cf-check">
           <input type="checkbox" checked={respectRobots} onChange={(e) => setRespectRobots(e.target.checked)} />
           Respect robots.txt
         </label>
-        <label className="checkbox">
+        <label className="cf-check">
           <input type="checkbox" checked={subdomains} onChange={(e) => setSubdomains(e.target.checked)} />
           Follow links to subdomains
         </label>
-        <label className="checkbox">
+        <label className="cf-check">
           <input type="checkbox" checked={followExternal} onChange={(e) => setFollowExternal(e.target.checked)} />
-          Crawl links that leave the seed host
+          Crawl links that leave the site
         </label>
-      </div>
+      </fieldset>
 
-      <div className="form-section">
-        <p className="form-section-title">Analysis</p>
-        <label className="checkbox">
+      <fieldset className="cf-section">
+        <legend>Analysis</legend>
+        <label className="cf-check">
           <input type="checkbox" checked={specialized} onChange={(e) => setSpecialized(e.target.checked)} />
-          Enable specialized checks (AEO/GEO heuristics, WordPress security probes)
+          Specialized checks (AEO and GEO heuristics, WordPress security probes)
         </label>
-        <label className="checkbox">
+        <label className="cf-check">
           <input type="checkbox" checked={securityAudit} onChange={(e) => setSecurityAudit(e.target.checked)} />
-          Enable security audit (TLS/certificate, cookies, response headers)
+          Security audit (TLS and certificate, cookies, response headers)
         </label>
-        <label className="checkbox">
+        <label className="cf-check">
           <input
             type="checkbox"
             checked={ignoreExternalTagging}
             onChange={(e) => setIgnoreExternalTagging(e.target.checked)}
           />
-          Ignore UTM tagging issues on links leaving the domain
+          Ignore UTM tagging issues on links that leave the site
         </label>
 
         {analyzers.length > 0 && (
-          <fieldset className="analyzers">
-            <legend className="analyzers-head">
-              <span>Analyzers (none checked = run all)</span>
-              <span className="analyzers-actions">
-                <button type="button" onClick={selectAllAnalyzers}>
-                  Select all
-                </button>
-                <button type="button" onClick={selectNoAnalyzers}>
-                  Select none
-                </button>
-              </span>
-            </legend>
-            <div className="analyzer-grid">
+          <fieldset className="cf-analyzers">
+            <legend>Analyzers</legend>
+            <p className="cf-hint">None checked runs all of them.</p>
+            <div className="cf-analyzer-actions">
+              <Button onClick={selectAllAnalyzers}>Select all</Button>
+              <Button onClick={selectNoAnalyzers}>Select none</Button>
+            </div>
+            <div className="cf-analyzer-grid">
               {analyzers.map((a) => (
-                <label key={a.name} className="checkbox" title={a.description}>
+                <label key={a.name} className="cf-check" title={a.description}>
                   <input type="checkbox" checked={selected.has(a.name)} onChange={() => toggleAnalyzer(a.name)} />
-                  {a.name}
+                  <span className="mono">{a.name}</span>
                 </label>
               ))}
             </div>
           </fieldset>
         )}
-      </div>
+      </fieldset>
 
-      <details className="advanced">
+      <details className="cf-advanced">
         <summary>Advanced</summary>
-        <div className="grid">
-          <label>
-            Include (regex, one per line, matched against the full normalized URL — the seed must
-            match too, or the crawl returns zero pages; no trailing slash)
+        <div className="cf-grid cf-grid-wide">
+          <label className="cf-field">
+            <span className="cf-label">Include (regex, one per line)</span>
+            <span className="cf-hint">
+              Matched against the full normalized URL. The seed must match too, or the crawl returns zero pages. No
+              trailing slash.
+            </span>
             <textarea rows={2} placeholder="/blog" value={include} onChange={(e) => setInclude(e.target.value)} />
           </label>
-          <label>
-            Exclude (regex, one per line, matched against the full URL)
+          <label className="cf-field">
+            <span className="cf-label">Exclude (regex, one per line)</span>
+            <span className="cf-hint">Matched against the full URL.</span>
             <textarea rows={2} placeholder="/admin/" value={exclude} onChange={(e) => setExclude(e.target.value)} />
           </label>
-          <label>
-            User-Agent
+          <label className="cf-field">
+            <span className="cf-label">User-Agent</span>
             <input type="text" value={userAgent} onChange={(e) => setUserAgent(e.target.value)} />
           </label>
-          <label>
-            User-Agent pool (one per line)
+          <label className="cf-field">
+            <span className="cf-label">User-Agent pool (one per line)</span>
             <textarea rows={2} value={userAgents} onChange={(e) => setUserAgents(e.target.value)} />
           </label>
-          <label>
-            User-Agent rotation
+          <label className="cf-field">
+            <span className="cf-label">User-Agent rotation</span>
             <select value={userAgentRotation} onChange={(e) => setUserAgentRotation(e.target.value)}>
-              <option value="off">off</option>
-              <option value="round-robin">round-robin</option>
-              <option value="random">random</option>
+              <option value="off">Off</option>
+              <option value="round-robin">Round robin</option>
+              <option value="random">Random</option>
             </select>
           </label>
-          <label>
-            Proxy
+          <label className="cf-field">
+            <span className="cf-label">Proxy</span>
             <input type="text" placeholder="http(s):// or socks5://" value={proxy} onChange={(e) => setProxy(e.target.value)} />
           </label>
-          <label>
-            Proxy pool (one per line)
+          <label className="cf-field">
+            <span className="cf-label">Proxy pool (one per line)</span>
             <textarea rows={2} value={proxies} onChange={(e) => setProxies(e.target.value)} />
           </label>
-          <label>
-            Proxy rotation
+          <label className="cf-field">
+            <span className="cf-label">Proxy rotation</span>
             <select value={proxyRotation} onChange={(e) => setProxyRotation(e.target.value)}>
-              <option value="off">off</option>
-              <option value="round-robin">round-robin</option>
-              <option value="random">random</option>
-              <option value="sticky-host">sticky-host</option>
+              <option value="off">Off</option>
+              <option value="round-robin">Round robin</option>
+              <option value="random">Random</option>
+              <option value="sticky-host">Sticky per host</option>
             </select>
           </label>
-          <label>
-            Basic Auth username
+          <label className="cf-field">
+            <span className="cf-label">Basic Auth username</span>
             <input type="text" value={basicAuthUser} onChange={(e) => setBasicAuthUser(e.target.value)} />
           </label>
-          <label>
-            Basic Auth password
+          <label className="cf-field">
+            <span className="cf-label">Basic Auth password</span>
             <input type="password" value={basicAuthPass} onChange={(e) => setBasicAuthPass(e.target.value)} />
           </label>
         </div>
 
-        <label className="checkbox">
+        <label className="cf-check">
           <input type="checkbox" checked={cookieAuth} onChange={(e) => setCookieAuth(e.target.checked)} />
-          Site is gated by a session cookie (e.g. a Shopify storefront password page)
+          The site needs a session cookie (for example a Shopify storefront password page)
         </label>
         {cookieAuth && (
-          <label>
-            Cookie header (paste the session cookie from a browser that's already past the gate —
-            DevTools → Application/Storage → Cookies; sent only to the seed host, not supported
-            with headless rendering)
+          <label className="cf-field">
+            <span className="cf-label">Cookie header</span>
+            <span className="cf-hint">
+              Paste the session cookie from a browser that is already past the gate (DevTools, Application or Storage,
+              Cookies). Sent only to the seed host. Not supported with headless rendering.
+            </span>
             <textarea
               rows={2}
+              className="mono"
               placeholder="_shopify_essential=:AZ_..."
               value={cookie}
               onChange={(e) => setCookie(e.target.value)}
@@ -304,27 +310,28 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
           </label>
         )}
 
-        <label className="checkbox">
+        <label className="cf-check">
           <input type="checkbox" checked={customHeaders} onChange={(e) => setCustomHeaders(e.target.checked)} />
-          Send custom request headers (e.g. a Shopify crawler access signature)
+          Send custom request headers (for example a Shopify crawler access signature)
         </label>
         {customHeaders && (
           <>
-            <label>
-              Header profile (name of a file at ~/.gocrawl/headers/&lt;name&gt;.headers on this
-              machine — the way to use a stored secret without pasting it here)
-              <input
-                type="text"
-                placeholder="uk"
-                value={headerProfile}
-                onChange={(e) => setHeaderProfile(e.target.value)}
-              />
+            <label className="cf-field">
+              <span className="cf-label">Header profile</span>
+              <span className="cf-hint">
+                Name of a file at ~/.gocrawl/headers/&lt;name&gt;.headers on this machine: the way to use a stored
+                secret without pasting it here.
+              </span>
+              <input type="text" placeholder="uk" value={headerProfile} onChange={(e) => setHeaderProfile(e.target.value)} />
             </label>
-            <label>
-              Extra headers (one "Name: value" per line; sent only to the seed host, override
-              the profile by name, not supported with headless rendering)
+            <label className="cf-field">
+              <span className="cf-label">Extra headers (one &quot;Name: value&quot; per line)</span>
+              <span className="cf-hint">
+                Sent only to the seed host. They override the profile by name. Not supported with headless rendering.
+              </span>
               <textarea
                 rows={3}
+                className="mono"
                 placeholder="X-Access-Token: abc123"
                 value={headers}
                 onChange={(e) => setHeaders(e.target.value)}
@@ -334,10 +341,12 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
         )}
       </details>
 
-      {error && <p className="error">{error}</p>}
-      <button type="submit" disabled={submitting}>
-        {submitting ? 'Starting…' : 'Start crawl'}
-      </button>
+      {error && <Notice tone="error">{error}</Notice>}
+      <div className="cf-actions">
+        <Button type="submit" variant="go" disabled={submitting}>
+          {submitting ? 'Starting…' : 'Start crawl'}
+        </Button>
+      </div>
     </form>
   )
 }
