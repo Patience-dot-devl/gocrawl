@@ -8,6 +8,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Web API: interactive browser login. `POST /api/login-sessions` opens a visible Chromium window in a throwaway profile, `…/capture` keeps the seed host's cookies (HttpOnly included) in memory for an hour, and `POST /api/crawls` accepts `login_session` to crawl with them.
 - Every document under `docs/` carries frontmatter (`id`, `title`, `scope`, `topic`,
   `status`, `superseded_by`, `updated`, `depends_on`, `sources`), following the scheme used in
   conductor-playground. The index in `docs/README.md` is generated from it by `make docs` and
