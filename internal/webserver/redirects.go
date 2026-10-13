@@ -118,6 +118,9 @@ func parseRedirectCheckForm(r *http.Request) (redirectCheckParams, error) {
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return p, errors.New("sitemap_url must be an http(s) URL, for example https://example.com/sitemap.xml")
 		}
+		if u.User != nil {
+			return p, errors.New("sitemap_url must not contain a user name or password")
+		}
 		p.sitemapURL = raw
 	}
 	if raw := strings.TrimSpace(r.FormValue("concurrency")); raw != "" {
@@ -157,7 +160,7 @@ func normalizeRedirectDomain(raw string) (string, error) {
 	}
 	if strings.Contains(d, "://") {
 		u, err := url.Parse(d)
-		if err != nil || u.Host == "" {
+		if err != nil || u.Host == "" || u.User != nil {
 			return "", errNotHostName
 		}
 		d = u.Host
@@ -235,6 +238,10 @@ func (s *Server) runRedirectCheck(ctx context.Context, cancel context.CancelFunc
 		// so finish records the job as canceled, which is what the user asked for.
 		err = nil
 	}
+	if err != nil && opts.SitemapURL != "" {
+		// The discovery error quotes the override URL, which may carry a token in its query.
+		err = errors.New(strings.ReplaceAll(err.Error(), opts.SitemapURL, "the sitemap URL"))
+	}
 	s.redirects.finish(id, err, func(d *redirectJob) {
 		if err == nil {
 			d.Rows = rows
@@ -253,10 +260,9 @@ func (s *Server) handleListRedirectChecks(w http.ResponseWriter, _ *http.Request
 }
 
 func (s *Server) handleGetRedirectCheck(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	job, ok := s.redirects.get(id)
+	job, ok := s.redirects.get(r.PathValue("id"))
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("no redirect check with id %q", id))
+		writeError(w, http.StatusNotFound, errors.New("no redirect check with that id"))
 		return
 	}
 	writeJSON(w, http.StatusOK, redirectJobViewOf(job, true))

@@ -316,9 +316,12 @@ func TestNormalizeRedirectDomain(t *testing.T) {
 			t.Errorf("normalizeRedirectDomain(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "   ", "example.com/blog", "https://", "exa mple.com"} {
-		if got, err := normalizeRedirectDomain(in); err == nil {
+	for _, in := range []string{"", "   ", "example.com/blog", "https://", "exa mple.com", "user:pw@example.com", "https://user:pw@example.com"} {
+		got, err := normalizeRedirectDomain(in)
+		if err == nil {
 			t.Errorf("normalizeRedirectDomain(%q) = %q, want an error", in, got)
+		} else if strings.Contains(err.Error(), "pw") {
+			t.Errorf("normalizeRedirectDomain(%q) error echoes the input: %v", in, err)
 		}
 	}
 }
@@ -369,5 +372,49 @@ func TestGetUnknownRedirectCheckIs404(t *testing.T) {
 	rec, _ := doJSON(t, srv, http.MethodGet, "/api/redirect-checks/nope", nil)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestRedirectCheckErrorsDoNotEchoSecrets(t *testing.T) {
+	useRedirectTestSite(t, redirectTestSite(t, nil))
+	srv := newTestServer(t)
+
+	for name, fields := range map[string]map[string]string{
+		"domain userinfo":      {"domain": "https://user:s3cret@example.com"},
+		"domain bare userinfo": {"domain": "user:s3cret@example.com"},
+		"sitemap userinfo":     {"domain": "example.com", "sitemap_url": "https://user:s3cret@example.com/sitemap.xml"},
+		"sitemap bad scheme":   {"domain": "example.com", "sitemap_url": "ftp://user:s3cret@example.com/s.xml"},
+	} {
+		rec, _ := postRedirectCheckForm(t, srv, fields, "r.csv", redirectCSV, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", name, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "s3cret") {
+			t.Errorf("%s: response echoes the secret: %s", name, rec.Body)
+		}
+	}
+	if n := len(srv.redirects.list()); n != 0 {
+		t.Fatalf("%d job(s) started from rejected requests", n)
+	}
+
+	// A sitemap_url with a query token that 404s: the failed job must not repeat the token.
+	id := startRedirectCheckForTest(t, srv, map[string]string{
+		"domain": "example.com", "sitemap_url": "https://example.com/missing.xml?token=s3cret",
+	})
+	job := pollRedirectCheck(t, srv, id)
+	if job["status"] != "error" {
+		t.Fatalf("status = %v, want error", job["status"])
+	}
+	if msg, _ := job["error"].(string); msg == "" || strings.Contains(msg, "s3cret") {
+		t.Fatalf("error = %q, want a message without the token", msg)
+	}
+	rec, _ := doJSON(t, srv, http.MethodGet, "/api/redirect-checks", nil)
+	if strings.Contains(rec.Body.String(), "s3cret") {
+		t.Fatalf("list response leaks the token: %s", rec.Body)
+	}
+
+	rec, _ = doJSON(t, srv, http.MethodGet, "/api/redirect-checks/s3cret-id", nil)
+	if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "s3cret-id") {
+		t.Fatalf("unknown id: status = %d, body = %s", rec.Code, rec.Body)
 	}
 }
