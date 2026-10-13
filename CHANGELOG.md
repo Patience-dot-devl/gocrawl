@@ -8,6 +8,9 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Web API: `GET /api/compare` diffs two crawls (crawl IDs, a host, or `latest`, as
+  `gocrawl compare` takes them), and `POST /api/reports/import` saves an uploaded JSON report
+  to the crawl store.
 - Every document under `docs/` carries frontmatter (`id`, `title`, `scope`, `topic`,
   `status`, `superseded_by`, `updated`, `depends_on`, `sources`), following the scheme used in
   conductor-playground. The index in `docs/README.md` is generated from it by `make docs` and
