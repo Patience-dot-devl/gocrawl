@@ -7,7 +7,7 @@ status: "current"
 superseded_by: []
 updated: 2026-10-13
 depends_on: ["web.md", "configuration.md", "roadmap.md"]
-sources: ["../internal/runner/runner.go", "../internal/runner/options.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
+sources: ["../internal/runner/runner.go", "../internal/runner/options.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/progress.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
 ---
 # Architecture & developer guide
 
@@ -93,6 +93,11 @@ breadth-first walk:
   which puts every request under the same rate limiter and `RespectRobots` policy as the
   crawl. A robots-disallowed probe returns `crawler.ErrRobotsDisallowed` without touching the
   server, and a `429` seen by a probe backs off the shared adaptive limiter.
+- `Options.OnProgress`, when set, is called after each page is recorded with a
+  [`crawler.Progress`](../internal/crawler/progress.go) snapshot: pages recorded, queue length,
+  the page just recorded, the rate limit in effect, and 429/503 responses in the last minute.
+  Calls are serialized in recording order and run while the engine holds its locks, so the
+  callback must return quickly and never call back into the engine.
 - Stopping early (a canceled context, e.g. Ctrl-C or `MaxDuration`) still returns everything
   fetched so far as a result, flagged via `Result.Coverage.Interrupted` /
   `DurationLimitReached` rather than discarded as an error.
@@ -100,6 +105,13 @@ breadth-first walk:
 The engine produces a [`crawler.Result`](../internal/crawler/types.go): the list of pages
 (each with status, redirects, links, timing, parsed doc), the per-host robots data, and an
 index for looking up a page by URL.
+
+Before the crawl, [`runner.Run`](../internal/runner/runner.go) runs a sitemap pre-pass:
+`sitemap.DiscoverAll` on the governed analyzer fetcher, filtered through `Engine.InScope`. The
+`sitemap` analyzer gets the result through `sitemap.WithURLs`, so the sitemap is fetched once
+per crawl, and `Coverage.SitemapTotal` / `SitemapFetched` come from it. `runner.WithProgress`
+wraps the engine callback into a `runner.Progress` that adds the run phase (`sitemap`,
+`crawling`, `analyzing`) and the sitemap counts; the web server uses it for live progress.
 
 ## The analyzer seam
 

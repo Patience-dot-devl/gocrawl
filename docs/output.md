@@ -5,7 +5,7 @@ scope: "The JSON, CSV, and HTML report formats — `Report`, `Summary`, `Issue` 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-17
+updated: 2026-10-13
 depends_on: ["mcp.md", "analyzers.md", "storage.md", "configuration.md"]
 sources: ["../internal/report/report.go", "../internal/sitemapgen", "../internal/analyze/analyze.go", "../internal/crawler/types.go"]
 ---
@@ -129,6 +129,10 @@ coverage is the context you need to trust that result.
 | `interrupted` | bool | The crawl was stopped early by context cancellation (e.g. Ctrl-C or `--max-duration`) rather than a configured limit. Omitted when false. |
 | `duration_limit_reached` | bool | The `--max-duration` wall-clock budget elapsed. Implies `interrupted`. Omitted when false. |
 | `max_pages` / `max_depth` | int | The limits in effect (`0` = unlimited). |
+| `sitemap_total` | int | In-scope URLs the site's sitemap lists, read once before the crawl. Omitted when no sitemap was found. |
+| `sitemap_fetched` | int | How many of those sitemap URLs this crawl fetched. Omitted when 0. |
+| `tape` | string | The crawl tape: one character per page in fetch order, `2`, `3`, `4`, `5` for the status class (a redirected page counts as its first hop, so it reads `3`) or `x` for a failed fetch. The web UI draws it; it is the same tape the live view showed. |
+| `tape_off` | string | Same length as `tape`: `1` where a sitemap was found and the page is not in its in-scope part, `0` otherwise. Empty (omitted) when no sitemap was found. |
 
 A first Ctrl-C during `gocrawl crawl` cancels the crawl gracefully and still writes whatever
 was fetched so far as a report with `interrupted: true`, rather than losing everything; a
@@ -142,6 +146,9 @@ prominent banner** at the top of the page. By default the crawl is bounded by `-
 (500) with unlimited depth, so it walks the whole site up to that
 budget rather than stopping at a shallow depth — re-crawl with a higher `--max-pages` (or `0`)
 when you see the partial-coverage banner.
+
+When the page budget is below `sitemap_total`, `notes` says so, for example: "The page
+budget (500) is below the sitemap total (1,240); this crawl covered at most 40% of the sitemap."
 
 ### Example JSON report
 

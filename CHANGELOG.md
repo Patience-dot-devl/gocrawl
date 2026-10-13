@@ -8,6 +8,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Live crawl progress in the web API: `GET /api/crawls/{id}` returns a `progress` object (phase, pages against the site's sitemap, rate, recent 429/503s, and a per-page status tape sliced with `?tape_from=N`), and `POST /api/sitemap-preview` finds a site's sitemap before crawling. Every crawl now reads the sitemap once up front, reports `coverage.sitemap_total` / `sitemap_fetched`, saves the per-page tape in `coverage.tape` / `tape_off`, and adds a note when the page budget is below the sitemap total.
 - Every document under `docs/` carries frontmatter (`id`, `title`, `scope`, `topic`,
   `status`, `superseded_by`, `updated`, `depends_on`, `sources`), following the scheme used in
   conductor-playground. The index in `docs/README.md` is generated from it by `make docs` and
