@@ -41,6 +41,7 @@ record: `archived` ones describe the code as it was planned, not as it is now.
 | [check-redirects Implementation Plan](superpowers/plans/2026-07-13-check-redirects.md) | archived | 2026-07-13 |
 | [Ignore External UTM Tagging Implementation Plan](superpowers/plans/2026-07-29-ignore-external-utm-tagging.md) | archived | 2026-07-29 |
 | [Structured-Data Depth and Shopify Analyzer Implementation Plan](superpowers/plans/2026-09-14-structured-data-shopify.md) | archived | 2026-09-14 |
+| [Feature-Complete Web UI Implementation Plan](superpowers/plans/2026-10-13-web-ui-feature-complete.md) | current | 2026-10-13 |
 
 **Findings**
 

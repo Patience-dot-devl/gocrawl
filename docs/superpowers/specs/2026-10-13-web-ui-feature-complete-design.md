@@ -118,9 +118,11 @@ uses the same User-Agent as a crawl would.
 - `tape_off`: `1` when that page is not in the sitemap, otherwise `0`.
 
 `GET /api/crawls/{id}?tape_from=N` returns only the characters from index `N`, so polling stays
-cheap (one byte per page per field). Saved crawls rebuild a status-only tape from the report's
-pages, in report order: per-page sitemap membership is not stored, so saved tapes have no
-notches and no outline ticks, only the totals from `Coverage`.
+cheap (one byte per page per field). The runner also saves the tape in the report
+(`Coverage.tape`, `Coverage.tape_off`, same encoding), so saved crawls show the same tape as
+the live view. Crawl list items carry a downsampled `tape_preview` (at most 160 ticks, worst
+status wins) for the mini tapes. Reports from before this change fall back to a tape grouped
+by status from `summary.pages_by_status`.
 
 **API.** `JobView` gains `progress` (the latest snapshot plus `phase`). The frontend keeps
 polling `GET /api/crawls/{id}` every 1.5s; no SSE.
@@ -211,7 +213,11 @@ once in a real browser and the crawl reuses that session.
    earliest expiry. `GET /api/login-sessions/{id}` reports state (`waiting`, `captured`,
    `closed`, `expired`).
 5. A crawl request references `login_session: <id>`; the server turns it into the existing
-   `Cookie` option, so the existing host restriction and headless-render cookie handling apply.
+   `Cookie` option, so the existing host restriction applies. Like `--cookie`, it works in raw
+   mode only: headless render refuses cookies, Basic Auth and custom headers because Chromium
+   can't scope them to the seed host (`internal/render/render.go`). The API returns `400` for
+   a login session or bearer token combined with headless render, and the form disables the
+   combination with that explanation.
 6. Sessions expire after 1 hour or when the process exits. Closing the browser window before
    capture moves the session to `closed`, and the UI says so.
 7. Logout guard: a crawl that uses a login session adds the exclude pattern
@@ -248,8 +254,7 @@ Left navigation rail: **New crawl**, **Crawls** (today's History), **Compare**, 
   explanations, site map, notes, export links.
 - **Crawls.** Saved and in-memory crawls, each with a small tape and sitemap coverage.
   Checkboxes to pick two and open Compare. **Import report…** file picker.
-- **Compare.** Two pickers defaulting to the newest two crawls of the same host. Both
-  status-only tapes,
+- **Compare.** Two pickers defaulting to the newest two crawls of the same host. Both tapes,
   summary deltas by severity and analyzer, tabs for new, resolved and persisting issues (the
   report's issue table and filters), added and removed pages.
 - **Redirects.** CSV picker, domain, optional sitemap URL, rate and concurrency, **Check
@@ -319,7 +324,7 @@ yet. Turn on 'Save to Crawls' when you start a crawl."
 
 ### Accessibility guard
 
-`web/scripts/contrast.mjs` reads the token file (`web/src/tokens.css`) for both themes and
+`web/scripts/contrast.mjs` reads the token file (`web/src/styles/tokens.css`) for both themes and
 fails when any pair from the table above drops below its threshold (4.5:1 text, 3:1 non-text).
 `npm run lint` runs it.
 
