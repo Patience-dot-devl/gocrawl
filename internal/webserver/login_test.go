@@ -103,9 +103,11 @@ func (b *fakeLoginBrowser) window(t *testing.T, i int) *fakeLoginWindow {
 	return b.windows[i]
 }
 
-func newTestLoginManager(b loginBrowser) *loginManager {
+func newTestLoginManager(t *testing.T, b loginBrowser) *loginManager {
+	t.Helper()
 	m := newLoginManager()
 	m.browser = b
+	t.Cleanup(m.closeAll)
 	return m
 }
 
@@ -150,7 +152,7 @@ func TestCookiesForHostFollowsBrowserDomainRules(t *testing.T) {
 
 func TestLoginManagerCaptureKeepsSeedCookiesAndClosesWindow(t *testing.T) {
 	b := &fakeLoginBrowser{}
-	m := newTestLoginManager(b)
+	m := newTestLoginManager(t, b)
 	ctx := context.Background()
 	v, err := m.open(ctx, "https://shop.example.com/account", "shop.example.com")
 	if err != nil {
@@ -189,7 +191,7 @@ func TestLoginManagerCaptureKeepsSeedCookiesAndClosesWindow(t *testing.T) {
 
 func TestLoginManagerCaptureWithoutSeedCookiesKeepsWaiting(t *testing.T) {
 	b := &fakeLoginBrowser{}
-	m := newTestLoginManager(b)
+	m := newTestLoginManager(t, b)
 	ctx := context.Background()
 	v, err := m.open(ctx, "https://shop.example.com/", "shop.example.com")
 	if err != nil {
@@ -211,7 +213,7 @@ func TestLoginManagerCaptureWithoutSeedCookiesKeepsWaiting(t *testing.T) {
 
 func TestLoginManagerUserClosingWindowEndsSession(t *testing.T) {
 	b := &fakeLoginBrowser{}
-	m := newTestLoginManager(b)
+	m := newTestLoginManager(t, b)
 	ctx := context.Background()
 	v, err := m.open(ctx, "https://shop.example.com/", "shop.example.com")
 	if err != nil {
@@ -232,7 +234,7 @@ func TestLoginManagerUserClosingWindowEndsSession(t *testing.T) {
 
 func TestLoginManagerExpiresSessions(t *testing.T) {
 	b := &fakeLoginBrowser{next: []*http.Cookie{{Name: "sid", Value: "1", Domain: "shop.example.com"}}}
-	m := newTestLoginManager(b)
+	m := newTestLoginManager(t, b)
 	m.ttl = 200 * time.Millisecond
 	ctx := context.Background()
 	waiting, err := m.open(ctx, "https://shop.example.com/", "shop.example.com")
@@ -264,7 +266,7 @@ func TestLoginManagerExpiresSessions(t *testing.T) {
 }
 
 func TestLoginManagerCapsOpenWindows(t *testing.T) {
-	m := newTestLoginManager(&fakeLoginBrowser{})
+	m := newTestLoginManager(t, &fakeLoginBrowser{})
 	ctx := context.Background()
 	for i := 0; i < maxOpenLoginWindows; i++ {
 		if _, err := m.open(ctx, "https://shop.example.com/", "shop.example.com"); err != nil {
@@ -279,7 +281,7 @@ func TestLoginManagerCapsOpenWindows(t *testing.T) {
 // A session cancelled while its browser is still starting must not leave a window behind.
 func TestLoginManagerRemoveWhileOpening(t *testing.T) {
 	b := &fakeLoginBrowser{gate: make(chan struct{})}
-	m := newTestLoginManager(b)
+	m := newTestLoginManager(t, b)
 	type result struct {
 		v   loginView
 		err error
@@ -311,7 +313,7 @@ func TestLoginManagerRemoveWhileOpening(t *testing.T) {
 
 func TestLoginManagerCloseAll(t *testing.T) {
 	b := &fakeLoginBrowser{}
-	m := newTestLoginManager(b)
+	m := newTestLoginManager(t, b)
 	ctx := context.Background()
 	v, err := m.open(ctx, "https://shop.example.com/", "shop.example.com")
 	if err != nil {
@@ -323,5 +325,58 @@ func TestLoginManagerCloseAll(t *testing.T) {
 	}
 	if _, ok := m.get(v.ID); ok {
 		t.Error("closeAll kept the session")
+	}
+}
+
+// After closeAll nothing may open a window: the server is going away.
+func TestLoginManagerRefusesOpenAfterCloseAll(t *testing.T) {
+	b := &fakeLoginBrowser{}
+	m := newTestLoginManager(t, b)
+	m.closeAll()
+	if _, err := m.open(context.Background(), "https://shop.example.com/", "shop.example.com"); !errors.Is(err, errLoginShutdown) {
+		t.Errorf("open after closeAll: err = %v, want errLoginShutdown", err)
+	}
+	if got := b.openedURLs(); len(got) != 0 {
+		t.Errorf("a window opened after closeAll: %v", got)
+	}
+}
+
+// slowCookiesWindow blocks Cookies until released, then fails, like a window that dies
+// mid-read.
+type slowCookiesWindow struct {
+	*fakeLoginWindow
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (w *slowCookiesWindow) Cookies(context.Context) ([]*http.Cookie, error) {
+	close(w.entered)
+	<-w.release
+	return nil, errors.New("window closed")
+}
+
+type slowCookiesBrowser struct{ win *slowCookiesWindow }
+
+func (b *slowCookiesBrowser) Open(context.Context, string) (loginWindow, error) { return b.win, nil }
+
+// When the window dies while capture is reading it, capture reports what became of the
+// session, not a blanket "closed".
+func TestLoginCaptureReportsSessionStateWhenWindowDiesMidRead(t *testing.T) {
+	win := &slowCookiesWindow{fakeLoginWindow: &fakeLoginWindow{done: make(chan struct{})}, entered: make(chan struct{}), release: make(chan struct{})}
+	m := newTestLoginManager(t, &slowCookiesBrowser{win: win})
+	v, err := m.open(context.Background(), "https://shop.example.com/", "shop.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := m.capture(context.Background(), v.ID)
+		errCh <- err
+	}()
+	<-win.entered
+	m.remove(v.ID) // closes the window and forgets the session
+	close(win.release)
+	if err := <-errCh; !errors.Is(err, errLoginNotFound) {
+		t.Errorf("capture err = %v, want errLoginNotFound", err)
 	}
 }

@@ -10,6 +10,8 @@ package webserver
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/store"
 )
@@ -39,6 +41,11 @@ func New(st *store.Store, opts ...Option) *Server {
 	}
 	for _, o := range opts {
 		o(s)
+	}
+	if _, real := s.logins.browser.(chromedpLoginBrowser); real {
+		// Profiles of login windows a killed server never cleaned up. Skipped under a
+		// fake browser so tests never touch the real temp directory.
+		go sweepStaleLoginProfiles(os.TempDir(), staleLoginProfileAge, time.Now())
 	}
 	s.mux = http.NewServeMux()
 	s.routes()

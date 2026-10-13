@@ -4,9 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +18,7 @@ import (
 
 	"golang.org/x/net/http/httpguts"
 
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/render"
 )
 
@@ -53,6 +58,7 @@ const (
 var (
 	errLoginNotFound = errors.New("no login session with that id")
 	errLoginLimit    = fmt.Errorf("%d login windows are already open; finish or cancel one first", maxOpenLoginWindows)
+	errLoginShutdown = errors.New("the server is shutting down")
 )
 
 // loginStateError is a request the session's state doesn't allow (HTTP 409).
@@ -126,6 +132,7 @@ type loginManager struct {
 	browser  loginBrowser
 	sessions map[string]*loginSession
 	ttl      time.Duration
+	closed   bool // set by closeAll: no window opens afterwards
 }
 
 func newLoginManager() *loginManager {
@@ -147,6 +154,10 @@ func newLoginID() string {
 // open registers a waiting session, then opens the browser without holding the lock.
 func (m *loginManager) open(ctx context.Context, rawURL, host string) (loginView, error) {
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return loginView{}, errLoginShutdown
+	}
 	m.pruneLocked(time.Now())
 	waiting := 0
 	for _, s := range m.sessions {
@@ -237,7 +248,22 @@ func (m *loginManager) capture(ctx context.Context, id string) (loginView, error
 	if err != nil {
 		select {
 		case <-win.Done():
-			return loginView{}, loginStateErr(loginClosed)
+			// The window went away while we were reading it. Report what became of the
+			// session (closed by the person, removed, expired, ...), not a guess.
+			m.mu.Lock()
+			cur, ok := m.sessions[id]
+			var st loginState
+			if ok {
+				st = cur.state
+				if st == loginWaiting {
+					st = loginClosed // watch has not recorded the closure yet
+				}
+			}
+			m.mu.Unlock()
+			if !ok {
+				return loginView{}, errLoginNotFound
+			}
+			return loginView{}, loginStateErr(st)
 		default:
 		}
 		return loginView{}, err
@@ -340,9 +366,10 @@ func (m *loginManager) cookieHeader(id string) (header, host string, err error) 
 	return strings.Join(parts, "; "), s.host, nil
 }
 
-// closeAll closes every window and forgets every session (process shutdown).
+// closeAll closes every window, forgets every session and refuses new ones (process shutdown).
 func (m *loginManager) closeAll() {
 	m.mu.Lock()
+	m.closed = true
 	var wins []loginWindow
 	for id, s := range m.sessions {
 		if s.window != nil {
@@ -399,4 +426,182 @@ func (chromedpLoginBrowser) Open(ctx context.Context, url string) (loginWindow, 
 	return w, nil
 }
 
-func (s *Server) loginRoutes() {}
+// loginProber is implemented by a loginBrowser that can tell, without opening a window,
+// whether Open can work here. A browser that doesn't implement it is assumed available.
+type loginProber interface {
+	Available() error
+}
+
+func (chromedpLoginBrowser) Available() error { return render.LoginAvailable() }
+
+// WithLoginBrowser replaces the Chromium launcher behind /api/login-sessions; tests pass a fake.
+func WithLoginBrowser(b loginBrowser) Option {
+	return func(s *Server) {
+		if s.logins == nil {
+			s.logins = newLoginManager()
+		}
+		s.logins.mu.Lock()
+		s.logins.browser = b
+		s.logins.mu.Unlock()
+	}
+}
+
+// Close releases what the server holds outside its own memory: open login windows and their
+// throwaway browser profiles. gocrawl serve calls it on shutdown, after the HTTP server has
+// stopped; once Close has run, no login window can be opened.
+func (s *Server) Close() {
+	s.logins.closeAll()
+}
+
+const (
+	maxLoginBody        = 16 << 10
+	loginOpenTimeout    = 45 * time.Second
+	loginCaptureTimeout = 30 * time.Second
+
+	// loginProfilePrefix is the temp-directory prefix internal/render gives a login window's
+	// throwaway browser profile; staleLoginProfileAge is how old one must be to be swept.
+	loginProfilePrefix   = "gocrawl-login-"
+	staleLoginProfileAge = time.Hour
+)
+
+// sweepStaleLoginProfiles removes gocrawl-login-* directories in dir that were last modified
+// more than maxAge before now: profiles a killed server (SIGKILL, crash) never got to delete.
+// Nothing else in dir is touched. Errors are ignored; this is housekeeping.
+func sweepStaleLoginProfiles(dir string, maxAge time.Duration, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), loginProfilePrefix) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || now.Sub(info.ModTime()) <= maxAge {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(dir, e.Name()))
+	}
+}
+
+type loginAvailability struct {
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+func (s *Server) loginRoutes() {
+	s.mux.HandleFunc("GET /api/login-sessions/available", s.handleLoginAvailable)
+	s.mux.HandleFunc("POST /api/login-sessions", s.handleStartLogin)
+	s.mux.HandleFunc("GET /api/login-sessions/{id}", s.handleGetLogin)
+	s.mux.HandleFunc("POST /api/login-sessions/{id}/capture", s.handleCaptureLogin)
+	s.mux.HandleFunc("DELETE /api/login-sessions/{id}", s.handleDeleteLogin)
+}
+
+func (s *Server) handleLoginAvailable(w http.ResponseWriter, _ *http.Request) {
+	s.logins.mu.Lock()
+	browser := s.logins.browser
+	s.logins.mu.Unlock()
+	out := loginAvailability{Available: true}
+	if p, ok := browser.(loginProber); ok {
+		if err := p.Available(); err != nil {
+			out = loginAvailability{Available: false, Reason: err.Error()}
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleStartLogin(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
+	var in struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxLoginBody)).Decode(&in); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("decoding request body: %w", err))
+		return
+	}
+	target, host, err := loginTarget(in.URL)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), loginOpenTimeout)
+	defer cancel()
+	v, err := s.logins.open(ctx, target, host)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusAccepted, v)
+	case errors.Is(err, errLoginLimit):
+		writeError(w, http.StatusTooManyRequests, err)
+	case errors.Is(err, errLoginShutdown):
+		writeError(w, http.StatusServiceUnavailable, err)
+	case errors.Is(err, render.ErrNoBrowser):
+		writeError(w, http.StatusServiceUnavailable, errors.New("no Chromium-class browser found; install Google Chrome, Chromium or Microsoft Edge to log in with a browser"))
+	case errors.Is(err, errLoginNotFound):
+		writeError(w, http.StatusConflict, errors.New("the login was cancelled while the browser was starting"))
+	default:
+		// err comes from render.OpenLoginWindow, which already redacts URL userinfo; do not
+		// add the request URL here.
+		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("could not open the login browser: %w", err))
+	}
+}
+
+func (s *Server) handleGetLogin(w http.ResponseWriter, r *http.Request) {
+	v, ok := s.logins.get(r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, errLoginNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *Server) handleCaptureLogin(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), loginCaptureTimeout)
+	defer cancel()
+	v, err := s.logins.capture(ctx, r.PathValue("id"))
+	if err != nil {
+		writeError(w, loginErrStatus(err), err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *Server) handleDeleteLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.logins.remove(r.PathValue("id")) {
+		writeError(w, http.StatusNotFound, errLoginNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func loginErrStatus(err error) int {
+	var stateErr *loginStateError
+	switch {
+	case errors.Is(err, errLoginNotFound):
+		return http.StatusNotFound
+	case errors.As(err, &stateErr):
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// loginTarget normalizes the URL to open like a crawl seed: https:// by default, and any
+// user:password stripped so it never reaches the browser's address bar or history.
+func loginTarget(raw string) (target, host string, err error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", "", errors.New("url is required")
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	raw, _, _ = crawler.SanitizeSeed(raw)
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		// Don't echo the input: it may carry credentials.
+		return "", "", errors.New("url must be an http or https URL with a host")
+	}
+	return u.String(), strings.ToLower(u.Hostname()), nil
+}
