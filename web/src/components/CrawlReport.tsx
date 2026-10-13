@@ -292,8 +292,8 @@ export default function CrawlReport({ id }: { id: string }) {
       {report && (
         <>
           {report.coverage && !report.coverage.complete && (
-            <Notice tone="warning">
-              <p role="alert">
+            <Notice tone="warning" role="alert">
+              <p>
                 <strong>Partial coverage: this crawl did not reach the whole site.</strong>{' '}
                 {report.coverage.duration_limit_reached ? (
                   <>
@@ -537,11 +537,12 @@ export default function CrawlReport({ id }: { id: string }) {
                         <th
                           key={col}
                           className="cr-sortable"
-                          onClick={() => toggle(col)}
                           data-dir={dirFor(col)}
                           aria-sort={dirFor(col) === 'asc' ? 'ascending' : dirFor(col) === 'desc' ? 'descending' : undefined}
                         >
-                          {col === 'url' ? 'URL' : col.charAt(0).toUpperCase() + col.slice(1)}
+                          <button type="button" onClick={() => toggle(col)}>
+                            {col === 'url' ? 'URL' : col.charAt(0).toUpperCase() + col.slice(1)}
+                          </button>
                         </th>
                       ))}
                       <th>Review</th>

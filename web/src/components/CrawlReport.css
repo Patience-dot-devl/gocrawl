@@ -246,21 +246,29 @@
   border-bottom: 1px solid var(--rule);
 }
 
-.cr-sortable {
+/* The sort control is a button inside the header cell so the keyboard can reach it; it
+   looks like the header text. */
+.cr-sortable button {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  background: none;
+  border: 0;
   cursor: pointer;
   user-select: none;
 }
 
-.cr-sortable:hover {
+.cr-sortable button:hover {
   color: var(--ink);
 }
 
-.cr-sortable[data-dir='asc']::after {
+.cr-sortable[data-dir='asc'] button::after {
   content: ' \25B2';
   font-size: 0.7em;
 }
 
-.cr-sortable[data-dir='desc']::after {
+.cr-sortable[data-dir='desc'] button::after {
   content: ' \25BC';
   font-size: 0.7em;
 }
