@@ -32,6 +32,7 @@ record: `archived` ones describe the code as it was planned, not as it is now.
 | [Structured-data depth and a Shopify analyzer](superpowers/specs/2026-09-14-structured-data-shopify-design.md) | archived | 2026-09-14 |
 | [Fixes from the dermalogica.nl functional test](superpowers/specs/2026-09-17-dermalogica-functional-fixes-design.md) | archived | 2026-09-17 |
 | [Ranking structured-data opportunities](superpowers/specs/2026-10-09-structured-opportunity-ranking-design.md) | current | 2026-10-12 |
+| [Feature-complete web UI](superpowers/specs/2026-10-13-web-ui-feature-complete-design.md) | current | 2026-10-13 |
 
 **Plans**
 
