@@ -31,6 +31,10 @@ type Params struct {
 	FollowExternal        *bool    `json:"follow_external,omitempty" jsonschema:"Follow links that leave the seed host entirely (default false)"`
 	Include               []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
 	Exclude               []string `json:"exclude,omitempty" jsonschema:"Skip URLs matching any of these regexes"`
+	StripQuery            bool     `json:"strip_query,omitempty" jsonschema:"Ignore query strings, treating ?a=1 and ?a=2 as one URL; this skips the query-dependent utm/tracking analysis (default false)"`
+	AdaptiveDelay         *bool    `json:"adaptive_delay,omitempty" jsonschema:"Slow the crawl automatically when the server answers HTTP 429/503, honoring Retry-After (default true)"`
+	FollowNofollow        bool     `json:"follow_nofollow,omitempty" jsonschema:"Also follow links marked rel=nofollow (default false)"`
+	Timeout               string   `json:"timeout,omitempty" jsonschema:"Per-request timeout as a Go duration string, e.g. '10s' (default 15s)"`
 
 	UserAgent         string   `json:"user_agent,omitempty" jsonschema:"User-Agent header sent on every request"`
 	UserAgents        []string `json:"user_agents,omitempty" jsonschema:"Pool of User-Agent strings to rotate across (supersedes user_agent)"`
@@ -39,6 +43,7 @@ type Params struct {
 	Proxies           []string `json:"proxies,omitempty" jsonschema:"Pool of proxy URLs to rotate across"`
 	ProxyRotation     string   `json:"proxy_rotation,omitempty" jsonschema:"Rotation across proxies: off, round-robin, random, or sticky-host"`
 	BasicAuth         string   `json:"basic_auth,omitempty" jsonschema:"HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)"`
+	BearerToken       string   `json:"bearer_token,omitempty" jsonschema:"Token sent as 'Authorization: Bearer <token>', only to the seed host (plus subdomains when subdomains is set); raw render mode only. Can't be combined with basic_auth or a custom Authorization header"`
 	Cookie            string   `json:"cookie,omitempty" jsonschema:"Raw Cookie header sent on every request, for sites gated by an app-level session cookie rather than server-level Basic Auth (e.g. a Shopify storefront password page) where a valid session cookie is already available"`
 	Headers           []string `json:"headers,omitempty" jsonschema:"Extra request headers as 'Name: value' strings, sent only to the seed host (plus subdomains when subdomains is set); raw render mode only. Prefer header_profile for secrets so their values stay out of the request"`
 	// HeaderProfile deliberately takes a profile name rather than a file path: a path would let
@@ -78,6 +83,21 @@ func (p Params) ToConfig() (config.Config, string, error) {
 		}
 		cfg.Crawl.MaxDuration = d
 	}
+	if t := strings.TrimSpace(p.Timeout); t != "" {
+		d, derr := time.ParseDuration(t)
+		if derr != nil {
+			return config.Config{}, "", fmt.Errorf("timeout %q: %w", p.Timeout, derr)
+		}
+		if d <= 0 {
+			return config.Config{}, "", fmt.Errorf("timeout %q: must be greater than zero", p.Timeout)
+		}
+		cfg.Crawl.Timeout = d
+	}
+	cfg.Crawl.StripQuery = p.StripQuery
+	cfg.Crawl.FollowNofollow = p.FollowNofollow
+	if p.AdaptiveDelay != nil {
+		cfg.Crawl.AdaptiveDelay = *p.AdaptiveDelay
+	}
 	if p.Render != "" {
 		cfg.Render = p.Render
 	}
@@ -111,6 +131,7 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	cfg.Crawl.Proxies = p.Proxies
 	cfg.Crawl.ProxyRotation = p.ProxyRotation
 	cfg.Crawl.BasicAuth = p.BasicAuth
+	cfg.Crawl.BearerToken = strings.TrimSpace(p.BearerToken)
 	cfg.Crawl.Cookie = p.Cookie
 	cfg.Crawl.Headers = p.Headers
 	cfg.Crawl.HeaderProfile = p.HeaderProfile
