@@ -80,15 +80,16 @@ func validateImportedSeed(seed string) error {
 	return nil
 }
 
-// validHostComponent reports whether host can be used as a single store directory name:
-// letters, digits, '-', '_', '.' and ':' (IPv6 literals) only, and not made of dots alone,
-// which would name the directory itself or its parent.
+// validHostComponent reports whether host can be used as a single store directory name. It is
+// a denylist so that Unicode (IDN) hosts, which the store files under their Unicode form, stay
+// importable: it rejects path separators, NUL, control characters, whitespace, and hosts made
+// of dots alone, which would name the directory itself or its parent.
 func validHostComponent(host string) bool {
 	if strings.Trim(host, ".") == "" {
 		return false
 	}
 	for _, c := range host {
-		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && !strings.ContainsRune("-_.:", c) {
+		if c == '/' || c == '\\' || c == 0 || unicode.IsControl(c) || unicode.IsSpace(c) {
 			return false
 		}
 	}
@@ -97,9 +98,9 @@ func validHostComponent(host string) bool {
 
 // fillImportedDefaults gives an imported report the non-nil collections that a report built by
 // report.Build always has, so the UI can read the summary maps and the issue list without null
-// checks. It also stamps a missing or zero started_at and finished_at with the current time:
-// the store files a report under its start time, and a zero time would make every such import
-// land on, and overwrite, the same ID.
+// checks. It also fills a missing or zero started_at / finished_at: the store files a report
+// under its start time, and a zero time would make every such import land on, and overwrite,
+// the same ID.
 func fillImportedDefaults(rep *report.Report) {
 	if rep.Issues == nil {
 		rep.Issues = []analyze.Issue{}
@@ -113,12 +114,17 @@ func fillImportedDefaults(rep *report.Report) {
 	if rep.Summary.ByStatus == nil {
 		rep.Summary.ByStatus = map[string]int{}
 	}
-	now := importClock().UTC().Format(time.RFC3339)
-	if !hasTimestamp(rep.StartedAt) {
-		rep.StartedAt = now
-	}
-	if !hasTimestamp(rep.FinishedAt) {
-		rep.FinishedAt = now
+	// A report with one valid timestamp reuses it for the other, so started_at never lands
+	// after finished_at; one with neither is stamped with the import time.
+	started, finished := hasTimestamp(rep.StartedAt), hasTimestamp(rep.FinishedAt)
+	switch {
+	case !started && !finished:
+		now := importClock().UTC().Format(time.RFC3339)
+		rep.StartedAt, rep.FinishedAt = now, now
+	case !started:
+		rep.StartedAt = rep.FinishedAt
+	case !finished:
+		rep.FinishedAt = rep.StartedAt
 	}
 }
 

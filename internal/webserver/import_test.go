@@ -106,16 +106,17 @@ func TestImportReportSavesIt(t *testing.T) {
 func TestImportReportRejectsInvalidFiles(t *testing.T) {
 	srv := newTestServer(t)
 	for name, body := range map[string]string{
-		"not JSON":          "this is not json",
-		"JSON array":        "[1,2]",
-		"no seed":           `{"pages_crawled":3}`,
-		"null":              "null",
-		"non-http seed":     `{"seed":"file:///etc/passwd"}`,
-		"seed with no host": `{"seed":"https://"}`,
-		"dot host":          `{"seed":"https://./"}`,
-		"dotdot host":       `{"seed":"https://../"}`,
-		"host with slash":   `{"seed":"https://a%2Fb/"}`,
-		"host with space":   `{"seed":"https://a b/"}`,
+		"not JSON":            "this is not json",
+		"JSON array":          "[1,2]",
+		"no seed":             `{"pages_crawled":3}`,
+		"null":                "null",
+		"non-http seed":       `{"seed":"file:///etc/passwd"}`,
+		"seed with no host":   `{"seed":"https://"}`,
+		"dot host":            `{"seed":"https://./"}`,
+		"dotdot host":         `{"seed":"https://../"}`,
+		"host with slash":     `{"seed":"https://a%2Fb/"}`,
+		"host with space":     `{"seed":"https://a b/"}`,
+		"host with backslash": `{"seed":"https://a\\b/"}`,
 	} {
 		rec, out := postImportFile(t, srv, "report.json", []byte(body), "")
 		if rec.Code != http.StatusBadRequest {
@@ -191,6 +192,7 @@ func TestImportReportFillsEmptyCollections(t *testing.T) {
 		t.Errorf("issues = %v, want []", rep["issues"])
 	}
 }
+
 func TestImportReportFillsMissingTimestamps(t *testing.T) {
 	// A clock that moves one second per reading, so imports can't collide on the ID's
 	// one-second resolution.
@@ -238,7 +240,7 @@ func TestImportReportKeepsGivenTimestamps(t *testing.T) {
 func TestImportReportWritesNothingOutsideTheHostDirectory(t *testing.T) {
 	dir := t.TempDir()
 	srv := New(store.New(dir))
-	for _, seed := range []string{"https://./", "https://../", "https://.../"} {
+	for _, seed := range []string{"https://./", "https://../", "https://.../", `https://a\\b/`} {
 		rec, _ := postImportFile(t, srv, "report.json", []byte(`{"seed":"`+seed+`","started_at":"2026-10-13T10:00:00Z"}`), "")
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400", seed, rec.Code)
@@ -285,5 +287,39 @@ func TestImportReportErrorsDoNotLeakThePath(t *testing.T) {
 	}
 	if msg, _ := out["error"].(string); msg == "" || strings.Contains(rec.Body.String(), dir) || strings.Contains(rec.Body.String(), "example.com/") {
 		t.Fatalf("error %q is empty or leaks the store path %q", msg, dir)
+	}
+}
+
+func TestImportReportAcceptsUnicodeAndPortHosts(t *testing.T) {
+	for name, tc := range map[string]struct{ seed, wantHost string }{
+		"Devanagari":     {"https://भारत.com/", "भारत.com"},
+		"combining mark": {"https://e\u0301.com/", "e\u0301.com"},
+		"precomposed":    {"https://é.com/", "é.com"},
+		"punycode":       {"https://xn--bcher-kva.example/", "xn--bcher-kva.example"},
+		"port":           {"https://xn--bcher-kva.example:8443/", "xn--bcher-kva.example"},
+	} {
+		srv := newTestServer(t)
+		body := `{"seed":"` + tc.seed + `","started_at":"2026-10-13T10:00:00Z"}`
+		rec, out := postImportFile(t, srv, "report.json", []byte(body), "")
+		if rec.Code != http.StatusCreated {
+			t.Errorf("%s: status = %d, body = %s", name, rec.Code, rec.Body)
+			continue
+		}
+		if id, _ := out["id"].(string); id != tc.wantHost+"/20261013T100000Z" {
+			t.Errorf("%s: id = %q, want host %q without a port", name, id, tc.wantHost)
+		}
+	}
+}
+
+func TestImportReportFillsOneMissingTimestampFromTheOther(t *testing.T) {
+	rep := report.Report{Seed: "https://example.com/", FinishedAt: "2026-10-13T10:01:00Z"}
+	fillImportedDefaults(&rep)
+	if rep.StartedAt != "2026-10-13T10:01:00Z" || rep.FinishedAt != "2026-10-13T10:01:00Z" {
+		t.Errorf("only finished_at given: started_at = %q, finished_at = %q", rep.StartedAt, rep.FinishedAt)
+	}
+	rep = report.Report{Seed: "https://example.com/", StartedAt: "2026-10-13T10:00:00Z", FinishedAt: "0001-01-01T00:00:00Z"}
+	fillImportedDefaults(&rep)
+	if rep.StartedAt != "2026-10-13T10:00:00Z" || rep.FinishedAt != "2026-10-13T10:00:00Z" {
+		t.Errorf("only started_at given: started_at = %q, finished_at = %q", rep.StartedAt, rep.FinishedAt)
 	}
 }
