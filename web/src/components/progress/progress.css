@@ -138,3 +138,22 @@
 .mini-tape-empty {
   color: var(--ink-2);
 }
+
+.ap-rate {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ap-rate label {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.ap-rate input {
+  width: 110px;
+  font: inherit;
+  padding: 5px 8px;
+  background: var(--surface);
+  border: 1px solid var(--field);
+  border-radius: 5px;
+  color: var(--ink);
+}

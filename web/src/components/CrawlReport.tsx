@@ -12,9 +12,11 @@ import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
 import StatusCode from './ui/StatusCode'
 import FinishedTape from './progress/FinishedTape'
+import AutoPauseNotice from './progress/AutoPauseNotice'
+import CrawlControls from './progress/CrawlControls'
 import RunningCrawl from './progress/RunningCrawl'
 import { runPill } from './progress/runPill'
-import { hostOf } from './progress/tapeText'
+import { halfRate, hostOf } from './progress/tapeText'
 import { isLive, useCrawlPoll } from './progress/useCrawlPoll'
 import './CrawlReport.css'
 
@@ -35,10 +37,12 @@ function trimEnd(message: string): string {
 export default function CrawlReport({ id }: { id: string }) {
   // loadError replaces the whole view (nothing loaded, or the crawl does not exist); pollError
   // is an inline notice above the report (a refresh failed, polling goes on); actionError is an
-  // inline notice for a failed action such as Stop crawl.
+  // inline notice for a failed action (Pause, Resume crawl, Stop crawl).
   const { job, progress, tape, tapeOff, recent, receivedAt, loadError, pollError, refresh } = useCrawlPoll(id)
   const [actionError, setActionError] = useState('')
   const [confirmStop, setConfirmStop] = useState(false)
+  // null until the user edits "Resume at": the field then shows half the current rate.
+  const [resumeRateInput, setResumeRateInput] = useState<string | null>(null)
   const [headingFocus, setHeadingFocus] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const [review, setReview] = useState<ReviewMap>({})
@@ -110,24 +114,30 @@ export default function CrawlReport({ id }: { id: string }) {
   // "Crawling" become "Crawl stopped".
   const pill = job.status === 'running' ? runPill(progress?.phase) : STATUS_PILL[job.status]
 
+  // A 404 or 409 means the crawl is no longer in the state the action needs, usually because it
+  // finished or changed phase meanwhile. That is not a failure for the user: show where it is now.
+  function actionFailed(label: string, err: unknown) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+      refresh()
+      return
+    }
+    setActionError(
+      `Could not ${label.toLowerCase()}: ${trimEnd(err instanceof Error ? err.message : String(err))}. Try ${label} again.`,
+    )
+  }
+
   function stopCrawl() {
     setConfirmStop(false)
     setHeadingFocus((n) => n + 1)
     setActionError('')
     cancelCrawl(id)
       .then(refresh)
-      .catch((err) => {
-        // A 404 or 409 means the crawl is no longer running, usually because it finished while the
-        // dialog was open. That is not a failure for the user: show the finished crawl.
-        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
-          refresh()
-          return
-        }
-        setActionError(
-          `Could not stop the crawl: ${trimEnd(err instanceof Error ? err.message : String(err))}. Try Stop crawl again.`,
-        )
-      })
+      .catch((err) => actionFailed('Stop crawl', err))
   }
+
+  // An automatic pause after repeated 429/503 responses asks the user for a lower rate.
+  const autoPaused = job.status === 'paused' && progress?.pause_reason === 'rate_limited'
+  const rateText = resumeRateInput ?? (progress ? halfRate(progress.rate) : '')
 
   return (
     <div className="cr">
@@ -140,9 +150,19 @@ export default function CrawlReport({ id }: { id: string }) {
         </PhasePill>
         <div className="cr-actions">
           {live && (
-            <Button variant="stop" onClick={() => setConfirmStop(true)}>
-              Stop crawl
-            </Button>
+            <CrawlControls
+              id={id}
+              status={job.status}
+              phase={progress?.phase}
+              resumeRate={autoPaused && Number(rateText) > 0 ? Number(rateText) : undefined}
+              onChanged={() => {
+                setActionError('')
+                setResumeRateInput(null)
+                refresh()
+              }}
+              onError={(verb, err) => actionFailed(verb === 'pause' ? 'Pause' : 'Resume crawl', err)}
+              onStop={() => setConfirmStop(true)}
+            />
           )}
           {report && (
             <>
@@ -192,6 +212,11 @@ export default function CrawlReport({ id }: { id: string }) {
           tapeOff={tapeOff}
           recent={recent}
           receivedAt={receivedAt}
+          notice={
+            autoPaused && progress ? (
+              <AutoPauseNotice progress={progress} rate={rateText} onRateChange={setResumeRateInput} />
+            ) : undefined
+          }
         />
       )}
 
