@@ -87,16 +87,60 @@ already in the API below. The working views, all against the API below:
   pool), HTTP Basic Auth, and a session-cookie field (a checkbox reveals a paste box) for sites
   gated by an app-level cookie, e.g. a Shopify storefront password page, and a custom-headers
   field (inline `Name: value` lines and/or a stored header profile name, e.g. for a Shopify
-  crawler access signature). (A few CLI-only flags
-  with no menu equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form
-  either.) Starts a job and jumps to its report.
-- **Report** — polls the running job (with a Stop crawl button while it runs), then shows a partial-coverage banner when the crawl
-  didn't reach the whole site, summary counts by severity/analyzer/page-status, an issues
-  table (filterable by severity, analyzer, and free-text search) with each issue's
-  what/impact/fix explanation and raw `data` expandable inline, any notes advisories, and
-  export links.
+  crawler access signature). It also has a per-request timeout, nofollow following, query-string stripping, the
+  429/503 slow-down, a bearer token, and a header-profile dropdown filled from Settings. It
+  opens pre-filled with your saved defaults; **Save as defaults** stores the current values
+  (never passwords, cookies, tokens or inline headers). Under Advanced, **Log in with browser…** opens a real
+  browser window for sites behind a login form (see
+  [Logging in with a browser](#logging-in-with-a-browser)); the form then shows the captured
+  cookie names, adds a logout exclude pattern you can remove, and starts the crawl with that
+  session. The button is disabled, with the reason, when no Chromium-class browser is installed
+  or Render is headless. Under the URL, a line reports the site's sitemap as you type (for example
+  "Found sitemap.xml via robots.txt: 1,240 pages in scope"), and when the page budget is
+  smaller, a notice offers **Raise budget to 1,240**. Starts a job and jumps to its report.
+- **Crawl (running)** — The header shows the host, a phase pill, a yellow
+  **Pause** and a red **Stop crawl**. Below it: a notice when the budget is below the sitemap
+  total, the crawl tape (one tick per page, colored and sized by status class, notched when
+  the page isn't in the sitemap, with outline ticks for sitemap pages not fetched yet or past
+  the budget), counts (sitemap pages fetched of the total, fetched pages not in the sitemap,
+  queue, elapsed time, request rate), status-class totals, and a "Fetching now" table of the
+  last eight pages with status and timing.
+- **Crawl (paused)** — the pill reads **Paused** and the actions become a green **Resume
+  crawl** and **Stop crawl**. Elapsed time stops while paused. When the crawl paused itself
+  because the site kept answering 429 or 503, a notice explains it, shows the server's
+  `Retry-After`, and offers a **Resume at** rate prefilled at half the current rate.
+- **Crawl (finished)** — The tape sits at the top of the report, followed by the sitemap
+  coverage line. The report saves the tape (`coverage.tape` / `tape_off`), so a crawl reopened
+  later, even after a server restart, shows the same tape; reports saved before this version
+  get a status-only tape. Then: a partial-coverage banner when the crawl didn't reach the
+  whole site, summary counts by severity/analyzer/page-status, an issues table (filterable by
+  severity, analyzer, and free-text search) with each issue's what/impact/fix explanation and
+  raw `data` expandable inline, any notes advisories, and export links.
 - **Crawls** — every crawl saved to the store (`save: true` on start), reopen-able as a
-  report. Its old address, `#/history`, still opens it.
+  report. Each row shows a small tape (a 160-tick preview, worst status per tick) and its
+  sitemap coverage. Tick two finished crawls and select **Compare selected** to open them in Compare. **Import report…**
+  uploads a gocrawl JSON report (for example one written with `-f json`), saves it to the
+  store, and opens it. Its old address, `#/history`, still opens it.
+- **Compare** — two pickers, defaulting to the newest two crawls of the same host, and a
+  **Swap** button. For each side it shows the crawl's tape from the saved report
+  (`coverage.tape`, in fetch order, notched where a page is not in the sitemap); a report saved
+  before tapes were stored gets a tape grouped by status instead. Then the issue counts by
+  severity (new, resolved, net change), the net change by analyzer and by page status, tabs
+  for new, resolved and persisting issues using the report's issue table and filters, and the
+  added and removed pages. The selection is in the URL (`#/compare?base=…&current=…`), so a
+  comparison can be bookmarked.
+- **Redirects** — upload a HubSpot-format redirect-rule CSV, enter the domain, and
+  optionally a sitemap URL, rate, concurrency and adaptive delay, then select **Check
+  redirects**. The check page shows a `done of total` progress bar (polled every 1.5 s) and
+  **Cancel check**. When it finishes, it shows a results table with HTTP status codes,
+  filterable by verdict and by scope, and **Export CSV**. When no sitemap is found, the check
+  ends with that error and a hint to fill in the Sitemap URL field. The Redirects page lists
+  this session's checks, which are kept in memory only.
+- **Settings** — theme (dark, light, or match the system), crawl defaults
+  (the New crawl fields, minus secrets), header profiles (list, create, edit, delete; each is
+  validated like `--header-file` and stored with mode `0600` in `~/.gocrawl/headers`), and
+  the crawl store's folder (read-only). Saved in `~/.gocrawl/gui.json`, not in the browser, so
+  it survives the desktop app's changing port.
 
 ## Look and feel
 
@@ -156,6 +200,8 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/crawls` | List every job (in-memory, this process) merged with the store's saved history, newest first. Each item also carries `status_classes` (pages per status class: `2`, `3`, `4`, `5`, `x`), `tape_preview` (the crawl tape shortened to at most 160 characters, each standing for a run of pages and showing the worst status among them) and, when known, `sitemap_total` / `sitemap_fetched`. List items never carry the full tape. |
 | `GET /api/crawls/{id}` | One job's status, its live `progress` (see [Live progress](#live-progress)) and, once finished, its full `Report` (see [Output reference](output.md)). `?tape_from=N` returns only the tape characters from index `N`; a negative or non-numeric `N` is a `400`. Falls back to the store for an id that isn't a live job; saved crawls have no `progress`, but their report's `coverage.tape` / `tape_off` hold the same tape. An id that is neither (for example a crawl that was running when the server restarted) is a `404` with the fixed message `crawl not found` (never the store path). |
 | `POST /api/crawls/{id}/cancel` | Cancel a running crawl. Like Ctrl-C on the CLI, this doesn't error the crawl — it stops early and still returns whatever was fetched as a partial report (`Report.Coverage.Interrupted`), tracked here as job status `canceled`. |
+| `POST /api/crawls/{id}/pause` | Pause a running crawl: no new fetches start, requests already in flight finish. During the sitemap pre-pass the pause is queued and takes effect when crawling starts. `204`; `409` when the crawl isn't running or is already analyzing. |
+| `POST /api/crawls/{id}/resume` | Resume a paused crawl. JSON body, optional `rate` (requests per second, `> 0`) to continue at a new rate; `{}` keeps the current one. `204`; `409` when the crawl isn't paused. |
 | `GET /api/crawls/{id}/export?format=json\|csv\|html` | Download the finished report in any of the three formats gocrawl already writes, via `report.For(format)`. `409` for a live job that has no report yet (`crawl has not finished yet`) or that failed (`crawl failed, so there is no report to export`); `404` with the fixed message `crawl not found` for an id that is neither a live job nor a saved crawl. |
 | `POST /api/sitemap-preview` | Find a site's sitemap without crawling. JSON body `{url, include, exclude, allow_subdomains}`; returns `{found, total, sources, via_robots}`, where `total` counts only sitemap URLs inside that scope. Respects robots.txt and sends the crawl's default User-Agent. The preview sends no credentials (no Basic Auth, cookie or custom headers), so a site gated behind them may report no sitemap. |
 | `GET /api/settings` | The UI's saved settings: `theme` (`dark`, `light` or `system`), `crawl_defaults` (a crawl request body that pre-fills the New crawl form), and the read-only `store_dir`. |
@@ -177,7 +223,8 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/compare?base=<ref>&current=<ref>` | Diff two crawls, `base` being the earlier one. The response is the same JSON as `gocrawl compare --format json`: new, resolved and persisting issues, summary deltas, and added and removed pages. A ref is a crawl ID from `GET /api/crawls` (a live job or a saved crawl), a host such as `example.com` (its newest saved crawl), or `latest`. File paths are not accepted. `400` when a ref is missing, `404` when one does not resolve, `409` when one names a crawl that is still running or paused. |
 | `POST /api/reports/import` | Save a gocrawl JSON report to the store, the web equivalent of `gocrawl render`. Multipart form with the report in the field `file`, up to 64 MB. Returns `201` with `{"id": "<host>/<timestamp>"}`; the crawl then appears in the crawl list and works with export and compare. `400` when the file is not a report or its `seed` is not an http(s) URL with a usable host, `413` when it is too large, `415` when the request is not `multipart/form-data`. An import with the same host and start time as a saved crawl replaces it. |
 
-Job status is one of `running`, `done`, `error`, `canceled`. The redirect-check endpoints use
+Job status is one of `running`, `paused`, `done`, `error`,
+`canceled`. A paused crawl still counts toward the running-crawl cap and can be canceled. The redirect-check endpoints use
 fixed error messages that never repeat the id, the domain, or a sitemap URL you sent, so a
 token in a sitemap URL cannot leak through an error.
 
@@ -209,8 +256,14 @@ transfers the new tape characters.
 | `throttled` | HTTP 429 and 503 responses in the last 60 seconds. |
 | `sitemap_found`, `sitemap_total`, `sitemap_fetched`, `off_sitemap`, `in_sitemap` | Progress against the site's sitemap: in-scope sitemap URLs, how many of them were fetched, fetched pages the sitemap doesn't list (equal to `fetched` when `sitemap_found` is false, since nothing is listed), and whether `current_url` is in it. `in_sitemap` also matches when the page redirected to a sitemap URL (`final_url`). |
 | `max_pages` | The page budget (`0` = unlimited). |
-| `active_ms` | How long the crawl has been running. |
+| `active_ms` | Active crawl time: time spent paused, and the sitemap pre-pass, don't count. |
+| `paused`, `pause_reason`, `retry_after_seconds` | Whether the crawl is paused, why (`user`, or `rate_limited` when it paused itself), and the latest `Retry-After` the server sent. |
 | `tape`, `tape_off`, `tape_from` | One character per recorded page, in fetch order. `tape` holds the status class (`2`, `3`, `4`, `5`, or `x` for a failed fetch); `tape_off` holds `1` for a page the sitemap doesn't list (and `0` otherwise). `tape_from` is the index the returned slice starts at. |
+
+Web crawls pause themselves when the site keeps rate limiting them: once adaptive delay has
+lowered the rate at least twice, ten or more 429/503 responses within a minute pause the crawl
+with `pause_reason: "rate_limited"`. The CLI and MCP never pause, because nobody is there to
+resume.
 
 Before every crawl, CLI and MCP included, gocrawl reads the site's sitemap once: robots.txt
 `Sitemap:` lines, then `/sitemap.xml` and `/sitemap_index.xml`, following indexes. Only URLs
@@ -223,8 +276,8 @@ For sites behind a login form (staging, member areas, a Shopify password page), 
 borrow a real browser session: gocrawl opens a normal Chrome, Chromium or Edge window on the
 site in a fresh, temporary profile, you log in there (SSO, two-factor and CAPTCHAs work), and
 gocrawl reads that window's cookies when you say you're done. It keeps only the cookies a
-browser would send to the site's host, closes the window, and deletes the profile. The login
-UI lands with the GUI views; the API above is what it will call.
+browser would send to the site's host, closes the window, and deletes the profile. The New crawl
+form's **Log in with browser…** button drives this API.
 
 The flow, over the API:
 
@@ -252,7 +305,7 @@ the cookies are captured.
   cookie's `Path` and `Secure` attributes are ignored, and a host-only cookie may reach the
   subdomains too when `subdomains` is on.
 - The API does not add a logout exclusion. The UI adds the exclude pattern
-  `(?i)(log|sign)-?out` to the crawl form (it lands with the GUI views), so the crawl doesn't
+  `(?i)/(log|sign)-?out(/|$|\?)` to the crawl form, so the crawl doesn't
   follow a logout link and end the session. It stays visible in the exclude field; remove it
   if you need those pages. API clients should add their own `exclude`.
 - Each login window uses a temporary browser profile named `gocrawl-login-*` in the system
@@ -279,6 +332,5 @@ the cookies are captured.
   `basic_auth`, `cookie`, inline `headers`, or credentials embedded in a URL. Header profiles are
   the exception by design: they are the place for secrets, and `GET /api/header-profiles/{name}`
   returns a body as-is.
-- The Settings view that edits all of this lands with the GUI settings view; until then these
-  routes are the interface.
+- The Settings view edits all of this through these routes.
 - Redirect-check results live in memory only, like unsaved crawls.

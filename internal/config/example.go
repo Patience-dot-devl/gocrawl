@@ -71,7 +71,7 @@ crawl:
   # writing the token into this file.
   bearer_token: ""
   timeout: "15s"        # per-request timeout
-  max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
+  max_duration: "0s"    # budget for active crawl time, paused time excluded (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report
   max_body_bytes: 5242880  # 5 MiB cap on a single response body
   respect_robots: true  # obey robots.txt while crawling

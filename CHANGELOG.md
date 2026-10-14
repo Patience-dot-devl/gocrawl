@@ -8,6 +8,16 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Pause, Resume crawl and Stop crawl buttons in the web UI. When a crawl pauses itself because the site keeps rate limiting it, the UI explains why, shows the server's Retry-After, and offers to resume at half the current rate.
+- Web UI: a Redirects view to upload a redirect-rule CSV, follow the check's progress, filter
+  the results by verdict and scope, and export them as CSV.
+- Web UI: a Compare view (both crawls' tapes, summary deltas, new, resolved and persisting
+  issues, added and removed pages), plus compare checkboxes and **Import report…** on the
+  Crawls list.
+- Web UI: **Log in with browser…** in the New crawl form captures a real browser login (SSO, two-factor and CAPTCHAs work) and crawls with it, showing only cookie names, count and expiry, and excluding logout links by default.
+- Web UI: a Settings view (theme, crawl defaults, header profiles, store folder), and the New crawl form gains a request timeout, nofollow following, query-string stripping, the 429/503 slow-down toggle, a bearer token and a header-profile dropdown, pre-filled from saved defaults with **Save as defaults**.
+- Pause and resume crawls through the web API (`POST /api/crawls/{id}/pause`, `POST /api/crawls/{id}/resume` with an optional new `rate`, job status `paused`). Web crawls pause themselves after sustained 429/503 responses and report the server's `Retry-After`, and `max_duration` now counts only active time, so a paused crawl doesn't use up its budget.
+- The web UI shows a running crawl live: the crawl tape, pages fetched against the sitemap, queue, elapsed time, request rate and the last pages fetched. The New crawl form previews the sitemap and offers to raise a page budget below it, finished reports open with the tape and sitemap coverage, and the Crawls list shows a small tape and sitemap coverage per crawl.
 - Live crawl progress in the web API: `GET /api/crawls/{id}` returns a `progress` object (phase, pages against the site's sitemap, rate, recent 429/503s, and a per-page status tape sliced with `?tape_from=N`), and `POST /api/sitemap-preview` finds a site's sitemap before crawling. Every crawl now reads the sitemap once up front, reports `coverage.sitemap_total` / `sitemap_fetched`, saves the per-page tape in `coverage.tape` / `tape_off`, and adds a note when the page budget is below the sitemap total.
 - Crawl requests (web API and MCP `crawl` tool) accept `strip_query`, `adaptive_delay`, `follow_nofollow`, `timeout` and `bearer_token`; the CLI gains `--bearer-token` (`crawl.bearer_token`), and the web API gains `GET`/`PUT /api/settings` (stored in `~/.gocrawl/gui.json`, never with secrets) and `/api/header-profiles` to manage header profiles.
 - Web API: interactive browser login. `POST /api/login-sessions` opens a visible Chromium window in a throwaway profile, `…/capture` keeps the seed host's cookies (HttpOnly included) in memory for an hour, and `POST /api/crawls` accepts `login_session` to crawl with them.
@@ -31,6 +41,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Changed
 
+- `--max-duration` now counts only active crawl time, so paused time doesn't use up the budget. Previously it enforced a wall-clock limit via an outer context deadline; now only the `max_duration` flag sets `coverage.duration_limit_reached`.
 - The web UI has a new look: dark by default (light and system themes are built in), a
   left navigation rail, bundled Atkinson Hyperlegible fonts, HTTP-status colors, and green,
   yellow, and red crawl controls. Cancel is now Stop crawl. `npm run lint` in `web/` also

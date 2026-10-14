@@ -20,7 +20,7 @@ type Params struct {
 	MaxPages              *int     `json:"max_pages,omitempty" jsonschema:"Hard cap on the number of pages crawled (default 500)"`
 	Concurrency           *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
 	RatePerSecond         *float64 `json:"rate,omitempty" jsonschema:"Max requests per second (default 0 = unlimited)"`
-	MaxDuration           string   `json:"max_duration,omitempty" jsonschema:"Wall-clock budget for the whole crawl as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
+	MaxDuration           string   `json:"max_duration,omitempty" jsonschema:"Budget for active crawl time (time spent paused excluded) as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
 	Render                string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
 	Analyzers             []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
 	Specialized           *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes, Shopify /products.json probe); off by default"`
