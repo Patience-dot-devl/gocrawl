@@ -87,9 +87,10 @@ already in the API below. The working views, all against the API below:
   pool), HTTP Basic Auth, and a session-cookie field (a checkbox reveals a paste box) for sites
   gated by an app-level cookie, e.g. a Shopify storefront password page, and a custom-headers
   field (inline `Name: value` lines and/or a stored header profile name, e.g. for a Shopify
-  crawler access signature). (A few CLI-only flags
-  with no menu equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form
-  either.) Under the URL, a line reports the site's sitemap as you type (for example
+  crawler access signature). It also has a per-request timeout, nofollow following, query-string stripping, the
+  429/503 slow-down, a bearer token, and a header-profile dropdown filled from Settings. It
+  opens pre-filled with your saved defaults; **Save as defaults** stores the current values
+  (never passwords, cookies, tokens or inline headers). Under the URL, a line reports the site's sitemap as you type (for example
   "Found sitemap.xml via robots.txt: 1,240 pages in scope"), and when the page budget is
   smaller, a notice offers **Raise budget to 1,240**. Starts a job and jumps to its report.
 - **Crawl (running)** — The header shows the host, a phase pill (Reading sitemap, Crawling,
@@ -109,6 +110,11 @@ already in the API below. The working views, all against the API below:
 - **Crawls** — every crawl saved to the store (`save: true` on start), reopen-able as a
   report. Each row shows a small tape (a 160-tick preview, worst status per tick) and its
   sitemap coverage. Its old address, `#/history`, still opens it.
+- **Settings** — theme (dark, light, or match the system), crawl defaults
+  (the New crawl fields, minus secrets), header profiles (list, create, edit, delete; each is
+  validated like `--header-file` and stored with mode `0600` in `~/.gocrawl/headers`), and
+  the crawl store's folder (read-only). Saved in `~/.gocrawl/gui.json`, not in the browser, so
+  it survives the desktop app's changing port.
 
 ## Look and feel
 
