@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { listCrawls } from '../api/crawls'
+import { importReport } from '../api/import'
 import { STATUS_PILL } from '../crawlStatus'
 import { href } from '../routes'
 import { useSort } from '../sort'
 import type { CrawlListItemWithProgress } from '../types/progress'
+import { isComparable, orderPair } from '../views/compare/pairs'
+import Button from './ui/Button'
 import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
 import MiniTape from './progress/MiniTape'
 import { percentOf, sitemapCoverageText } from './progress/tapeText'
+import '../views/compare.css'
 import './History.css'
 
 function historySortValue(item: CrawlListItemWithProgress, key: string): string | number {
@@ -52,6 +56,10 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [picked, setPicked] = useState<string[]>([])
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listCrawls()
@@ -60,18 +68,62 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
       .finally(() => setLoaded(true))
   }, [])
 
+  function togglePicked(id: string) {
+    setPicked((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : prev.length >= 2 ? prev : [...prev, id]))
+  }
+
+  function openCompare() {
+    const chosen = picked.map((id) => items.find((i) => i.id === id)).filter((i) => i !== undefined)
+    if (chosen.length !== 2) return
+    const pair = orderPair(chosen[0], chosen[1])
+    window.location.hash = href({ view: 'compare', base: pair.base, current: pair.current })
+  }
+
+  async function onImportFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImporting(true)
+    setImportError('')
+    try {
+      const { id } = await importReport(file)
+      window.location.hash = href({ view: 'crawl', id })
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const filtered = items.filter((item) => item.seed.toLowerCase().includes(search.trim().toLowerCase()))
   const { sorted, toggle, dirFor } = useSort(filtered, historySortValue)
 
   if (error) return <Notice tone="error">Could not load your crawls: {error}. Reload the page to try again.</Notice>
   if (!loaded) return <p className="muted">Loading…</p>
 
+  const toolbar = (
+    <>
+      <div className="crawls-toolbar">
+        <Button variant="primary" disabled={picked.length !== 2} onClick={openCompare}>
+          Compare selected ({picked.length} of 2)
+        </Button>
+        <Button variant="secondary" disabled={importing} onClick={() => fileRef.current?.click()}>
+          {importing ? 'Importing…' : 'Import report…'}
+        </Button>
+        <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
+      </div>
+      {importError && <Notice tone="error">Could not import that file: {importError}</Notice>}
+    </>
+  )
+
   return (
     <div className="hist">
       <h1>Crawls</h1>
+      {toolbar}
       {items.length === 0 ? (
         <p className="hist-empty">
-          No saved crawls yet. Turn on &lsquo;Save to Crawls&rsquo; when you <a href={href({ view: 'new' })}>start a crawl</a>.
+          No saved crawls yet. Turn on &lsquo;Save to Crawls&rsquo; when you <a href={href({ view: 'new' })}>start a crawl</a>,
+          or import a JSON report.
         </p>
       ) : (
         <>
@@ -91,6 +143,7 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
             <table>
               <thead>
                 <tr>
+                  <th scope="col">Compare</th>
                   {COLUMNS.map((col) => (
                     <th
                       key={col.key}
@@ -111,6 +164,15 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
                   const pill = STATUS_PILL[item.status]
                   return (
                     <tr key={item.id} className="hist-row" onClick={() => onSelect(item.id)}>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Compare ${item.seed}, finished ${formatFinished(item.finished_at)}`}
+                          checked={picked.includes(item.id)}
+                          disabled={!isComparable(item) || (picked.length >= 2 && !picked.includes(item.id))}
+                          onChange={() => togglePicked(item.id)}
+                        />
+                      </td>
                       <td>
                         <a className="mono" href={href({ view: 'crawl', id: item.id })} onClick={(e) => e.stopPropagation()}>
                           {item.seed}

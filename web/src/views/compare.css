@@ -64,3 +64,11 @@
   overflow: auto;
   padding-left: 1.25rem;
 }
+
+.crawls-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
