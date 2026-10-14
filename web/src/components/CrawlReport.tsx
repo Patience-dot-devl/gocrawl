@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cancelCrawl, exportURL, listExplanations } from '../api/crawls'
 import { ApiError } from '../api/client'
 import { href } from '../routes'
 import SiteMap from './SiteMap'
-import { useSort } from '../sort'
 import { STATUS_PILL } from '../crawlStatus'
-import type { Explanation, Issue } from '../types/crawls'
+import type { Explanation } from '../types/crawls'
+import IssueTable, { type ReviewMap } from './IssueTable'
 import Button from './ui/Button'
 import ConfirmDialog from './ui/ConfirmDialog'
 import Notice from './ui/Notice'
@@ -16,16 +16,6 @@ import RunningCrawl from './progress/RunningCrawl'
 import { runPill } from './progress/runPill'
 import { isLive, useCrawlPoll } from './progress/useCrawlPoll'
 import './CrawlReport.css'
-
-const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 }
-
-interface ReviewState {
-  resolved: boolean
-  nonissue: boolean
-  note: string
-}
-
-type IssueRow = Issue & { _key: number }
 
 function formatCount(n: number): string {
   return n.toLocaleString('en-US')
@@ -49,23 +39,6 @@ function hostOf(seed: string): string {
   }
 }
 
-function issueSortValue(row: IssueRow, key: string): string | number {
-  switch (key) {
-    case 'severity':
-      return SEVERITY_RANK[row.severity] ?? 9
-    case 'analyzer':
-      return row.analyzer
-    case 'code':
-      return row.code
-    case 'url':
-      return row.url
-    case 'message':
-      return row.message
-    default:
-      return ''
-  }
-}
-
 export default function CrawlReport({ id }: { id: string }) {
   // loadError replaces the whole view (nothing loaded, or the crawl does not exist); pollError
   // is an inline notice above the report (a refresh failed, polling goes on); actionError is an
@@ -75,18 +48,9 @@ export default function CrawlReport({ id }: { id: string }) {
   const [confirmStop, setConfirmStop] = useState(false)
   const [headingFocus, setHeadingFocus] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const [severityOn, setSeverityOn] = useState<Record<string, boolean>>({ error: true, warning: true, info: true })
-  const [analyzerFilter, setAnalyzerFilter] = useState('')
-  const [search, setSearch] = useState('')
-  const [codeOn, setCodeOn] = useState<Record<string, boolean>>({})
-  const [codeMenuOpen, setCodeMenuOpen] = useState(false)
-  const [hideResolved, setHideResolved] = useState(false)
-  const [hideNonissue, setHideNonissue] = useState(false)
-  const [review, setReview] = useState<Record<number, ReviewState>>({})
-  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [review, setReview] = useState<ReviewMap>({})
   const [tab, setTab] = useState<'issues' | 'sitemap'>('issues')
   const [explanations, setExplanations] = useState<Record<string, Explanation>>({})
-  const selectAllRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listExplanations()
@@ -98,48 +62,6 @@ export default function CrawlReport({ id }: { id: string }) {
   // by crawl id, so the report-derived UI state below starts fresh for every report without a
   // reset effect. A code missing from codeOn counts as shown.
   const report = job?.report
-
-  useEffect(() => {
-    if (!codeMenuOpen) return
-    function close() {
-      setCodeMenuOpen(false)
-    }
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [codeMenuOpen])
-
-  const codeCounts = useMemo(() => {
-    const counts: Record<string, number> = {}
-    report?.issues.forEach((i) => {
-      counts[i.code] = (counts[i.code] ?? 0) + 1
-    })
-    return counts
-  }, [report])
-  const codeList = useMemo(() => Object.keys(codeCounts).sort(), [codeCounts])
-  const hiddenCodeCount = codeList.filter((c) => codeOn[c] === false).length
-
-  const rows: IssueRow[] = useMemo(
-    () => (report ? report.issues.map((i, originalIndex) => ({ ...i, _key: originalIndex })) : []),
-    [report],
-  )
-
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return rows.filter((i) => {
-      if (severityOn[i.severity] === false) return false
-      if (analyzerFilter && i.analyzer !== analyzerFilter) return false
-      if (codeOn[i.code] === false) return false
-      if (term && !(i.url.toLowerCase().includes(term) || i.message.toLowerCase().includes(term) || i.code.toLowerCase().includes(term))) {
-        return false
-      }
-      const r = review[i._key]
-      if (hideResolved && r?.resolved) return false
-      if (hideNonissue && r?.nonissue) return false
-      return true
-    })
-  }, [rows, severityOn, analyzerFilter, codeOn, search, hideResolved, hideNonissue, review])
-
-  const { sorted, toggle, dirFor } = useSort(filtered, issueSortValue, { key: 'severity' })
 
   // The dialog is only meaningful while the crawl runs: if the crawl finishes while it is open,
   // it goes away, and the Stop crawl button that opened it goes with it. Focus then has nowhere
@@ -157,12 +79,6 @@ export default function CrawlReport({ id }: { id: string }) {
     if (headingFocus > 0) headingRef.current?.focus()
   }, [headingFocus])
 
-  const selectedShownCount = sorted.filter((r) => selected.has(r._key)).length
-  useEffect(() => {
-    if (!selectAllRef.current) return
-    selectAllRef.current.indeterminate = selectedShownCount > 0 && selectedShownCount < sorted.length
-  }, [selectedShownCount, sorted.length])
-
   if (loadError?.notFound) {
     return (
       <div className="cr">
@@ -176,57 +92,6 @@ export default function CrawlReport({ id }: { id: string }) {
   }
   if (loadError) return <Notice tone="error">{loadError.message}</Notice>
   if (!job) return <p className="muted">Loading…</p>
-
-  const emptyReview: ReviewState = { resolved: false, nonissue: false, note: '' }
-
-  function setReviewFlag(key: number, patch: Partial<ReviewState>) {
-    setReview((prev) => ({
-      ...prev,
-      [key]: { ...emptyReview, ...prev[key], ...patch },
-    }))
-  }
-
-  function toggleSelected(key: number) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
-  function selectShown(checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      sorted.forEach((r) => (checked ? next.add(r._key) : next.delete(r._key)))
-      return next
-    })
-  }
-
-  function bulkApply(kind: 'resolved' | 'nonissue' | 'clear') {
-    setReview((prev) => {
-      const next = { ...prev }
-      sorted.forEach((r) => {
-        if (!selected.has(r._key)) return
-        if (kind === 'clear') {
-          next[r._key] = { ...emptyReview, note: prev[r._key]?.note ?? '' }
-        } else {
-          next[r._key] = { ...emptyReview, ...prev[r._key], [kind]: true }
-        }
-      })
-      return next
-    })
-    setSelected(new Set())
-  }
-
-  function clearFilters() {
-    setSeverityOn({ error: true, warning: true, info: true })
-    setAnalyzerFilter('')
-    setSearch('')
-    setCodeOn(Object.fromEntries(codeList.map((c) => [c, true])))
-    setHideResolved(false)
-    setHideNonissue(false)
-  }
 
   function exportReviewed() {
     if (!report) return
@@ -247,14 +112,6 @@ export default function CrawlReport({ id }: { id: string }) {
     document.body.removeChild(a)
     URL.revokeObjectURL(a.href)
   }
-
-  const filtersActive =
-    search.trim() !== '' ||
-    analyzerFilter !== '' ||
-    hiddenCodeCount > 0 ||
-    hideResolved ||
-    hideNonissue ||
-    Object.values(severityOn).some((v) => v === false)
 
   // One PhasePill for every state, so its live region persists and a screen reader hears
   // "Crawling" become "Crawl stopped".
@@ -485,204 +342,11 @@ export default function CrawlReport({ id }: { id: string }) {
             </div>
           )}
 
-          {tab === 'sitemap' && report.site_map ? (
-            <SiteMap siteMap={report.site_map} />
-          ) : (
-            <>
-              <div className="cr-filters">
-                <div className="cr-sevs" role="group" aria-label="Severity">
-                  {(['error', 'warning', 'info'] as const).map((sev) => (
-                    <button
-                      key={sev}
-                      type="button"
-                      className={`cr-sev sev-${sev}`}
-                      aria-pressed={severityOn[sev]}
-                      onClick={() => setSeverityOn((prev) => ({ ...prev, [sev]: !prev[sev] }))}
-                    >
-                      {sev.charAt(0).toUpperCase() + sev.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                <label className="cr-inline">
-                  Analyzer
-                  <select value={analyzerFilter} onChange={(e) => setAnalyzerFilter(e.target.value)}>
-                    <option value="">All</option>
-                    {Object.keys(report.summary.by_analyzer).map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className={`cr-codes${hiddenCodeCount > 0 ? ' cr-codes-hidden' : ''}`}>
-                  <Button
-                    aria-expanded={codeMenuOpen}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setCodeMenuOpen((v) => !v)
-                    }}
-                  >
-                    {hiddenCodeCount > 0 ? `Codes (${hiddenCodeCount} hidden)` : 'Codes'}
-                    <span aria-hidden="true">▾</span>
-                  </Button>
-                  <div className="cr-codes-panel" hidden={!codeMenuOpen} onClick={(e) => e.stopPropagation()}>
-                    <div className="cr-codes-actions">
-                      <Button onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, true])))}>
-                        Show all
-                      </Button>
-                      <Button onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, false])))}>
-                        Hide all
-                      </Button>
-                    </div>
-                    {codeList.map((c) => (
-                      <label key={c} className="cr-code-option">
-                        <input
-                          type="checkbox"
-                          checked={codeOn[c] !== false}
-                          onChange={(e) => setCodeOn((prev) => ({ ...prev, [c]: e.target.checked }))}
-                        />
-                        <code>{c}</code>
-                        <span className="num muted">{codeCounts[c]}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <input
-                  type="search"
-                  className="cr-search"
-                  placeholder="Search URL, message, code…"
-                  aria-label="Search issues"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <label className="cr-inline">
-                  <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} />
-                  Hide resolved
-                </label>
-                <label className="cr-inline">
-                  <input type="checkbox" checked={hideNonissue} onChange={(e) => setHideNonissue(e.target.checked)} />
-                  Hide non-issues
-                </label>
-                <span className="cr-count-line num muted">
-                  Showing {formatCount(sorted.length)} of {formatCount(rows.length)} {noun(rows.length, 'issue')}
-                </span>
-                {filtersActive && <Button onClick={clearFilters}>Clear filters</Button>}
-              </div>
-
-              <div className="cr-bulk">
-                <label className="cr-inline">
-                  <input
-                    ref={selectAllRef}
-                    type="checkbox"
-                    checked={sorted.length > 0 && selectedShownCount === sorted.length}
-                    onChange={(e) => selectShown(e.target.checked)}
-                  />
-                  Select shown
-                </label>
-                <Button disabled={selected.size === 0} onClick={() => bulkApply('nonissue')}>
-                  Mark as non-issue
-                </Button>
-                <Button disabled={selected.size === 0} onClick={() => bulkApply('resolved')}>
-                  Mark as resolved
-                </Button>
-                <Button disabled={selected.size === 0} onClick={() => bulkApply('clear')}>
-                  Clear review
-                </Button>
-                {selected.size > 0 && <span className="num muted">{selected.size} selected</span>}
-              </div>
-
-              <div className="cr-table-scroll">
-                <table className="cr-issues">
-                  <thead>
-                    <tr>
-                      {(['severity', 'analyzer', 'code', 'url', 'message'] as const).map((col) => (
-                        <th
-                          key={col}
-                          className="cr-sortable"
-                          data-dir={dirFor(col)}
-                          aria-sort={dirFor(col) === 'asc' ? 'ascending' : dirFor(col) === 'desc' ? 'descending' : undefined}
-                        >
-                          <button type="button" onClick={() => toggle(col)}>
-                            {col === 'url' ? 'URL' : col.charAt(0).toUpperCase() + col.slice(1)}
-                          </button>
-                        </th>
-                      ))}
-                      <th>Review</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sorted.map((i) => {
-                      const explanation = explanations[i.code]
-                      const r = review[i._key]
-                      return (
-                        <tr key={i._key} className={r?.resolved || r?.nonissue ? 'cr-reviewed' : undefined}>
-                          <td className={`sev-${i.severity}`}>{i.severity}</td>
-                          <td className="mono">{i.analyzer}</td>
-                          <td>
-                            <code>{i.code}</code>
-                          </td>
-                          <td className="cr-url mono" title={i.url}>
-                            {i.url}
-                          </td>
-                          <td>
-                            {i.message}
-                            {explanation && (
-                              <details className="cr-explain">
-                                <summary>What this means and how to fix it</summary>
-                                <dl>
-                                  <dt>What it is</dt>
-                                  <dd>{explanation.what}</dd>
-                                  <dt>Impact</dt>
-                                  <dd>{explanation.impact}</dd>
-                                  <dt>How to fix it</dt>
-                                  <dd>{explanation.fix}</dd>
-                                </dl>
-                              </details>
-                            )}
-                            {i.data && (
-                              <details className="cr-explain">
-                                <summary>Data</summary>
-                                <pre>{JSON.stringify(i.data, null, 2)}</pre>
-                              </details>
-                            )}
-                          </td>
-                          <td className="cr-review">
-                            <label className="cr-inline">
-                              <input type="checkbox" checked={selected.has(i._key)} onChange={() => toggleSelected(i._key)} />
-                              Select
-                            </label>
-                            <label className="cr-inline">
-                              <input
-                                type="checkbox"
-                                checked={!!r?.resolved}
-                                onChange={(e) => setReviewFlag(i._key, { resolved: e.target.checked })}
-                              />
-                              Resolved
-                            </label>
-                            <label className="cr-inline">
-                              <input
-                                type="checkbox"
-                                checked={!!r?.nonissue}
-                                onChange={(e) => setReviewFlag(i._key, { nonissue: e.target.checked })}
-                              />
-                              Non-issue
-                            </label>
-                            <textarea
-                              rows={2}
-                              placeholder="Add a comment…"
-                              aria-label="Comment"
-                              value={r?.note ?? ''}
-                              onChange={(e) => setReviewFlag(i._key, { note: e.target.value })}
-                            />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+          {tab === 'sitemap' && report.site_map && <SiteMap siteMap={report.site_map} />}
+          {/* Stays mounted behind the Site map tab, so its filters and search survive a tab switch. */}
+          <div hidden={tab === 'sitemap'}>
+            <IssueTable issues={report.issues} explanations={explanations} review={{ map: review, set: setReview }} />
+          </div>
         </>
       )}
     </div>
