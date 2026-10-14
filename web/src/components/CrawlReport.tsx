@@ -14,6 +14,7 @@ import StatusCode from './ui/StatusCode'
 import FinishedTape from './progress/FinishedTape'
 import RunningCrawl from './progress/RunningCrawl'
 import { runPill } from './progress/runPill'
+import { hostOf } from './progress/tapeText'
 import { isLive, useCrawlPoll } from './progress/useCrawlPoll'
 import './CrawlReport.css'
 
@@ -29,14 +30,6 @@ function noun(n: number, singular: string): string {
 // An error message without its final full stop, so a sentence can follow it cleanly.
 function trimEnd(message: string): string {
   return message.replace(/[.\s]+$/, '')
-}
-
-function hostOf(seed: string): string {
-  try {
-    return new URL(seed).host
-  } catch {
-    return seed
-  }
 }
 
 export default function CrawlReport({ id }: { id: string }) {

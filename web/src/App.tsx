@@ -25,7 +25,7 @@ export default function App() {
         {route.view === 'new' && <CrawlForm onStarted={(id) => navigate({ view: 'crawl', id })} />}
         {route.view === 'crawls' && <History onSelect={(id) => navigate({ view: 'crawl', id })} />}
         {route.view === 'crawl' && <CrawlReport key={route.id} id={route.id} />}
-        {route.view === 'compare' && <CompareView />}
+        {route.view === 'compare' && <CompareView base={route.base} current={route.current} />}
         {route.view === 'redirects' && <RedirectsView />}
         {route.view === 'redirect' && <RedirectView key={route.id} id={route.id} />}
         {route.view === 'settings' && <SettingsView />}

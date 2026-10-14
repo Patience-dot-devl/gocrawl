@@ -1,0 +1,66 @@
+.compare-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+.compare-pickers label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--ink-2);
+}
+.compare-pickers select {
+  min-width: 20rem;
+}
+.compare-tapes {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.compare-tape-label {
+  margin: 0 0 0.25rem;
+  color: var(--ink);
+}
+.compare-tape-counts {
+  margin: 0.25rem 0 0;
+  color: var(--ink-2);
+}
+.compare-headline {
+  font-size: 1.125rem;
+}
+.compare-deltas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  margin: 1rem 0;
+}
+.compare-deltas table {
+  width: auto;
+}
+.compare-deltas caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: 0.25rem;
+}
+.compare-deltas th,
+.compare-deltas td {
+  padding: 0.25rem 0.75rem 0.25rem 0;
+}
+.compare-deltas th.compare-num,
+.compare-deltas td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.compare-pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+.compare-url-list {
+  max-height: 24rem;
+  overflow: auto;
+  padding-left: 1.25rem;
+}
