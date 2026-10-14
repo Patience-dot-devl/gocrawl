@@ -89,7 +89,7 @@ export interface Explanation {
   fix: string
 }
 
-export type CrawlStatus = 'running' | 'done' | 'error' | 'canceled'
+export type CrawlStatus = 'running' | 'paused' | 'done' | 'error' | 'canceled'
 
 export interface JobView {
   id: string

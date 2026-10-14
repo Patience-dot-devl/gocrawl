@@ -5,6 +5,7 @@ import type { CrawlStatus } from './types/crawls'
 // "Stop crawl" leads to "Crawl stopped".
 export const STATUS_PILL: Record<CrawlStatus, { phase: Phase; label: string }> = {
   running: { phase: 'crawling', label: 'Crawling' },
+  paused: { phase: 'paused', label: 'Paused' },
   done: { phase: 'done', label: 'Finished' },
   canceled: { phase: 'stopped', label: 'Crawl stopped' },
   error: { phase: 'failed', label: 'Failed' },

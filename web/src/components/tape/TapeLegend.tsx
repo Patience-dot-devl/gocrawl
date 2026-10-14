@@ -1,10 +1,10 @@
 import { STATUS_CLASSES, STATUS_LABEL } from '../../status'
+import { OUTLINE_LABEL, type TapeState } from './tapeModel'
 import './Tape.css'
 
 // The key under a full-size tape. sitemap adds the notch and outline entries, which only a
-// live crawl with a sitemap draws (saved crawls rebuild a status-only tape). finished renames
-// the slate outline from "Not fetched yet" to "Not reached by links".
-export default function TapeLegend({ sitemap = false, finished = false }: { sitemap?: boolean; finished?: boolean }) {
+// crawl with a sitemap draws. state names the slate outline (see OUTLINE_LABEL).
+export default function TapeLegend({ sitemap = false, state = 'live' }: { sitemap?: boolean; state?: TapeState }) {
   return (
     <ul className="tape-legend">
       {STATUS_CLASSES.map((k) => (
@@ -21,7 +21,7 @@ export default function TapeLegend({ sitemap = false, finished = false }: { site
           </li>
           <li>
             <i className="tick tick-todo" aria-hidden="true" />
-            {finished ? 'Not reached by links' : 'Not fetched yet'}
+            {OUTLINE_LABEL[state]}
           </li>
           <li>
             <i className="tick tick-cut" aria-hidden="true" />

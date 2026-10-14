@@ -3,6 +3,8 @@ import { listAnalyzers, startCrawl } from '../api/crawls'
 import type { AnalyzerInfo, StartCrawlParams } from '../types/crawls'
 import Button from './ui/Button'
 import Notice from './ui/Notice'
+import SitemapPreviewLine from './progress/SitemapPreviewLine'
+import { DEFAULT_MAX_PAGES } from './progress/tapeText'
 import './CrawlForm.css'
 
 export default function CrawlForm({ onStarted }: { onStarted: (id: string) => void }) {
@@ -138,6 +140,14 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
           required
         />
       </label>
+      <SitemapPreviewLine
+        url={url}
+        include={splitList(include)}
+        exclude={splitList(exclude)}
+        subdomains={subdomains}
+        maxPages={maxPages.trim() === '' ? DEFAULT_MAX_PAGES : Number(maxPages)}
+        onRaiseBudget={(pages) => setMaxPages(String(pages))}
+      />
 
       <fieldset className="cf-section">
         <legend>Crawl behavior</legend>
