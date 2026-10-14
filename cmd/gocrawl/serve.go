@@ -51,7 +51,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		// The operator asked for a reachable server; the loopback Host check would only
 		// lock out the clients they just opened the door to.
 		opts = append(opts, webserver.AllowAnyHost())
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: --addr %s is not loopback; the web API has no authentication and anyone who can reach it can start crawls from this machine\n", addr)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: --addr %s is not loopback; the web API has no authentication and anyone who can reach it can start crawls from this machine and read the contents of your header profiles\n", addr)
 	}
 	web := webserver.New(st, opts...)
 	// Closes login browser windows (and deletes their temporary profiles). Deferred, so it runs

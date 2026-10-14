@@ -48,12 +48,13 @@ All notable changes to `gocrawl` are documented here. The format is based on
   checks every color pair against WCAG 2.2 AA.
 - In the web UI, the navigation entry and address for saved crawls changed from History
   (`#/history`) to Crawls (`#/crawls`); `#/history` still opens it. The navigation also lists
-  Compare, Redirects, and Settings, which are placeholders for now.
+  Compare, Redirects, and Settings.
 - Agent instructions moved from `CLAUDE.md` to `AGENTS.md`, so every coding agent reads the
   same file. `CLAUDE.md` now only imports it.
 
 ### Fixed
 
+- Web API and MCP: a seed URL that can't be parsed is refused with a fixed message instead of echoing its password, a missing header profile reads `header profile "x" not found` instead of quoting its file path, the settings, header-profile and saved-crawl errors no longer name filesystem paths, and shutting the server down (`gocrawl serve`) now cancels running and paused crawls and redirect checks so their headless browsers close.
 - `docs/analyzers.md` now lists the `http-body-truncated` and `sitemap-truncated` codes.
 - Web UI and API: a failed or late Stop crawl no longer replaces the report, Stop crawl asks in an in-app dialog, `GET /api/crawls/{id}` and the export answer an unknown id with a fixed `crawl not found` (no store path), report counts are singular or plural with thousands separators, the coverage notice uses UI wording, and the crawl form's fields have names.
 - Web UI accessibility and layout pass: the issue table draws 100 rows at a time (**Show 100 more**), so a crawl with thousands of issues stays responsive; Pause and Resume crawl keep keyboard focus; review checkboxes are 24px targets; each view sets the page title; a skip link, moved focus after a view change, field hints tied to their fields, and named form controls; the tape, legend and phase dots stay visible in Windows High Contrast; readable redirect result columns, a Crawls table that fits at 1200px, and clearer wording in the redirect, Settings, paused and coverage views.
