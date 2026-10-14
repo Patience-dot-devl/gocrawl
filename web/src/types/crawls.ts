@@ -146,5 +146,11 @@ export interface StartCrawlParams {
   cookie?: string
   headers?: string[]
   header_profile?: string
+  strip_query?: boolean
+  adaptive_delay?: boolean
+  follow_nofollow?: boolean
+  timeout?: string
+  bearer_token?: string
+  login_session?: string
   save: boolean
 }
