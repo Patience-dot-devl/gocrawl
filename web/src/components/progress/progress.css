@@ -135,6 +135,17 @@
   max-width: 264px;
   overflow: hidden;
 }
+/* On a narrower window the tape gives up some ticks instead of scrolling the table. */
+@media (max-width: 1359px) {
+  .mini-tape-cell {
+    width: 200px;
+    max-width: 200px;
+  }
+  .mini-tape-cell .tape {
+    width: 184px;
+    max-width: 184px;
+  }
+}
 .mini-tape-empty {
   color: var(--ink-2);
 }

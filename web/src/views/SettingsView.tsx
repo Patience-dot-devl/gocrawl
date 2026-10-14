@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { listAnalyzers } from '../api/crawls'
 import { deleteHeaderProfile, getHeaderProfile, listHeaderProfiles, saveHeaderProfile } from '../api/profiles'
 import CrawlFields from '../components/crawlform/CrawlFields'
@@ -6,6 +6,7 @@ import { fromParams, toParams, type FormValues } from '../components/crawlform/v
 import Button from '../components/ui/Button'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Notice from '../components/ui/Notice'
+import { usePageTitle } from '../pageTitle'
 import { useSettings } from '../settings/context'
 import { applyTheme, type Theme } from '../theme'
 import type { AnalyzerInfo } from '../types/crawls'
@@ -20,12 +21,19 @@ function message(e: unknown): string {
 }
 
 export default function SettingsView() {
+  usePageTitle('Settings')
   const { settings, error: loadError } = useSettings()
   // Nothing below may save until the settings answered (or failed): saving earlier would
   // write the built-in defaults over the file.
   const locked = settings === null && !loadError
   const [profiles, setProfiles] = useState<string[]>([])
   const [profilesError, setProfilesError] = useState('')
+  const [analyzers, setAnalyzers] = useState<AnalyzerInfo[]>([])
+  const [analyzersError, setAnalyzersError] = useState('')
+  // The sections are drawn once everything they list has answered, so the page does not
+  // jump as the analyzer checkboxes and the profile list arrive.
+  const [profilesDone, setProfilesDone] = useState(false)
+  const [analyzersDone, setAnalyzersDone] = useState(false)
 
   const reloadProfiles = useCallback(async () => {
     try {
@@ -41,7 +49,14 @@ export default function SettingsView() {
     listHeaderProfiles()
       .then((r) => setProfiles(r.profiles))
       .catch((e: unknown) => setProfilesError(message(e)))
+      .finally(() => setProfilesDone(true))
+    listAnalyzers()
+      .then((r) => setAnalyzers(r.analyzers))
+      .catch((e: unknown) => setAnalyzersError(message(e)))
+      .finally(() => setAnalyzersDone(true))
   }, [])
+
+  const ready = (settings !== null || loadError !== '') && profilesDone && analyzersDone
 
   return (
     <div className="set">
@@ -51,16 +66,24 @@ export default function SettingsView() {
           Couldn't load your settings: {loadError}. Saving any setting below replaces the settings file.
         </Notice>
       )}
-      <ThemeSection locked={locked} />
-      <DefaultsSection profiles={profiles} locked={locked} />
-      <ProfilesSection profiles={profiles} loadError={profilesError} onChanged={reloadProfiles} />
-      <section className="set-panel">
-        <h2>Crawl store</h2>
-        <p>
-          Saved crawls live in <code>{settings?.store_dir ?? '…'}</code>. Start gocrawl with{' '}
-          <code>gocrawl serve --store-dir &lt;dir&gt;</code> to use another folder.
+      {!ready ? (
+        <p className="muted" role="status">
+          Loading settings…
         </p>
-      </section>
+      ) : (
+        <>
+          <ThemeSection locked={locked} />
+          <DefaultsSection profiles={profiles} analyzers={analyzers} analyzersError={analyzersError} locked={locked} />
+          <ProfilesSection profiles={profiles} loadError={profilesError} onChanged={reloadProfiles} />
+          <section className="set-panel">
+            <h2>Crawl store</h2>
+            <p>
+              Saved crawls live in <code>{settings?.store_dir ?? '…'}</code>. Start gocrawl with{' '}
+              <code>gocrawl serve --store-dir &lt;dir&gt;</code> to use another folder.
+            </p>
+          </section>
+        </>
+      )}
     </div>
   )
 }
@@ -84,10 +107,10 @@ function ThemeSection({ locked }: { locked: boolean }) {
 
   return (
     <section className="set-panel">
-      <h2>Theme</h2>
+      <h2>Appearance</h2>
       <label className="cf-field">
         <span className="cf-label">Theme</span>
-        <select value={theme} disabled={locked} onChange={(e) => void choose(e.target.value as Theme)}>
+        <select name="theme" value={theme} disabled={locked} onChange={(e) => void choose(e.target.value as Theme)}>
           <option value="dark">Dark</option>
           <option value="light">Light</option>
           <option value="system">Match the system</option>
@@ -98,12 +121,21 @@ function ThemeSection({ locked }: { locked: boolean }) {
   )
 }
 
-function DefaultsSection({ profiles, locked }: { profiles: string[]; locked: boolean }) {
+function DefaultsSection({
+  profiles,
+  analyzers,
+  analyzersError,
+  locked,
+}: {
+  profiles: string[]
+  analyzers: AnalyzerInfo[]
+  analyzersError: string
+  locked: boolean
+}) {
   const { settings, save } = useSettings()
   const defaults = settings?.crawl_defaults
   const [values, setValues] = useState<FormValues>(() => fromParams(defaults))
   const [seenDefaults, setSeenDefaults] = useState(defaults)
-  const [analyzers, setAnalyzers] = useState<AnalyzerInfo[]>([])
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [dirty, setDirty] = useState(false)
@@ -113,12 +145,6 @@ function DefaultsSection({ profiles, locked }: { profiles: string[]; locked: boo
     setSeenDefaults(defaults)
     if (!dirty) setValues(fromParams(defaults))
   }
-
-  useEffect(() => {
-    listAnalyzers()
-      .then((r) => setAnalyzers(r.analyzers))
-      .catch((e: unknown) => setError(message(e)))
-  }, [])
 
   async function store(crawlDefaults: CrawlDefaults, done: string) {
     setError('')
@@ -155,7 +181,7 @@ function DefaultsSection({ profiles, locked }: { profiles: string[]; locked: boo
           analyzers={analyzers}
           profiles={profiles}
         />
-        {error && <Notice tone="error">{error}</Notice>}
+        {(error || analyzersError) && <Notice tone="error">{error || analyzersError}</Notice>}
         {note && <Notice tone="info">{note}</Notice>}
         <div className="cf-actions">
           <Button type="submit" variant="primary">
@@ -189,6 +215,33 @@ function ProfilesSection({
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const uid = useId()
+  const sectionRef = useRef<HTMLElement>(null)
+  const newButtonRef = useRef<HTMLButtonElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  // What to focus once the next render has drawn it: the editor field a profile was opened
+  // in, or the saved profile's button in the refreshed list. Without this, focus would fall
+  // to the page when the control that held it is replaced or removed.
+  const focusTarget = useRef<{ kind: 'editor'; isNew: boolean } | { kind: 'profile'; name: string } | null>(null)
+
+  useEffect(() => {
+    const target = focusTarget.current
+    if (!target) return
+    if (target.kind === 'editor') {
+      if (target.isNew) nameRef.current?.focus()
+      else bodyRef.current?.focus()
+      focusTarget.current = null
+      return
+    }
+    const button = [...(sectionRef.current?.querySelectorAll<HTMLElement>('[data-profile]') ?? [])].find(
+      (el) => el.dataset.profile === target.name,
+    )
+    if (button) {
+      button.focus()
+      focusTarget.current = null
+    }
+  }, [profiles, editing])
 
   async function edit(name: string) {
     setError('')
@@ -196,6 +249,7 @@ function ProfilesSection({
     try {
       const p = await getHeaderProfile(name)
       setEditing({ name: p.name, body: p.body, isNew: false })
+      focusTarget.current = { kind: 'editor', isNew: false }
     } catch (e) {
       setError(message(e))
     }
@@ -205,6 +259,7 @@ function ProfilesSection({
     setError('')
     setNote('')
     setEditing({ name: '', body: '', isNew: true })
+    focusTarget.current = { kind: 'editor', isNew: true }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -223,8 +278,9 @@ function ProfilesSection({
     }
     try {
       await saveHeaderProfile(name, editing.body)
-      setEditing({ name, body: editing.body, isNew: false })
+      setEditing(null)
       setNote(`Saved profile "${name}".`)
+      focusTarget.current = { kind: 'profile', name }
       await onChanged()
     } catch (err) {
       setError(message(err))
@@ -239,6 +295,7 @@ function ProfilesSection({
       await deleteHeaderProfile(editing.name)
       setNote(`Deleted profile "${editing.name}".`)
       setEditing(null)
+      newButtonRef.current?.focus()
       await onChanged()
     } catch (err) {
       setError(message(err))
@@ -246,12 +303,12 @@ function ProfilesSection({
   }
 
   return (
-    <section className="set-panel">
+    <section className="set-panel" ref={sectionRef}>
       <h2>Header profiles</h2>
       <p>
         Request headers stored on this machine in <code>~/.gocrawl/headers</code>, for example a
-        Shopify crawler access signature. A crawl picks one by name, so the values never pass
-        through the form.
+        Shopify crawler access signature. A crawl picks one by name on the New crawl form, so the
+        header values stay out of that form.
       </p>
       {loadError && <Notice tone="error">{loadError}</Notice>}
       {profiles.length === 0 ? (
@@ -260,14 +317,20 @@ function ProfilesSection({
         <ul className="set-profiles">
           {profiles.map((name) => (
             <li key={name}>
-              <Button type="button" variant="secondary" onClick={() => void edit(name)} aria-pressed={editing?.name === name}>
+              <Button
+                type="button"
+                variant="secondary"
+                data-profile={name}
+                onClick={() => void edit(name)}
+                aria-pressed={editing?.name === name}
+              >
                 {name}
               </Button>
             </li>
           ))}
         </ul>
       )}
-      <Button type="button" variant="secondary" onClick={startNew}>
+      <Button type="button" variant="secondary" ref={newButtonRef} onClick={startNew}>
         New profile
       </Button>
 
@@ -276,24 +339,36 @@ function ProfilesSection({
           <label className="cf-field">
             <span className="cf-label">Name</span>
             <input
+              ref={nameRef}
               type="text"
+              name="profile_name"
+              autoComplete="off"
+              spellCheck={false}
               value={editing.name}
               readOnly={!editing.isNew}
               onChange={(e) => setEditing({ ...editing, name: e.target.value })}
               placeholder="uk"
             />
           </label>
-          <label className="cf-field">
-            <span className="cf-label">Headers (one &quot;Name: value&quot; per line)</span>
-            <span className="cf-hint">Lines starting with # are comments.</span>
+          <div className="cf-field">
+            <label className="cf-label" htmlFor={`${uid}-body`}>
+              Headers (one &quot;Name: value&quot; per line)
+            </label>
+            <span className="cf-hint" id={`${uid}-body-hint`}>
+              Lines starting with # are comments.
+            </span>
             <textarea
+              id={`${uid}-body`}
+              aria-describedby={`${uid}-body-hint`}
+              ref={bodyRef}
+              name="profile_headers"
               rows={6}
               spellCheck={false}
               value={editing.body}
               onChange={(e) => setEditing({ ...editing, body: e.target.value })}
               placeholder={'# UK store\nSignature: sig1=:...:'}
             />
-          </label>
+          </div>
           <div className="cf-actions">
             <Button type="submit" variant="primary">
               Save profile

@@ -121,3 +121,44 @@
   --u: 1px;
   width: 4px;
 }
+
+/*
+ * Windows High Contrast (forced colors) replaces every author background color and drops
+ * box-shadows, which would erase the ticks, the outline ticks and the legend swatches. They opt
+ * out of the adjustment and use system colors instead. Height already separates 2xx, 3xx and
+ * the taller classes; the colors below tell the tall ones apart, the same ticks serve the
+ * legend, and the status words stay in the text summary.
+ */
+@media (forced-colors: active) {
+  .tick {
+    forced-color-adjust: none;
+  }
+
+  .tick-2 {
+    background: CanvasText;
+  }
+
+  .tick-3 {
+    background: LinkText;
+  }
+
+  .tick-4 {
+    background: ActiveText;
+  }
+
+  .tick-5 {
+    background: linear-gradient(CanvasText 0 calc(5 * var(--u)), Highlight calc(5 * var(--u)));
+  }
+
+  .tick-x {
+    background: GrayText;
+  }
+
+  .tick-todo {
+    box-shadow: inset 0 0 0 1px GrayText;
+  }
+
+  .tick-cut {
+    box-shadow: inset 0 0 0 1px Highlight;
+  }
+}

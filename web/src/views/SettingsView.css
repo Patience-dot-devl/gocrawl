@@ -1,6 +1,7 @@
 /* Settings view: one panel per section. Form fields reuse the New crawl form's cf- classes
    (CrawlForm.css, imported by CrawlFields). */
 .set-panel {
+  max-width: 920px;
   margin: 0 0 20px;
   padding: 14px 18px 18px;
   background: var(--surface);

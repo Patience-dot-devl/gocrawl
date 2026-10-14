@@ -25,7 +25,7 @@
 
 .hist-table th,
 .hist-table td {
-  padding: 7px 12px;
+  padding: 7px 8px;
   border-top: 1px solid var(--rule);
 }
 
@@ -36,6 +36,17 @@
 
 .hist-num {
   text-align: right;
+}
+
+/* The checkbox column: just wide enough for a 24px target. */
+.hist-table .hist-pick {
+  width: 40px;
+  padding-right: 4px;
+}
+
+.hist-table .hist-pick input {
+  width: 24px;
+  height: 24px;
 }
 
 /* The sort control is a button inside the header cell so the keyboard can reach it; it

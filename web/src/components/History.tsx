@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { listCrawls } from '../api/crawls'
 import { importReport } from '../api/import'
 import { STATUS_PILL } from '../crawlStatus'
+import { usePageTitle } from '../pageTitle'
 import { href } from '../routes'
 import { useSort } from '../sort'
 import type { CrawlListItemWithProgress } from '../types/progress'
@@ -10,7 +11,8 @@ import Button from './ui/Button'
 import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
 import MiniTape from './progress/MiniTape'
-import { percentOf, sitemapCoverageText } from './progress/tapeText'
+import { formatCount, percentOf, sitemapCoverageText } from './progress/tapeText'
+import { isLive } from './progress/useCrawlPoll'
 import '../views/compare.css'
 import './History.css'
 
@@ -52,6 +54,7 @@ const COLUMNS: { key: string; label: string; numeric?: boolean }[] = [
 ]
 
 export default function History({ onSelect }: { onSelect: (id: string) => void }) {
+  usePageTitle('Crawls')
   const [items, setItems] = useState<CrawlListItemWithProgress[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
@@ -89,7 +92,10 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
       const { id } = await importReport(file)
       window.location.hash = href({ view: 'crawl', id })
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : String(err))
+      // The server appends the JSON decoder's complaint ("invalid character 'h' ..."), which
+      // helps nobody choosing a file; keep the first part.
+      const text = err instanceof Error ? err.message : String(err)
+      setImportError(text.replace(/^(not a gocrawl JSON report): [\s\S]*$/, '$1'))
     } finally {
       setImporting(false)
     }
@@ -104,10 +110,16 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
   const toolbar = (
     <>
       <div className="crawls-toolbar">
-        <Button variant="primary" disabled={picked.length !== 2} onClick={openCompare}>
+        <Button variant={picked.length === 2 ? 'primary' : 'secondary'} disabled={picked.length !== 2} onClick={openCompare}>
           Compare selected ({picked.length} of 2)
         </Button>
-        <Button variant="secondary" disabled={importing} onClick={() => fileRef.current?.click()}>
+        <Button
+          variant="secondary"
+          aria-disabled={importing || undefined}
+          onClick={() => {
+            if (!importing) fileRef.current?.click()
+          }}
+        >
           {importing ? 'Importing…' : 'Import report…'}
         </Button>
         <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
@@ -130,6 +142,7 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
           <div className="hist-filters">
             <input
               type="search"
+              name="search"
               placeholder="Search by site URL…"
               aria-label="Search crawls"
               value={search}
@@ -143,7 +156,9 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Compare</th>
+                  <th scope="col" className="hist-pick">
+                    <span className="sr-only">Select to compare</span>
+                  </th>
                   {COLUMNS.map((col) => (
                     <th
                       key={col.key}
@@ -162,11 +177,14 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
               <tbody>
                 {sorted.map((item) => {
                   const pill = STATUS_PILL[item.status]
+                  // Analysis has not run yet, so 0 errors would be a claim the crawl has not earned.
+                  const live = isLive(item.status)
                   return (
                     <tr key={item.id} className="hist-row" onClick={() => onSelect(item.id)}>
-                      <td onClick={(e) => e.stopPropagation()}>
+                      <td className="hist-pick" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
+                          name="compare"
                           aria-label={`Compare ${item.seed}, finished ${formatFinished(item.finished_at)}`}
                           checked={picked.includes(item.id)}
                           disabled={!isComparable(item) || (picked.length >= 2 && !picked.includes(item.id))}
@@ -181,10 +199,10 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
                       <td>
                         <PhasePill phase={pill.phase}>{pill.label}</PhasePill>
                       </td>
-                      <td className="hist-num num">{item.pages_crawled?.toLocaleString() ?? '—'}</td>
+                      <td className="hist-num num">{item.pages_crawled === undefined ? '—' : formatCount(item.pages_crawled)}</td>
                       <td>{sitemapCoverageText(item.sitemap_total, item.sitemap_fetched)}</td>
-                      <td className="hist-num num">{item.by_severity?.error ?? 0}</td>
-                      <td className="hist-num num">{item.by_severity?.warning ?? 0}</td>
+                      <td className="hist-num num">{live ? '—' : formatCount(item.by_severity?.error ?? 0)}</td>
+                      <td className="hist-num num">{live ? '—' : formatCount(item.by_severity?.warning ?? 0)}</td>
                       <td className="muted">{formatFinished(item.finished_at)}</td>
                       <td className="mini-tape-cell">
                         <MiniTape item={item} />

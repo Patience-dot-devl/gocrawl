@@ -48,6 +48,7 @@
 
 .cf-grid {
   display: grid;
+  align-items: end; /* fields with a hint (Bearer token) keep their input level with the others */
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 0 16px;
 }

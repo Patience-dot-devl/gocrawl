@@ -6,6 +6,7 @@ import type { LoginSession } from '../types/login'
 import CrawlFields from './crawlform/CrawlFields'
 import LoginPanel from './crawlform/LoginPanel'
 import { LOGOUT_EXCLUDE, fromParams, hostOf, splitList, toParams, withLine, type FormValues } from './crawlform/values'
+import { usePageTitle } from '../pageTitle'
 import { useSettings } from '../settings/context'
 import SitemapPreviewLine from './progress/SitemapPreviewLine'
 import { DEFAULT_MAX_PAGES } from './progress/tapeText'
@@ -18,6 +19,7 @@ function message(e: unknown): string {
 }
 
 export default function CrawlForm({ onStarted }: { onStarted: (id: string) => void }) {
+  usePageTitle('New crawl')
   const { settings, saveDefaults, error: settingsError } = useSettings()
   const defaults = settings?.crawl_defaults
   const [values, setValues] = useState<FormValues>(() => fromParams(defaults))

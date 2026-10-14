@@ -7,6 +7,7 @@ import Tape from '../components/tape/Tape'
 import { countTape, describeTape } from '../components/tape/tapeModel'
 import Button from '../components/ui/Button'
 import Notice from '../components/ui/Notice'
+import { usePageTitle } from '../pageTitle'
 import { href } from '../routes'
 import type { CompareMeta, CompareResult } from '../types/compare'
 import type { CrawlListItem, Explanation, Issue, Report } from '../types/crawls'
@@ -16,6 +17,11 @@ import './compare.css'
 type Tab = 'new' | 'resolved' | 'persisting'
 const TABS: Tab[] = ['new', 'resolved', 'persisting']
 const TAB_LABEL: Record<Tab, string> = { new: 'New', resolved: 'Resolved', persisting: 'Persisting' }
+const TAB_EMPTY: Record<Tab, string> = {
+  new: 'No new issues appeared.',
+  resolved: 'No issues were resolved.',
+  persisting: 'No issues carried over from the base crawl.',
+}
 const SEVERITIES = ['error', 'warning', 'info'] as const
 const MAX_URLS = 1000
 
@@ -216,7 +222,7 @@ function CompareResultView({
       </div>
       {TABS.filter((t) => visited.includes(t)).map((t) => (
         <div key={t} hidden={tab !== t}>
-          <IssueTable issues={lists[t]} explanations={explanations} />
+          <IssueTable issues={lists[t]} explanations={explanations} empty={TAB_EMPTY[t]} />
         </div>
       ))}
 
@@ -229,6 +235,7 @@ function CompareResultView({
 }
 
 export default function CompareView({ base, current }: { base?: string; current?: string }) {
+  usePageTitle('Compare crawls')
   const [crawls, setCrawls] = useState<CrawlListItem[] | null>(null)
   const [listError, setListError] = useState('')
   const [explanations, setExplanations] = useState<Record<string, Explanation>>({})
@@ -289,7 +296,7 @@ export default function CompareView({ base, current }: { base?: string; current?
     return (
       <label>
         {label}
-        <select value={value} onChange={(e) => choose(side, e.target.value)}>
+        <select name={side} value={value} onChange={(e) => choose(side, e.target.value)}>
           {!value && <option value="">Choose a crawl</option>}
           {candidates.map((c) => (
             <option key={c.id} value={c.id}>
