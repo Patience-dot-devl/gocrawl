@@ -81,8 +81,9 @@ breadth-first walk:
 - `inScope` filters each candidate URL by scheme, host (seed host ± subdomains, unless
   `FollowExternal`), and the exclude-then-include regex rules.
 - `RespectRobots` consults a per-host robots manager before fetching; `MaxPages` and
-  `MaxDepth` bound the walk. `MaxDuration` bounds the whole crawl's wall-clock time via a
-  context deadline.
+  `MaxDepth` bound the walk. `MaxDuration` bounds the
+  crawl's active time: a timer that stops while the crawl is paused cancels the crawl when the
+  budget is used up.
 - After fetching, links are extracted from the parsed document and pushed onto the frontier
   (skipping external links unless `FollowExternal`, and `nofollow` links unless
   `FollowNofollow`).
@@ -99,6 +100,12 @@ breadth-first walk:
   the page just recorded, the rate limit in effect, and 429/503 responses in the last minute.
   Calls are serialized in recording order and run while the engine holds its locks, so the
   callback must return quickly and never call back into the engine.
+- `Engine.Pause` and `Engine.Resume(rate)` hold back and release the frontier: in-flight
+  requests finish and are recorded, a task that was waiting on the rate limiter goes back to
+  the head of the queue, and cancellation still wakes a paused crawl. With
+  `Options.PauseOnThrottle` the engine pauses itself after sustained 429/503 responses.
+  `runner.Control` (through `runner.WithControl`) forwards pause and resume to the engine,
+  queueing a pause made during the sitemap pre-pass.
 - Stopping early (a canceled context, e.g. Ctrl-C or `MaxDuration`) still returns everything
   fetched so far as a result, flagged via `Result.Coverage.Interrupted` /
   `DurationLimitReached` rather than discarded as an error.

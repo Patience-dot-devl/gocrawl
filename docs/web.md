@@ -5,7 +5,7 @@ scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-14
+updated: 2026-10-13
 depends_on: ["mcp.md", "output.md", "redirect-check.md"]
 sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
 ---
@@ -168,6 +168,8 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/crawls` | List every job (in-memory, this process) merged with the store's saved history, newest first. Each item also carries `status_classes` (pages per status class: `2`, `3`, `4`, `5`, `x`), `tape_preview` (the crawl tape shortened to at most 160 characters, each standing for a run of pages and showing the worst status among them) and, when known, `sitemap_total` / `sitemap_fetched`. List items never carry the full tape. |
 | `GET /api/crawls/{id}` | One job's status, its live `progress` (see [Live progress](#live-progress)) and, once finished, its full `Report` (see [Output reference](output.md)). `?tape_from=N` returns only the tape characters from index `N`; a negative or non-numeric `N` is a `400`. Falls back to the store for an id that isn't a live job; saved crawls have no `progress`, but their report's `coverage.tape` / `tape_off` hold the same tape. An id that is neither (for example a crawl that was running when the server restarted) is a `404` with the fixed message `crawl not found` (never the store path). |
 | `POST /api/crawls/{id}/cancel` | Cancel a running crawl. Like Ctrl-C on the CLI, this doesn't error the crawl — it stops early and still returns whatever was fetched as a partial report (`Report.Coverage.Interrupted`), tracked here as job status `canceled`. |
+| `POST /api/crawls/{id}/pause` | Pause a running crawl: no new fetches start, requests already in flight finish. During the sitemap pre-pass the pause is queued and takes effect when crawling starts. `204`; `409` when the crawl isn't running or is already analyzing. |
+| `POST /api/crawls/{id}/resume` | Resume a paused crawl. JSON body, optional `rate` (requests per second, `> 0`) to continue at a new rate; `{}` keeps the current one. `204`; `409` when the crawl isn't paused. |
 | `GET /api/crawls/{id}/export?format=json\|csv\|html` | Download the finished report in any of the three formats gocrawl already writes, via `report.For(format)`. `409` for a live job that has no report yet (`crawl has not finished yet`) or that failed (`crawl failed, so there is no report to export`); `404` with the fixed message `crawl not found` for an id that is neither a live job nor a saved crawl. |
 | `POST /api/sitemap-preview` | Find a site's sitemap without crawling. JSON body `{url, include, exclude, allow_subdomains}`; returns `{found, total, sources, via_robots}`, where `total` counts only sitemap URLs inside that scope. Respects robots.txt and sends the crawl's default User-Agent. The preview sends no credentials (no Basic Auth, cookie or custom headers), so a site gated behind them may report no sitemap. |
 | `GET /api/settings` | The UI's saved settings: `theme` (`dark`, `light` or `system`), `crawl_defaults` (a crawl request body that pre-fills the New crawl form), and the read-only `store_dir`. |
@@ -189,7 +191,8 @@ All endpoints are under `/api`; everything else falls through to the embedded fr
 | `GET /api/compare?base=<ref>&current=<ref>` | Diff two crawls, `base` being the earlier one. The response is the same JSON as `gocrawl compare --format json`: new, resolved and persisting issues, summary deltas, and added and removed pages. A ref is a crawl ID from `GET /api/crawls` (a live job or a saved crawl), a host such as `example.com` (its newest saved crawl), or `latest`. File paths are not accepted. `400` when a ref is missing, `404` when one does not resolve, `409` when one names a crawl that is still running or paused. |
 | `POST /api/reports/import` | Save a gocrawl JSON report to the store, the web equivalent of `gocrawl render`. Multipart form with the report in the field `file`, up to 64 MB. Returns `201` with `{"id": "<host>/<timestamp>"}`; the crawl then appears in the crawl list and works with export and compare. `400` when the file is not a report or its `seed` is not an http(s) URL with a usable host, `413` when it is too large, `415` when the request is not `multipart/form-data`. An import with the same host and start time as a saved crawl replaces it. |
 
-Job status is one of `running`, `done`, `error`, `canceled`. The redirect-check endpoints use
+Job status is one of `running`, `paused`, `done`, `error`,
+`canceled`. A paused crawl still counts toward the running-crawl cap and can be canceled. The redirect-check endpoints use
 fixed error messages that never repeat the id, the domain, or a sitemap URL you sent, so a
 token in a sitemap URL cannot leak through an error.
 
@@ -221,8 +224,14 @@ transfers the new tape characters.
 | `throttled` | HTTP 429 and 503 responses in the last 60 seconds. |
 | `sitemap_found`, `sitemap_total`, `sitemap_fetched`, `off_sitemap`, `in_sitemap` | Progress against the site's sitemap: in-scope sitemap URLs, how many of them were fetched, fetched pages the sitemap doesn't list (equal to `fetched` when `sitemap_found` is false, since nothing is listed), and whether `current_url` is in it. `in_sitemap` also matches when the page redirected to a sitemap URL (`final_url`). |
 | `max_pages` | The page budget (`0` = unlimited). |
-| `active_ms` | How long the crawl has been running. |
+| `active_ms` | Active crawl time: time spent paused, and the sitemap pre-pass, don't count. |
+| `paused`, `pause_reason`, `retry_after_seconds` | Whether the crawl is paused, why (`user`, or `rate_limited` when it paused itself), and the latest `Retry-After` the server sent. |
 | `tape`, `tape_off`, `tape_from` | One character per recorded page, in fetch order. `tape` holds the status class (`2`, `3`, `4`, `5`, or `x` for a failed fetch); `tape_off` holds `1` for a page the sitemap doesn't list (and `0` otherwise). `tape_from` is the index the returned slice starts at. |
+
+Web crawls pause themselves when the site keeps rate limiting them: once adaptive delay has
+lowered the rate at least twice, ten or more 429/503 responses within a minute pause the crawl
+with `pause_reason: "rate_limited"`. The CLI and MCP never pause, because nobody is there to
+resume.
 
 Before every crawl, CLI and MCP included, gocrawl reads the site's sitemap once: robots.txt
 `Sitemap:` lines, then `/sitemap.xml` and `/sitemap_index.xml`, following indexes. Only URLs

@@ -127,7 +127,7 @@ coverage is the context you need to trust that result.
 | `page_limit_reached` | bool | The `--max-pages` budget cut the crawl short. Omitted when false. |
 | `depth_limit_reached` | bool | The `--depth` limit cut the crawl short. Omitted when false. |
 | `interrupted` | bool | The crawl was stopped early by context cancellation (e.g. Ctrl-C or `--max-duration`) rather than a configured limit. Omitted when false. |
-| `duration_limit_reached` | bool | The `--max-duration` wall-clock budget elapsed. Implies `interrupted`. Omitted when false. |
+| `duration_limit_reached` | bool | The `--max-duration` budget of active crawl time elapsed (time a web crawl spent paused doesn't count). Implies `interrupted`. Omitted when false. |
 | `max_pages` / `max_depth` | int | The limits in effect (`0` = unlimited). |
 | `sitemap_total` | int | In-scope URLs the site's sitemap lists, read once before the crawl. Omitted when no sitemap was found. |
 | `sitemap_fetched` | int | How many of those sitemap URLs this crawl fetched. Omitted when 0. |
