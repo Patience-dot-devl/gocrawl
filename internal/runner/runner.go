@@ -147,6 +147,7 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	if err != nil {
 		return nil, err
 	}
+	opts.PauseOnThrottle = settings.pauseOnThrottle
 	// Always on: besides feeding WithProgress, the reporter records the crawl tape saved in
 	// Coverage.Tape, so a saved report's tape matches the one the web UI showed live.
 	progress := newProgressReporter(settings.progress)
@@ -189,9 +190,13 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	progress.setPhase(PhaseSitemap)
 	sm := discoverSitemap(ctx, engine, governed, seed)
 	progress.setSitemap(sm, engine.Normalize)
+	// attach before announcing the crawling phase, so a pause queued during the pre-pass is
+	// already in the engine's state when the phase event goes out.
+	settings.control.attach(engine)
 	progress.setPhase(PhaseCrawling)
 
 	result, err := engine.Crawl(ctx, seed)
+	settings.control.detach()
 	if err != nil {
 		return nil, err
 	}
