@@ -113,3 +113,14 @@
 .ft-coverage b {
   font-variant-numeric: tabular-nums;
 }
+
+/* New crawl form: sitemap preview under the Site URL field. */
+.sp-wrap {
+  display: grid;
+  gap: 8px;
+}
+.sp-line {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+}
