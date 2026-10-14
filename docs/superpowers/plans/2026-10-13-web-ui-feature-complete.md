@@ -5,7 +5,7 @@ scope: "Task-by-task plan for the feature-complete web UI spec, in four waves"
 topic: "plan"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-10-14
 depends_on: ["../specs/2026-10-13-web-ui-feature-complete-design.md"]
 sources: []
 ---
@@ -36,6 +36,13 @@ TypeScript 7 + Vite 8, oxlint, a Node-builtin contrast script; Atkinson Hyperleg
 Mono (SIL OFL) bundled as WOFF2.
 
 **Spec:** [Feature-complete web UI](../specs/2026-10-13-web-ui-feature-complete-design.md)
+
+## Execution changes (2026-10-14)
+
+Decided after wave 1 merged, to cut token use. The tasks below are unchanged; how they run changed.
+
+- Each remaining track runs as one implementer and one review at merge time, one track at a time. Sonnet by default; Opus only for the pause-backend review and the final branch review; Haiku for the API-module tasks (W2-SET-1, W2-LOGIN-1, W2-CMP-1) and all docs-and-changelog tasks, each batched into one run.
+- Accessibility work beyond the contrast guard, existing accessibility code and native elements is deferred to one dedicated pass after wave 3. Task steps that ask for ARIA, live regions, focus management, keyboard flows or screen-reader text are skipped until that pass.
 
 ## Global Constraints
 
