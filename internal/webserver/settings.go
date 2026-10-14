@@ -37,6 +37,12 @@ const (
 	maxSettingsBody = 1 << 20
 )
 
+// Fixed 500 messages: the underlying errors quote the settings file's path.
+var (
+	errSettingsUnreadable = errors.New("could not read the settings file: check that it is readable, or save the settings again to replace it")
+	errSettingsNotSaved   = errors.New("could not save the settings: check that the settings folder is writable and try again")
+)
+
 var validThemes = map[string]bool{"dark": true, "light": true, "system": true}
 
 // WithGUISettingsPath sets the file GET and PUT /api/settings read and write (gocrawl serve
@@ -63,7 +69,8 @@ func (s *Server) settingsRoutes() {
 func (s *Server) handleGetSettings(w http.ResponseWriter, _ *http.Request) {
 	settings, err := loadGUISettings(s.guiSettingsPath)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		// The error names the settings file's path, which stays out of the response.
+		writeError(w, http.StatusInternalServerError, errSettingsUnreadable)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.settingsView(settings))
@@ -100,7 +107,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := saveGUISettings(s.guiSettingsPath, in); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("saving settings: %w", err))
+		writeError(w, http.StatusInternalServerError, errSettingsNotSaved)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.settingsView(in))

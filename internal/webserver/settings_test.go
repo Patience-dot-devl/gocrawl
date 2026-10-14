@@ -189,8 +189,9 @@ func TestGetSettingsReportsCorruptFile(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
-	if msg, _ := out["error"].(string); !strings.Contains(msg, path) {
-		t.Errorf("error %q doesn't name the file", msg)
+	// The binding rule: no filesystem path in a response. The message says what to do instead.
+	if msg, _ := out["error"].(string); strings.Contains(msg, path) || !strings.Contains(msg, "settings file") {
+		t.Errorf("error %q should describe the settings file without its path", msg)
 	}
 }
 

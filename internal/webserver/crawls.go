@@ -120,7 +120,8 @@ func (s *Server) handleListCrawls(w http.ResponseWriter, _ *http.Request) {
 
 	entries, err := s.store.List("")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		// The store error names the server's store path, which stays out of the response.
+		writeError(w, http.StatusInternalServerError, errors.New("could not read the saved crawls: check that the crawl store is readable and try again"))
 		return
 	}
 	for _, e := range entries {

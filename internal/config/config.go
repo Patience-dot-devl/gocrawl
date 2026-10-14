@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -386,8 +387,12 @@ func (c CrawlConfig) loadHeaders() (http.Header, error) {
 			return nil, fmt.Errorf("header_profile: %w", err)
 		}
 		profile, err := readHeaderFile(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			// Not the OS error: it quotes the profile's path, and this reaches MCP and web responses.
+			return nil, fmt.Errorf("header profile %q not found", name)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("header_profile %q: %w", name, err)
+			return nil, fmt.Errorf("header profile %q could not be read (check its file permissions)", name)
 		}
 		if err := add(profile, fmt.Sprintf("header_profile %q", name)); err != nil {
 			return nil, err

@@ -31,7 +31,7 @@ func (s *Server) profileRoutes() {
 func (s *Server) handleListProfiles(w http.ResponseWriter, _ *http.Request) {
 	names, err := config.ListHeaderProfiles()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeError(w, http.StatusInternalServerError, errProfilesUnreadable)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profiles": names})
@@ -41,7 +41,7 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	body, err := config.ReadHeaderProfile(name)
 	if err != nil {
-		writeError(w, profileErrorStatus(err), err)
+		writeProfileError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, headerProfileView{Name: name, Body: body})
@@ -64,7 +64,7 @@ func (s *Server) handlePutProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := config.SaveHeaderProfile(r.PathValue("name"), in.Body); err != nil {
-		writeError(w, profileErrorStatus(err), err)
+		writeProfileError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -72,20 +72,27 @@ func (s *Server) handlePutProfile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 	if err := config.DeleteHeaderProfile(r.PathValue("name")); err != nil {
-		writeError(w, profileErrorStatus(err), err)
+		writeProfileError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// profileErrorStatus maps a config header-profile error to its HTTP status.
-func profileErrorStatus(err error) int {
+var (
+	errProfilesUnreadable = errors.New("could not read the header profiles folder: check that it is readable and try again")
+	errProfileIO          = errors.New("could not read or write the header profile: check that the header profiles folder is writable and try again")
+)
+
+// writeProfileError answers a config header-profile error. Invalid-name and not-found errors
+// carry only the profile name, so they pass through; anything else is an OS error that quotes
+// the profile's path, so it becomes a fixed 500 message.
+func writeProfileError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, config.ErrInvalidHeaderProfile):
-		return http.StatusBadRequest
+		writeError(w, http.StatusBadRequest, err)
 	case errors.Is(err, fs.ErrNotExist):
-		return http.StatusNotFound
+		writeError(w, http.StatusNotFound, err)
 	default:
-		return http.StatusInternalServerError
+		writeError(w, http.StatusInternalServerError, errProfileIO)
 	}
 }
