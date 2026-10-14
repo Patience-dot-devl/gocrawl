@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { AnalyzerInfo } from '../../types/crawls'
 import Button from '../ui/Button'
-import type { FieldsMode, FormValues } from './values'
+import { LOGOUT_EXCLUDE, splitList, type FieldsMode, type FormValues } from './values'
 import '../CrawlForm.css'
 
 interface Props {
@@ -158,6 +158,12 @@ export default function CrawlFields({ values: v, onChange, mode, analyzers, prof
             <span className="cf-label">Exclude (regex, one per line)</span>
             <span className="cf-hint">Matched against the full URL.</span>
             <textarea name="exclude" rows={2} placeholder="/admin/" value={v.exclude} onChange={(e) => onChange({ exclude: e.target.value })} />
+            {crawl && splitList(v.exclude).includes(LOGOUT_EXCLUDE) && (
+              <span className="cf-hint">
+                {LOGOUT_EXCLUDE} keeps the crawl away from logout links, which would end your browser
+                login. Remove the line if you need those pages crawled.
+              </span>
+            )}
           </label>
           <label className="cf-field">
             <span className="cf-label">User-Agent</span>

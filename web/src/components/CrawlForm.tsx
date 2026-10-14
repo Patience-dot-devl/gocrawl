@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { listAnalyzers, startCrawl } from '../api/crawls'
 import { listHeaderProfiles } from '../api/profiles'
 import type { AnalyzerInfo, StartCrawlParams } from '../types/crawls'
+import type { LoginSession } from '../types/login'
 import CrawlFields from './crawlform/CrawlFields'
-import { fromParams, splitList, toParams, type FormValues } from './crawlform/values'
+import LoginPanel from './crawlform/LoginPanel'
+import { LOGOUT_EXCLUDE, fromParams, hostOf, loginExpired, splitList, toParams, withLine, type FormValues } from './crawlform/values'
 import { useSettings } from '../settings/context'
 import SitemapPreviewLine from './progress/SitemapPreviewLine'
 import { DEFAULT_MAX_PAGES } from './progress/tapeText'
@@ -31,6 +33,18 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   const [profiles, setProfiles] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [login, setLogin] = useState<LoginSession | null>(null)
+  const loginBlocked =
+    values.render === 'headless'
+      ? 'Browser login works with raw rendering only. Set Render to raw first.'
+      : values.cookieAuth && values.cookie.trim()
+        ? 'Clear the cookie header first: the browser login supplies the cookies.'
+        : ''
+
+  function addLogoutExclude() {
+    setDirty(true)
+    setValues((v) => ({ ...v, exclude: withLine(v.exclude, LOGOUT_EXCLUDE) }))
+  }
 
   useEffect(() => {
     listAnalyzers()
@@ -65,9 +79,25 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       setError('Use a bearer token or Basic Auth, not both: they set the same Authorization header.')
       return
     }
+    if (login?.state === 'waiting') {
+      setError('Finish the browser login first: press "I\'m logged in", or cancel it.')
+      return
+    }
+    if (login?.state === 'captured' && loginExpired(login)) {
+      setError('Login expired — log in again.')
+      return
+    }
+    if (login?.state === 'captured' && hostOf(values.url) !== login.host) {
+      setError(`The browser login is for ${login.host}, but the seed URL is on ${hostOf(values.url) || 'another host'}. Log in again for this site.`)
+      return
+    }
     setSubmitting(true)
     setError('')
     const params: StartCrawlParams = { ...toParams(values, 'crawl'), url: values.url.trim(), save: values.save }
+    if (login?.state === 'captured') {
+      params.login_session = login.id
+      delete params.cookie
+    }
     try {
       const job = await startCrawl(params)
       onStarted(job.id)
@@ -101,7 +131,23 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
         maxPages={values.maxPages.trim() === '' ? DEFAULT_MAX_PAGES : Number(values.maxPages)}
         onRaiseBudget={(pages) => update({ maxPages: String(pages) })}
       />
-      <CrawlFields values={values} onChange={update} mode="crawl" analyzers={analyzers} profiles={profiles} />
+      <CrawlFields
+        values={values}
+        onChange={update}
+        mode="crawl"
+        analyzers={analyzers}
+        profiles={profiles}
+        cookieLocked={login?.state === 'captured'}
+        loginSlot={
+          <LoginPanel
+            url={values.url}
+            blockedReason={loginBlocked}
+            session={login}
+            onSession={setLogin}
+            onStarted={addLogoutExclude}
+          />
+        }
+      />
       {error && <Notice tone="error">{error}</Notice>}
       {defaultsNote && <Notice tone="info">{defaultsNote}</Notice>}
       <div className="cf-actions">

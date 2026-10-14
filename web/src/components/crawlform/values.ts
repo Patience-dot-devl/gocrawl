@@ -1,3 +1,4 @@
+import type { LoginSession } from '../../types/login'
 import type { CrawlDefaults } from '../../types/settings'
 
 // 'crawl' is the New crawl form; 'defaults' is the Settings view, which never holds secrets.
@@ -179,4 +180,35 @@ export function toParams(v: FormValues, mode: FieldsMode): CrawlDefaults {
     if (v.bearerToken.trim()) p.bearer_token = v.bearerToken.trim()
   }
   return p
+}
+
+// Added to the exclude field when a browser login starts, so the crawl doesn't follow a
+// logout link and end the session. It stays visible in the field and can be removed.
+export const LOGOUT_EXCLUDE = '(?i)(log|sign)-?out'
+
+// withLine appends line to a newline-separated list unless it is already there.
+export function withLine(list: string, line: string): string {
+  const lines = splitList(list)
+  return lines.includes(line) ? list : [...lines, line].join('\n')
+}
+
+// hostOf returns the lower-case host name of a seed URL as the server computes it
+// (https:// assumed when missing), or '' when it doesn't parse.
+export function hostOf(url: string): string {
+  const raw = url.trim()
+  if (!raw) return ''
+  try {
+    return new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  } catch {
+    return ''
+  }
+}
+
+// loginExpired is true once a captured login's earliest cookie has expired. A session without
+// expires_at (only session cookies) lasts until the server drops it, which the panel's poll
+// and the start request report.
+export function loginExpired(session: LoginSession, now: number = Date.now()): boolean {
+  if (!session.expires_at) return false
+  const t = Date.parse(session.expires_at)
+  return !Number.isNaN(t) && t <= now
 }
