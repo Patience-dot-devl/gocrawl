@@ -151,5 +151,6 @@ export interface StartCrawlParams {
   follow_nofollow?: boolean
   timeout?: string
   bearer_token?: string
+  login_session?: string
   save: boolean
 }
