@@ -3,7 +3,7 @@ id: "2026-10-13-web-ui-feature-complete"
 title: "Feature-Complete Web UI Implementation Plan"
 scope: "Task-by-task plan for the feature-complete web UI spec, in four waves"
 topic: "plan"
-status: "current"
+status: "archived"
 superseded_by: []
 updated: 2026-10-14
 depends_on: ["../specs/2026-10-13-web-ui-feature-complete-design.md"]

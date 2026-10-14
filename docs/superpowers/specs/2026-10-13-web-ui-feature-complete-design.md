@@ -3,9 +3,9 @@ id: "2026-10-13-web-ui-feature-complete-design"
 title: "Feature-complete web UI"
 scope: "Proposal to bring every CLI capability into the web UI, with live sitemap-based progress, pause/resume, crawl auth, and a new visual system; approved, not yet built"
 topic: "spec"
-status: "current"
+status: "archived"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-10-14
 depends_on: []
 sources: []
 ---
