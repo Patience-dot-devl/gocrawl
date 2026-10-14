@@ -45,6 +45,8 @@ type AdaptiveLimiter struct {
 	curRate       float64 // current req/s after any backoff (0 = still unlimited)
 	lastAdjust    time.Time
 	throttleCount int
+	// debounce is backoffDebounce; a field so engine tests can turn it off.
+	debounce time.Duration
 	// recent holds the arrival time of every 429/503 response within throttleWindow, oldest
 	// first. Pruned on every write and read.
 	recent []time.Time
@@ -63,6 +65,7 @@ func NewAdaptiveLimiter(ratePerSecond float64, enabled bool) *AdaptiveLimiter {
 		limiter:  rate.NewLimiter(limit, 1),
 		enabled:  enabled,
 		baseRate: ratePerSecond,
+		debounce: backoffDebounce,
 	}
 }
 
@@ -96,7 +99,7 @@ func (a *AdaptiveLimiter) OnResponse(statusCode int, header http.Header) (adjust
 	if !a.enabled {
 		return false, 0
 	}
-	if !a.lastAdjust.IsZero() && now.Sub(a.lastAdjust) < backoffDebounce {
+	if !a.lastAdjust.IsZero() && now.Sub(a.lastAdjust) < a.debounce {
 		return false, 0
 	}
 	a.lastAdjust = now
@@ -222,4 +225,26 @@ func (f *AdaptiveFetcher) Fetch(ctx context.Context, rawURL string) (*Page, erro
 		f.Limiter.OnResponse(page.StatusCode, page.Header)
 	}
 	return page, err
+}
+
+// SetRate replaces the current rate (an operator resuming at a chosen speed). r <= 0 is
+// ignored. Later 429/503s halve from the new rate.
+func (a *AdaptiveLimiter) SetRate(r float64) {
+	if r <= 0 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.curRate = r
+	a.limiter.SetLimit(rate.Limit(r))
+}
+
+// ResetRecent forgets the recent 429/503 window and the last Retry-After, so a resumed crawl
+// gets a fresh minute before auto-pause can trigger again, and a second pause can't report the
+// previous pause's wait.
+func (a *AdaptiveLimiter) ResetRecent() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.recent = nil
+	a.lastRetryAfter = 0
 }

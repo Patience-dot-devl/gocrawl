@@ -14,7 +14,7 @@ import (
 // enforced Crawl-delay) without disturbing overall ordering.
 //
 // Termination uses reference counting: pending counts tasks that are queued or being
-// processed by a worker. push increments it; taskDone (called exactly once per task returned
+// processed by a worker. push and pushFront increment it; taskDone (called exactly once per task returned
 // by next) decrements it. The frontier is exhausted once pending reaches zero with the queue
 // empty — by construction this can't happen while a task that might still push children is
 // outstanding, since a worker always pushes a task's children before calling taskDone for it.
@@ -23,6 +23,9 @@ type frontier struct {
 	cond    *sync.Cond
 	queue   []task
 	pending int
+	// paused makes next hold back queued tasks (Engine.Pause). Cancellation and exhaustion
+	// still end next, so a paused crawl can be stopped and a crawl with nothing left ends.
+	paused bool
 }
 
 func newFrontier() *frontier {
@@ -48,9 +51,9 @@ func (f *frontier) queued() int {
 }
 
 // next blocks until a task is available, ctx is done, or the frontier is exhausted (nothing
-// queued and nothing pending), returning ok=false in the latter two cases. Checking ctx first
-// on every wake means a cancellation abandons any remaining queued work immediately rather
-// than draining it.
+// queued and nothing pending), returning ok=false in the latter two cases. While paused it
+// hands out nothing but keeps waiting. Checking ctx first on every wake means a cancellation
+// abandons any remaining queued work immediately rather than draining it.
 func (f *frontier) next(ctx context.Context) (task, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -58,16 +61,36 @@ func (f *frontier) next(ctx context.Context) (task, bool) {
 		if ctx.Err() != nil {
 			return task{}, false
 		}
-		if len(f.queue) > 0 {
+		// pending counts queued tasks too, so pending == 0 means the queue is empty.
+		if f.pending == 0 {
+			return task{}, false
+		}
+		if !f.paused && len(f.queue) > 0 {
 			t := f.queue[0]
 			f.queue = f.queue[1:]
 			return t, true
 		}
-		if f.pending == 0 {
-			return task{}, false
-		}
 		f.cond.Wait()
 	}
+}
+
+// setPaused holds back (true) or releases (false) queued tasks and wakes every waiter.
+func (f *frontier) setPaused(p bool) {
+	f.mu.Lock()
+	f.paused = p
+	f.mu.Unlock()
+	f.cond.Broadcast()
+}
+
+// pushFront puts a task a worker took but did not process back at the head of the queue and
+// marks it pending again. The worker must still call taskDone for its original turn; pending
+// never touches zero in between because pushFront increments first.
+func (f *frontier) pushFront(t task) {
+	f.mu.Lock()
+	f.pending++
+	f.queue = append([]task{t}, f.queue...)
+	f.mu.Unlock()
+	f.cond.Signal()
 }
 
 // taskDone marks one task, previously returned by next, as fully processed — including having

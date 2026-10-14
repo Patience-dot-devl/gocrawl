@@ -62,7 +62,7 @@ func pollUntilFinished(t *testing.T, srv *Server, id string) map[string]any {
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		_, job := doJSON(t, srv, http.MethodGet, "/api/crawls/"+id, nil)
-		if job["status"] != "running" {
+		if job["status"] != "running" && job["status"] != "paused" {
 			return job
 		}
 		time.Sleep(20 * time.Millisecond)

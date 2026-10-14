@@ -11,13 +11,29 @@ type RunOption func(*runSettings)
 type runSettings struct {
 	// progress receives a Progress snapshot per recorded page and per phase change.
 	progress func(Progress)
+	// control forwards Pause/Resume to the engine during the crawl phase.
+	control *Control
+	// pauseOnThrottle sets crawler.Options.PauseOnThrottle.
+	pauseOnThrottle bool
 }
 
-// WithProgress makes Run report progress to fn: one call per phase change and one per page
-// the crawl records, serialized and in order. fn runs on crawl goroutines while the engine
+// WithProgress makes Run report progress to fn: one call per phase change, one per page the
+// crawl records, and one per pause or resume, serialized and in order. fn runs on crawl
+// goroutines (or, for a pause or resume, on the goroutine that asked for it) while the engine
 // holds its locks, so it must return quickly and must not call a Control method.
 func WithProgress(fn func(Progress)) RunOption {
 	return func(s *runSettings) { s.progress = fn }
+}
+
+// WithControl lets the caller pause and resume this Run's crawl through c.
+func WithControl(c *Control) RunOption {
+	return func(s *runSettings) { s.control = c }
+}
+
+// WithPauseOnThrottle makes the crawl pause itself after sustained 429/503 responses (see
+// crawler.Options.PauseOnThrottle). Only for callers that can resume it, like the web UI.
+func WithPauseOnThrottle() RunOption {
+	return func(s *runSettings) { s.pauseOnThrottle = true }
 }
 
 // newRunSettings applies opts in order, skipping nil entries so a caller can pass an

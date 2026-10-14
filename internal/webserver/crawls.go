@@ -22,6 +22,8 @@ func (s *Server) crawlRoutes() {
 	s.mux.HandleFunc("GET /api/crawls", s.handleListCrawls)
 	s.mux.HandleFunc("GET /api/crawls/{id}", s.handleGetCrawl)
 	s.mux.HandleFunc("POST /api/crawls/{id}/cancel", s.handleCancelCrawl)
+	s.mux.HandleFunc("POST /api/crawls/{id}/pause", s.handlePauseCrawl)
+	s.mux.HandleFunc("POST /api/crawls/{id}/resume", s.handleResumeCrawl)
 	s.mux.HandleFunc("GET /api/crawls/{id}/export", s.handleExportCrawl)
 }
 
@@ -76,7 +78,8 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	job, ok := s.crawls.start(crawlJob{Seed: seed, MaxPages: cfg.Crawl.MaxPages}, cancel, s.maxRunning)
+	ctl := runner.NewControl()
+	job, ok := s.crawls.start(crawlJob{Seed: seed, MaxPages: cfg.Crawl.MaxPages, control: ctl}, cancel, s.maxRunning)
 	if !ok {
 		cancel()
 		writeError(w, http.StatusTooManyRequests, fmt.Errorf("%d crawls already running; wait for one to finish or cancel it", s.maxRunning))
@@ -85,7 +88,7 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer cancel()
-		rep, runErr := runner.Run(ctx, cfg, seed, s.crawlRunOptions(job.ID)...)
+		rep, runErr := runner.Run(ctx, cfg, seed, s.crawlRunOptions(job.ID, ctl)...)
 		// Save before finishing, so a poller that sees the job finish also sees it persisted.
 		var storeID string
 		if runErr == nil && req.Save {

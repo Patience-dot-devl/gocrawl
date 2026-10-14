@@ -6,7 +6,7 @@ import (
 )
 
 // crawlJob is the crawl-specific part of a Job: what the web API knows about one crawl
-// beyond its lifecycle. Later features add their fields here (the pause control).
+// beyond its lifecycle.
 type crawlJob struct {
 	Seed    string
 	Report  *report.Report
@@ -20,6 +20,9 @@ type crawlJob struct {
 	// '1' where that page is not in the sitemap. Appended only under the job manager's lock.
 	Tape    []byte
 	TapeOff []byte
+	// control pauses and resumes the crawl. Call its Pause/Resume outside s.crawls.with: they
+	// emit a progress event whose callback takes the job manager's lock.
+	control *runner.Control
 }
 
 // JobView is the API representation of a crawl job.
