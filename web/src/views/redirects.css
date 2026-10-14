@@ -1,0 +1,117 @@
+/* Redirects views: the check form and session list (RedirectsView), and the progress and
+   results of one check (RedirectView). Labels sit above their field in sentence case. */
+.redirect-form {
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+  margin-bottom: 32px;
+}
+
+.redirect-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.redirect-form input[type='text'],
+.redirect-form input[type='url'] {
+  width: 100%;
+}
+
+.redirect-form .redirect-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.redirect-form .redirect-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.redirect-hint {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+/* A server error can span lines (a CSV header mismatch lists the columns), so keep its
+   line breaks. */
+.redirect-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.redirect-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.redirect-progress progress {
+  flex: 1 1 256px;
+  height: 12px;
+  accent-color: var(--violet);
+}
+
+.redirect-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  margin: 16px 0;
+}
+
+.redirect-muted {
+  color: var(--ink-2);
+}
+
+.redirect-verdict-error {
+  font-weight: 600;
+}
+
+.redirect-table {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+.redirect-table th,
+.redirect-table td {
+  padding: 7px 12px;
+  border-top: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.redirect-table thead th {
+  border-top: 0;
+  white-space: nowrap;
+}
+
+.redirect-url {
+  max-width: 352px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.redirect-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.redirect-notes {
+  min-width: 240px;
+  overflow-wrap: anywhere;
+}
