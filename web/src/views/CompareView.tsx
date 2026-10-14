@@ -7,6 +7,7 @@ import Tape from '../components/tape/Tape'
 import { countTape, describeTape } from '../components/tape/tapeModel'
 import Button from '../components/ui/Button'
 import Notice from '../components/ui/Notice'
+import { usePageTitle } from '../pageTitle'
 import { href } from '../routes'
 import type { CompareMeta, CompareResult } from '../types/compare'
 import type { CrawlListItem, Explanation, Issue, Report } from '../types/crawls'
@@ -234,6 +235,7 @@ function CompareResultView({
 }
 
 export default function CompareView({ base, current }: { base?: string; current?: string }) {
+  usePageTitle('Compare crawls')
   const [crawls, setCrawls] = useState<CrawlListItem[] | null>(null)
   const [listError, setListError] = useState('')
   const [explanations, setExplanations] = useState<Record<string, Explanation>>({})

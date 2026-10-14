@@ -7,12 +7,17 @@
   margin-bottom: 32px;
 }
 
-.redirect-form label {
+.redirect-form label,
+.redirect-form .redirect-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.redirect-form .redirect-field label {
+  display: block;
 }
 
 .redirect-form input[type='text'],

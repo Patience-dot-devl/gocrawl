@@ -1,17 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useId, useState, type FormEvent } from 'react'
 import { listRedirectChecks, startRedirectCheck } from '../api/redirects'
 import Button from '../components/ui/Button'
 import Notice from '../components/ui/Notice'
+import { usePageTitle } from '../pageTitle'
 import { href, navigate } from '../routes'
-import type { RedirectCheck, RedirectCheckStatus } from '../types/redirects'
+import type { RedirectCheck } from '../types/redirects'
 import './redirects.css'
 
-const STATUS_LABEL: Record<RedirectCheckStatus, string> = {
-  running: 'Running',
-  done: 'Done',
-  error: 'Failed',
-  canceled: 'Canceled',
-}
+import { STATUS_LABEL } from './redirects/status'
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -24,6 +20,8 @@ function formatStarted(s?: string): string {
 }
 
 export default function RedirectsView() {
+  usePageTitle('Redirects')
+  const uid = useId()
   const [file, setFile] = useState<File | null>(null)
   const [domain, setDomain] = useState('')
   const [sitemapURL, setSitemapURL] = useState('')
@@ -74,20 +72,27 @@ export default function RedirectsView() {
       </p>
 
       <form className="redirect-form" onSubmit={onSubmit}>
-        <label>
-          Redirect rules (CSV)
+        <div className="redirect-field">
+          <label htmlFor={`${uid}-file`}>Redirect rules (CSV)</label>
           <input
+            id={`${uid}-file`}
+            aria-describedby={`${uid}-file-hint`}
             type="file"
             name="file"
             accept=".csv,text/csv"
             required
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-          <span className="redirect-hint">A HubSpot URL Redirects export, up to 10 MB.</span>
-        </label>
-        <label>
-          Domain
+          <span className="redirect-hint" id={`${uid}-file-hint`}>
+            A HubSpot URL Redirects export, up to 10 MB. The rules need full URLs (https://example.com/old); a path alone
+            counts as external and is skipped.
+          </span>
+        </div>
+        <div className="redirect-field">
+          <label htmlFor={`${uid}-domain`}>Domain</label>
           <input
+            id={`${uid}-domain`}
+            aria-describedby={`${uid}-domain-hint`}
             type="text"
             name="domain"
             required
@@ -95,19 +100,26 @@ export default function RedirectsView() {
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
           />
-          <span className="redirect-hint">Subdomains count as in scope. Rules that point at other domains are skipped.</span>
-        </label>
-        <label>
-          Sitemap URL (optional)
+          <span className="redirect-hint" id={`${uid}-domain-hint`}>
+            Subdomains count as in scope. Rules that point at other domains are skipped. For a site on http or a custom
+            port, also fill in the sitemap URL below.
+          </span>
+        </div>
+        <div className="redirect-field">
+          <label htmlFor={`${uid}-sitemap`}>Sitemap URL (optional)</label>
           <input
+            id={`${uid}-sitemap`}
+            aria-describedby={`${uid}-sitemap-hint`}
             type="url"
             name="sitemap_url"
             placeholder="https://example.com/sitemap.xml"
             value={sitemapURL}
             onChange={(e) => setSitemapURL(e.target.value)}
           />
-          <span className="redirect-hint">Leave empty to try /sitemap.xml and /sitemap_index.xml.</span>
-        </label>
+          <span className="redirect-hint" id={`${uid}-sitemap-hint`}>
+            Leave empty to try /sitemap.xml and /sitemap_index.xml.
+          </span>
+        </div>
         <div className="redirect-row">
           <label>
             Rate (requests per second)

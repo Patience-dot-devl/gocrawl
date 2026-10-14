@@ -22,7 +22,11 @@ interface Props {
 export default function CrawlControls({ id, status, phase, resumeRate, onChanged, onError, onStop }: Props) {
   const [busy, setBusy] = useState(false)
 
+  // The button stays enabled in the DOM while a request runs (aria-disabled, with the click
+  // ignored): a disabled button loses keyboard focus. Pause and Resume crawl are also one
+  // button whose label changes, so the node, and focus with it, survives the swap.
   async function act(verb: 'pause' | 'resume', action: () => Promise<void>) {
+    if (busy) return
     setBusy(true)
     try {
       await action()
@@ -34,18 +38,18 @@ export default function CrawlControls({ id, status, phase, resumeRate, onChanged
     }
   }
 
+  const paused = status === 'paused'
+
   return (
     <>
-      {status === 'paused' ? (
-        <Button variant="go" disabled={busy} onClick={() => void act('resume', () => resumeCrawl(id, resumeRate))}>
-          Resume crawl
+      {(paused || phase !== 'analyzing') && (
+        <Button
+          variant={paused ? 'go' : 'pause'}
+          aria-disabled={busy || undefined}
+          onClick={() => void (paused ? act('resume', () => resumeCrawl(id, resumeRate)) : act('pause', () => pauseCrawl(id)))}
+        >
+          {paused ? 'Resume crawl' : 'Pause'}
         </Button>
-      ) : (
-        phase !== 'analyzing' && (
-          <Button variant="pause" disabled={busy} onClick={() => void act('pause', () => pauseCrawl(id))}>
-            Pause
-          </Button>
-        )
       )}
       <Button variant="stop" onClick={onStop}>
         Stop crawl

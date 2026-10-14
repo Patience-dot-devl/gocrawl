@@ -4,8 +4,10 @@ import { cancelRedirectCheck, getRedirectCheck, redirectExportURL } from '../api
 import Button from '../components/ui/Button'
 import Notice from '../components/ui/Notice'
 import StatusCode from '../components/ui/StatusCode'
+import { usePageTitle } from '../pageTitle'
 import { href } from '../routes'
 import type { RedirectCheck, RedirectScope, RedirectVerdict } from '../types/redirects'
+import { STATUS_LABEL } from './redirects/status'
 import './redirects.css'
 
 const POLL_MS = 1500
@@ -41,6 +43,12 @@ function Status({ code }: { code: number }) {
   return code > 0 ? <StatusCode code={code} /> : <span className="redirect-muted">—</span>
 }
 
+// A server error as a sentence: first letter capital, one full stop at the end.
+function sentence(text: string): string {
+  const t = text.trim().replace(/[.\s]+$/, '')
+  return t ? `${t.charAt(0).toUpperCase()}${t.slice(1)}.` : ''
+}
+
 function yesNo(b: boolean): string {
   return b ? 'yes' : 'no'
 }
@@ -55,6 +63,7 @@ export default function RedirectView({ id }: { id: string }) {
   const [canceling, setCanceling] = useState(false)
   const [verdict, setVerdict] = useState<RedirectVerdict | ''>('')
   const [scope, setScope] = useState<RedirectScope | 'all'>('all')
+  usePageTitle(notFound ? 'Redirect check not found' : check ? `${check.domain} - Redirect check` : 'Redirect check')
 
   useEffect(() => {
     let stopped = false
@@ -139,8 +148,8 @@ export default function RedirectView({ id }: { id: string }) {
   return (
     <div className="redirects">
       <h1>Redirect check: {check.domain}</h1>
-      <p className="redirect-muted">
-        {check.file_name || 'Redirect rules'} · {check.total.toLocaleString()} rules · {check.status}
+      <p className="redirect-muted" role="status">
+        {check.file_name || 'Redirect rules'} · {check.total.toLocaleString()} rules · {STATUS_LABEL[check.status] ?? check.status}
       </p>
       {error && (
         <Notice tone="error">
@@ -169,12 +178,22 @@ export default function RedirectView({ id }: { id: string }) {
 
       {check.status === 'error' && (
         <Notice tone="error" action={back}>
-          <div className="redirect-error">{check.error}</div>
+          <p>
+            <strong>The check could not finish.</strong>
+          </p>
+          <div className="redirect-error">{sentence(check.error ?? '')}</div>
+          <p>Check the domain and the sitemap URL, then run the check again.</p>
         </Notice>
       )}
 
       {check.status === 'done' && rows && (
         <>
+          {rows.length > 0 && rows.every((r) => r.verdict === 'skipped-external') && (
+            <Notice tone="warning">
+              Every rule was skipped as external. Check that the domain matches the URLs in the file, and that the file
+              uses full URLs (https://example.com/old), not paths.
+            </Notice>
+          )}
           <p>
             {VERDICTS.filter((v) => verdictCounts[v])
               .map((v) => `${verdictCounts[v].toLocaleString()} ${VERDICT_LABEL[v].toLowerCase()}`)
@@ -183,7 +202,7 @@ export default function RedirectView({ id }: { id: string }) {
           <div className="redirect-filters">
             <label>
               Verdict
-              <select value={verdict} onChange={(e) => setVerdict(e.target.value as RedirectVerdict | '')}>
+              <select name="verdict" value={verdict} onChange={(e) => setVerdict(e.target.value as RedirectVerdict | '')}>
                 <option value="">All verdicts</option>
                 {VERDICTS.map((v) => (
                   <option key={v} value={v}>
@@ -194,7 +213,7 @@ export default function RedirectView({ id }: { id: string }) {
             </label>
             <label>
               Scope
-              <select value={scope} onChange={(e) => setScope(e.target.value as RedirectScope | 'all')}>
+              <select name="scope" value={scope} onChange={(e) => setScope(e.target.value as RedirectScope | 'all')}>
                 <option value="all">All scopes</option>
                 {SCOPES.map((s) => (
                   <option key={s} value={s}>

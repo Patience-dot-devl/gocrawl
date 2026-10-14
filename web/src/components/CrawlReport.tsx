@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cancelCrawl, exportURL, listExplanations } from '../api/crawls'
 import { ApiError } from '../api/client'
+import { usePageTitle } from '../pageTitle'
 import { href } from '../routes'
 import SiteMap from './SiteMap'
 import { STATUS_PILL } from '../crawlStatus'
@@ -39,6 +40,7 @@ export default function CrawlReport({ id }: { id: string }) {
   // is an inline notice above the report (a refresh failed, polling goes on); actionError is an
   // inline notice for a failed action (Pause, Resume crawl, Stop crawl).
   const { job, progress, tape, tapeOff, recent, receivedAt, loadError, pollError, refresh } = useCrawlPoll(id)
+  usePageTitle(loadError?.notFound ? 'Crawl not found' : job ? `${hostOf(job.seed)} - Crawl` : 'Crawl')
   const [actionError, setActionError] = useState('')
   const [confirmStop, setConfirmStop] = useState(false)
   // null until the user edits "Resume at": the field then shows half the current rate.

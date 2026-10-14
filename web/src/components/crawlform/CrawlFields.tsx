@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import type { AnalyzerInfo } from '../../types/crawls'
+import { href } from '../../routes'
 import Button from '../ui/Button'
 import { LOGOUT_EXCLUDE, splitList, type FieldsMode, type FormValues } from './values'
 import '../CrawlForm.css'
@@ -21,6 +22,8 @@ interface Props {
 // defaults. The seed URL and the form's own actions stay in the caller.
 export default function CrawlFields({ values: v, onChange, mode, analyzers, profiles, loginSlot, cookieLocked = false }: Props) {
   const crawl = mode === 'crawl'
+  const uid = useId()
+  const logoutHint = crawl && splitList(v.exclude).includes(LOGOUT_EXCLUDE)
   const selected = new Set(v.analyzers)
   const profileOptions = v.headerProfile && !profiles.includes(v.headerProfile) ? [...profiles, v.headerProfile] : profiles
 
@@ -146,25 +149,35 @@ export default function CrawlFields({ values: v, onChange, mode, analyzers, prof
       <details className="cf-advanced">
         <summary>Advanced</summary>
         <div className="cf-grid cf-grid-wide">
-          <label className="cf-field">
-            <span className="cf-label">Include (regex, one per line)</span>
-            <span className="cf-hint">
+          <div className="cf-field">
+            <label className="cf-label" htmlFor={`${uid}-include`}>
+              Include (regex, one per line)
+            </label>
+            <span className="cf-hint" id={`${uid}-include-hint`}>
               Matched against the full normalized URL. The seed must match too, or the crawl returns zero pages. No
               trailing slash.
             </span>
-            <textarea name="include" rows={2} placeholder="/blog" value={v.include} onChange={(e) => onChange({ include: e.target.value })} />
-          </label>
-          <label className="cf-field">
-            <span className="cf-label">Exclude (regex, one per line)</span>
-            <span className="cf-hint">Matched against the full URL.</span>
-            <textarea name="exclude" rows={2} placeholder="/admin/" value={v.exclude} onChange={(e) => onChange({ exclude: e.target.value })} />
-            {crawl && splitList(v.exclude).includes(LOGOUT_EXCLUDE) && (
-              <span className="cf-hint">
+            <textarea id={`${uid}-include`} aria-describedby={`${uid}-include-hint`} name="include" rows={2} placeholder="/blog" value={v.include} onChange={(e) => onChange({ include: e.target.value })} />
+          </div>
+          <div className="cf-field">
+            <label className="cf-label" htmlFor={`${uid}-exclude`}>
+              Exclude (regex, one per line)
+            </label>
+            <span className="cf-hint" id={`${uid}-exclude-hint`}>
+              Matched against the full URL.
+            </span>
+            <textarea
+              id={`${uid}-exclude`}
+              aria-describedby={`${uid}-exclude-hint${logoutHint ? ` ${uid}-exclude-logout` : ''}`}
+              name="exclude"
+              rows={2} placeholder="/admin/" value={v.exclude} onChange={(e) => onChange({ exclude: e.target.value })} />
+            {logoutHint && (
+              <span className="cf-hint" id={`${uid}-exclude-logout`}>
                 {LOGOUT_EXCLUDE} keeps the crawl away from logout links, which would end your browser
                 login. Remove the line if you need those pages crawled.
               </span>
             )}
-          </label>
+          </div>
           <label className="cf-field">
             <span className="cf-label">User-Agent</span>
             <input name="user_agent" type="text" value={v.userAgent} onChange={(e) => onChange({ userAgent: e.target.value })} />
@@ -212,19 +225,24 @@ export default function CrawlFields({ values: v, onChange, mode, analyzers, prof
                 <span className="cf-label">Basic Auth password</span>
                 <input autoComplete="new-password" name="basic_auth_password" type="password" value={v.basicAuthPass} onChange={(e) => onChange({ basicAuthPass: e.target.value })} />
               </label>
-              <label className="cf-field">
-                <span className="cf-label">Bearer token</span>
-                <span className="cf-hint">
+              <div className="cf-field">
+                <label className="cf-label" htmlFor={`${uid}-bearer`}>
+                  Bearer token
+                </label>
+                <span className="cf-hint" id={`${uid}-bearer-hint`}>
                   Sent as &quot;Authorization: Bearer …&quot; to the seed host only. Not together with Basic Auth or a custom
                   Authorization header. Raw rendering only.
                 </span>
-                <input name="bearer_token"
+                <input
+                  id={`${uid}-bearer`}
+                  aria-describedby={`${uid}-bearer-hint`}
+                  name="bearer_token"
                   type="password"
                   autoComplete="off"
                   value={v.bearerToken}
                   onChange={(e) => onChange({ bearerToken: e.target.value })}
                 />
-              </label>
+              </div>
             </div>
             <label className="cf-check">
               <input name="cookie_auth"
@@ -237,20 +255,27 @@ export default function CrawlFields({ values: v, onChange, mode, analyzers, prof
             </label>
             {cookieLocked && <p className="cf-hint">Your browser login supplies the cookies for this crawl.</p>}
             {v.cookieAuth && !cookieLocked && (
-              <label className="cf-field">
-                <span className="cf-label">Cookie header</span>
-                <span className="cf-hint">
+              <div className="cf-field">
+                <label className="cf-label" htmlFor={`${uid}-cookie`}>
+                  Cookie header
+                </label>
+                <span className="cf-hint" id={`${uid}-cookie-hint`}>
                   Paste the session cookie from a browser that is already past the gate (DevTools, Application or Storage,
                   Cookies). Sent only to the seed host. Not supported with headless rendering.
                 </span>
-                <textarea autoComplete="off" name="cookie"
+                <textarea
+                  id={`${uid}-cookie`}
+                  aria-describedby={`${uid}-cookie-hint`}
+                  autoComplete="off"
+                  spellCheck={false}
+                  name="cookie"
                   rows={2}
                   className="mono"
                   placeholder="_shopify_essential=:AZ_..."
                   value={v.cookie}
                   onChange={(e) => onChange({ cookie: e.target.value })}
                 />
-              </label>
+              </div>
             )}
             {loginSlot}
           </fieldset>
@@ -267,10 +292,21 @@ export default function CrawlFields({ values: v, onChange, mode, analyzers, prof
         </label>
         {v.customHeaders && (
           <>
-            <label className="cf-field">
-              <span className="cf-label">Header profile</span>
-              <span className="cf-hint">Managed under Settings; stored in ~/.gocrawl/headers on this machine.</span>
-              <select name="header_profile" value={v.headerProfile} onChange={(e) => onChange({ headerProfile: e.target.value })}>
+            <div className="cf-field">
+              <label className="cf-label" htmlFor={`${uid}-profile`}>
+                Header profile
+              </label>
+              <span className="cf-hint" id={`${uid}-profile-hint`}>
+                {crawl ? (
+                  <>
+                    Managed under <a href={href({ view: 'settings' })}>Settings</a>
+                  </>
+                ) : (
+                  'Managed under Header profiles below'
+                )}
+                ; stored in ~/.gocrawl/headers on this machine.
+              </span>
+              <select id={`${uid}-profile`} aria-describedby={`${uid}-profile-hint`} name="header_profile" value={v.headerProfile} onChange={(e) => onChange({ headerProfile: e.target.value })}>
                 <option value="">None</option>
                 {profileOptions.map((name) => (
                   <option key={name} value={name}>
@@ -278,21 +314,28 @@ export default function CrawlFields({ values: v, onChange, mode, analyzers, prof
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
             {crawl && (
-              <label className="cf-field">
-                <span className="cf-label">Extra headers (one &quot;Name: value&quot; per line)</span>
-                <span className="cf-hint">
+              <div className="cf-field">
+                <label className="cf-label" htmlFor={`${uid}-headers`}>
+                  Extra headers (one &quot;Name: value&quot; per line)
+                </label>
+                <span className="cf-hint" id={`${uid}-headers-hint`}>
                   Sent only to the seed host. They override the profile by name. Not supported with headless rendering.
                 </span>
-                <textarea autoComplete="off" name="headers"
+                <textarea
+                  id={`${uid}-headers`}
+                  aria-describedby={`${uid}-headers-hint`}
+                  autoComplete="off"
+                  spellCheck={false}
+                  name="headers"
                   rows={3}
                   className="mono"
                   placeholder="X-Access-Token: abc123"
                   value={v.headers}
                   onChange={(e) => onChange({ headers: e.target.value })}
                 />
-              </label>
+              </div>
             )}
           </>
         )}
