@@ -125,6 +125,13 @@ already in the API below. The working views, all against the API below:
   for new, resolved and persisting issues using the report's issue table and filters, and the
   added and removed pages. The selection is in the URL (`#/compare?base=…&current=…`), so a
   comparison can be bookmarked.
+- **Redirects** — upload a HubSpot-format redirect-rule CSV, enter the domain, and
+  optionally a sitemap URL, rate, concurrency and adaptive delay, then select **Check
+  redirects**. The check page shows a `done of total` progress bar (polled every 1.5 s) and
+  **Cancel check**. When it finishes, it shows a results table with HTTP status codes,
+  filterable by verdict and by scope, and **Export CSV**. When no sitemap is found, the check
+  ends with that error and a hint to fill in the Sitemap URL field. The Redirects page lists
+  this session's checks, which are kept in memory only.
 - **Settings** — theme (dark, light, or match the system), crawl defaults
   (the New crawl fields, minus secrets), header profiles (list, create, edit, delete; each is
   validated like `--header-file` and stored with mode `0600` in `~/.gocrawl/headers`), and

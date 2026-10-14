@@ -8,6 +8,8 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Web UI: a Redirects view to upload a redirect-rule CSV, follow the check's progress, filter
+  the results by verdict and scope, and export them as CSV.
 - Web UI: a Compare view (both crawls' tapes, summary deltas, new, resolved and persisting
   issues, added and removed pages), plus compare checkboxes and **Import report…** on the
   Crawls list.
