@@ -350,6 +350,13 @@ type Options struct {
 	// everything fetched so far as a partial result (see Coverage.DurationLimitReached), the
 	// same way a canceled context (e.g. an operator's Ctrl-C) does.
 	MaxDuration time.Duration
+	// PauseOnThrottle makes the engine pause itself when the server keeps rate limiting it:
+	// ten or more 429/503 responses within a minute pause the crawl (Progress.PauseReason
+	// "rate_limited", with the latest Retry-After). With adaptive delay on, adaptive delay must
+	// also have lowered the rate at least twice; with it off there are no backoffs to wait for,
+	// so the responses alone trigger the pause. Only useful when someone can call Resume: the
+	// web UI turns it on, the CLI and MCP leave it off.
+	PauseOnThrottle bool
 	// OnProgress, when non-nil, is called with a snapshot of the crawl's progress after each
 	// page is recorded and on every pause and resume (Engine.Pause, Engine.Resume). Calls are
 	// serialized and arrive in recording order: Fetched rises by exactly one per page event,

@@ -369,3 +369,141 @@ func TestEnginePauseResumeConcurrent(t *testing.T) {
 		t.Errorf("%d progress events, want at least one per page", events.Load())
 	}
 }
+
+func TestMaybeAutoPauseNeedsOptionBackoffsAndThreshold(t *testing.T) {
+	burst := func(e *Engine, n int) {
+		for range n {
+			e.limiter.OnResponse(http.StatusTooManyRequests, nil)
+		}
+	}
+
+	off := DefaultOptions()
+	e := New(off, NewHTTPFetcher(off))
+	e.limiter.debounce = 0
+	burst(e, 10)
+	e.maybeAutoPause(http.StatusTooManyRequests)
+	if e.Paused() {
+		t.Error("paused without PauseOnThrottle")
+	}
+
+	on := DefaultOptions()
+	on.PauseOnThrottle = true
+
+	// With adaptive delay off there are no backoffs to wait for: ten throttle responses in the
+	// window are enough.
+	noBackoff := on
+	noBackoff.AdaptiveDelay = false
+	e = New(noBackoff, NewHTTPFetcher(noBackoff))
+	burst(e, 9)
+	e.maybeAutoPause(http.StatusTooManyRequests)
+	if e.Paused() {
+		t.Error("paused below the threshold of 10 with adaptive delay off")
+	}
+	burst(e, 1)
+	e.maybeAutoPause(http.StatusTooManyRequests)
+	if !e.Paused() || e.ps.reason != PauseReasonRateLimited {
+		t.Errorf("adaptive delay off: paused=%v reason=%q, want paused for %q", e.Paused(), e.ps.reason, PauseReasonRateLimited)
+	}
+
+	e = New(on, NewHTTPFetcher(on)) // default 2s debounce: ten rapid 429s are one backoff
+	burst(e, 10)
+	e.maybeAutoPause(http.StatusTooManyRequests)
+	if e.Paused() {
+		t.Error("paused after a single backoff")
+	}
+
+	e = New(on, NewHTTPFetcher(on))
+	e.limiter.debounce = 0
+	burst(e, 9)
+	e.maybeAutoPause(http.StatusTooManyRequests)
+	if e.Paused() {
+		t.Error("paused below the threshold of 10")
+	}
+	burst(e, 1)
+	e.maybeAutoPause(http.StatusOK)
+	if e.Paused() {
+		t.Error("a 200 must not trigger auto-pause")
+	}
+	e.maybeAutoPause(http.StatusTooManyRequests)
+	if !e.Paused() || e.ps.reason != PauseReasonRateLimited {
+		t.Errorf("paused=%v reason=%q, want paused for %q", e.Paused(), e.ps.reason, PauseReasonRateLimited)
+	}
+}
+
+// TestEngineAutoPausesOnSustained429 runs a real crawl against a server that answers 429 to
+// everything but the home page, and expects the crawl to pause itself, report the server's
+// Retry-After, stop fetching, and still end cleanly when canceled.
+func TestEngineAutoPausesOnSustained429(t *testing.T) {
+	var leafHits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			var b strings.Builder
+			b.WriteString("<html><body>")
+			for i := range 40 {
+				fmt.Fprintf(&b, `<a href="/p%d">p%d</a>`, i, i)
+			}
+			b.WriteString("</body></html>")
+			fmt.Fprint(w, b.String())
+		case "/robots.txt":
+			http.NotFound(w, r)
+		default:
+			// Only the tenth refusal names a long wait: earlier ones would otherwise slow the
+			// test to one request every two minutes.
+			if leafHits.Add(1) >= 10 {
+				w.Header().Set("Retry-After", "120")
+			}
+			w.WriteHeader(http.StatusTooManyRequests)
+		}
+	}))
+	defer ts.Close()
+
+	opts := DefaultOptions()
+	opts.Concurrency = 1
+	opts.RatePerSecond = 4000 // nine halvings from here still leave ~8 req/s
+	opts.PauseOnThrottle = true
+	paused := make(chan Progress, 1)
+	opts.OnProgress = func(p Progress) {
+		if p.Paused {
+			select {
+			case paused <- p:
+			default:
+			}
+		}
+	}
+	e := New(opts, NewHTTPFetcher(opts))
+	e.limiter.debounce = 0 // back off on every 429, not once per 2s
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan *Result, 1)
+	go func() {
+		r, _ := e.Crawl(ctx, ts.URL)
+		done <- r
+	}()
+
+	var p Progress
+	select {
+	case p = <-paused:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the crawl never paused itself")
+	}
+	if p.PauseReason != PauseReasonRateLimited || p.RetryAfterSeconds != 120 || p.Throttled < 10 {
+		t.Errorf("pause event = %+v, want reason rate_limited, Retry-After 120, >= 10 throttled", p)
+	}
+	atPause := leafHits.Load()
+	time.Sleep(300 * time.Millisecond)
+	if got := leafHits.Load(); got != atPause {
+		t.Errorf("%d more requests after the auto-pause", got-atPause)
+	}
+
+	cancel()
+	select {
+	case r := <-done:
+		if !r.Coverage.Interrupted || len(r.Pages) != int(atPause)+1 {
+			t.Errorf("interrupted=%v pages=%d, want true / %d", r.Coverage.Interrupted, len(r.Pages), atPause+1)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancel did not end the auto-paused crawl")
+	}
+}

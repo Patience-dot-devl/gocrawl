@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"errors"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -124,4 +125,34 @@ func (e *Engine) endRun() (wasPaused bool) {
 	e.ps.fr, e.ps.running, e.ps.finished = nil, false, true
 	e.ps.paused, e.ps.reason, e.ps.retryAfter = false, "", 0
 	return wasPaused
+}
+
+// Auto-pause tuning (Options.PauseOnThrottle).
+const (
+	autoPauseThreshold   = 10 // 429/503 responses within throttleWindow
+	autoPauseMinBackoffs = 2  // adaptive-delay adjustments that must already have happened
+)
+
+// maybeAutoPause pauses the crawl when PauseOnThrottle is set and the server keeps answering
+// 429/503. With adaptive delay on it waits until adaptive delay has backed off at least
+// autoPauseMinBackoffs times; with it off nothing ever backs off, so the responses alone count.
+// Called by a worker after each response; the worker holds no engine lock.
+func (e *Engine) maybeAutoPause(status int) {
+	if !e.opts.PauseOnThrottle {
+		return
+	}
+	if status != http.StatusTooManyRequests && status != http.StatusServiceUnavailable {
+		return
+	}
+	backoffs := e.limiter.ThrottleCount()
+	if e.limiter.enabled && backoffs < autoPauseMinBackoffs {
+		return
+	}
+	n := e.limiter.RecentThrottled()
+	if n < autoPauseThreshold {
+		return
+	}
+	if e.pauseWith(PauseReasonRateLimited, e.limiter.LastRetryAfter()) {
+		e.logf("%d HTTP 429/503 responses in the last minute after %d backoffs — pausing the crawl", n, backoffs)
+	}
 }

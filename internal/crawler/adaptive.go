@@ -45,6 +45,8 @@ type AdaptiveLimiter struct {
 	curRate       float64 // current req/s after any backoff (0 = still unlimited)
 	lastAdjust    time.Time
 	throttleCount int
+	// debounce is backoffDebounce; a field so engine tests can turn it off.
+	debounce time.Duration
 	// recent holds the arrival time of every 429/503 response within throttleWindow, oldest
 	// first. Pruned on every write and read.
 	recent []time.Time
@@ -63,6 +65,7 @@ func NewAdaptiveLimiter(ratePerSecond float64, enabled bool) *AdaptiveLimiter {
 		limiter:  rate.NewLimiter(limit, 1),
 		enabled:  enabled,
 		baseRate: ratePerSecond,
+		debounce: backoffDebounce,
 	}
 }
 
@@ -96,7 +99,7 @@ func (a *AdaptiveLimiter) OnResponse(statusCode int, header http.Header) (adjust
 	if !a.enabled {
 		return false, 0
 	}
-	if !a.lastAdjust.IsZero() && now.Sub(a.lastAdjust) < backoffDebounce {
+	if !a.lastAdjust.IsZero() && now.Sub(a.lastAdjust) < a.debounce {
 		return false, 0
 	}
 	a.lastAdjust = now

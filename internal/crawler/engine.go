@@ -202,6 +202,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			}
 			e.logf("HTTP %d from %s — reducing crawl rate to %.3g req/s", page.StatusCode, target, next)
 		}
+		e.maybeAutoPause(page.StatusCode)
 		page.Depth = t.depth
 		page.Referrer = t.referrer
 		page.Links = e.extractLinks(page)
