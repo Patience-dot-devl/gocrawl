@@ -14,9 +14,11 @@ import (
 // calls after it ends do nothing and return false.
 //
 // Lock order: Control.mu is taken before the engine's locks (Pause and Resume emit a progress
-// event while it is held). Nothing on the progress path takes Control.mu, and Active takes no
-// lock at all, so a caller may call Active while holding its own job lock, but must not call
-// Pause or Resume while holding a lock its progress callback takes.
+// event while it is held). Nothing on the progress path takes Control.mu. Active takes no
+// Control lock, but through Engine.ActiveTime it briefly takes the engine's ps.mu and then
+// the activeClock's mutex, one after the other. A caller may therefore call Active while
+// holding its own job lock (that adds a job lock → ps.mu edge, noted in the Engine lock
+// order), but must not call Pause or Resume while holding a lock its progress callback takes.
 type Control struct {
 	mu      sync.Mutex
 	engine  *crawler.Engine // set during the crawl phase

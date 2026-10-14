@@ -74,8 +74,10 @@ func newProgressView(j *Job[crawlJob], tapeFrom int, now time.Time) *progressVie
 	}
 }
 
-// activeMS is the crawl phase's active time (pauses excluded). Control.Active is lock-free,
-// so this is safe inside s.crawls.with.
+// activeMS is the crawl phase's active time (pauses excluded). Control.Active takes no
+// Control lock, only the engine's ps.mu and activeClock mutex in turn (neither is held across
+// a progress callback), so this is safe inside s.crawls.with: it adds a job lock → ps.mu edge
+// that no path reverses.
 func activeMS(j *Job[crawlJob], now time.Time) int64 {
 	if j.Data.control != nil {
 		return j.Data.control.Active().Milliseconds()
