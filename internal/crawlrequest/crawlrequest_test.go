@@ -1,6 +1,7 @@
 package crawlrequest
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -224,6 +225,21 @@ func TestToConfig_InvalidTimeout(t *testing.T) {
 	for _, v := range []string{"soon", "-1s", "0s"} {
 		if _, _, err := (Params{URL: "https://example.com", Timeout: v}).ToConfig(); err == nil {
 			t.Errorf("timeout %q: expected an error", v)
+		}
+	}
+}
+
+func TestToConfig_RejectsUnparsableSeedWithoutEchoingIt(t *testing.T) {
+	for _, raw := range []string{
+		"https://alice:s3cret@example.com/%zz",
+		"alice:s3cret@example.com/%zz",
+	} {
+		_, _, err := Params{URL: raw}.ToConfig()
+		if err == nil {
+			t.Fatalf("ToConfig(%q): expected an error for an unparsable URL", raw)
+		}
+		if strings.Contains(err.Error(), "s3cret") || strings.Contains(err.Error(), "alice") {
+			t.Errorf("error %q echoes the seed's userinfo", err)
 		}
 	}
 }

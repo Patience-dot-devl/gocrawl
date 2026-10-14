@@ -31,8 +31,10 @@ gocrawl serve
 | `--store-dir` | `~/.gocrawl/crawls` | Crawl history root, same store used by `--save`, `gocrawl history`, and `gocrawl compare`. |
 
 Open `http://localhost:8080` in a browser. Ctrl-C shuts the server down gracefully (in-flight
-HTTP requests are given up to 10s to finish; crawl jobs already running detach from the
-request that started them, so they aren't tied to a shutdown).
+HTTP requests are given up to 10s to finish). Crawl jobs run detached from the request that
+started them, so they outlive it, but shutdown cancels every running or paused crawl and
+redirect check and waits up to 5s for them to finish, which also closes the headless browser
+behind a crawl.
 
 ## Exposure
 
@@ -74,10 +76,8 @@ to `gocrawl serve` running on `:8080` for frontend development with hot reload.
 
 ## What the UI does
 
-The navigation lists New crawl, Crawls, Compare, Redirects, and Settings. Compare,
-Redirects, and Settings are placeholders until those features land; the Compare view and the
-report import form arrive with the GUI views, on top of the compare and import endpoints
-already in the API below. The working views, all against the API below:
+The navigation lists New crawl, Crawls, Compare, Redirects, and Settings. The views, all
+against the API below:
 
 - **New crawl** — a form for the seed URL and every crawl option the interactive menu
   exposes: depth, page cap, concurrency, rate limit, max duration, render mode,

@@ -5,7 +5,9 @@
 package crawlrequest
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -61,6 +63,11 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	}
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
+	}
+	// crawler.SanitizeSeed leaves a seed it can't parse unchanged, userinfo included, and the
+	// *url.Error from the first fetch would quote it. Refuse it here with a fixed message.
+	if _, perr := url.Parse(seed); perr != nil {
+		return config.Config{}, "", errors.New("url is not a valid web address (check for stray characters; the value is not shown)")
 	}
 
 	cfg := config.Default()

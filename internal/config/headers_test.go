@@ -82,8 +82,8 @@ func TestToOptionsReportsMissingHeaderProfile(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	c := Default()
 	c.Crawl.HeaderProfile = "nope"
-	if _, err := c.ToOptions(); err == nil || !strings.Contains(err.Error(), "header_profile") {
-		t.Errorf("err = %v, want a header_profile error", err)
+	if _, err := c.ToOptions(); err == nil || err.Error() != `header profile "nope" not found` {
+		t.Errorf("err = %v, want a plain header profile not-found error", err)
 	}
 }
 

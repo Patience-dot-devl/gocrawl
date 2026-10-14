@@ -448,12 +448,26 @@ func WithLoginBrowser(b loginBrowser) Option {
 	}
 }
 
-// Close releases what the server holds outside its own memory: open login windows and their
-// throwaway browser profiles. gocrawl serve calls it on shutdown, after the HTTP server has
-// stopped; once Close has run, no login window can be opened.
+// Close releases what the server holds outside its own memory: running and paused crawl and
+// redirect-check jobs, and open login windows with their throwaway browser profiles. gocrawl
+// serve calls it on shutdown, after the HTTP server has stopped; once Close has run, no login
+// window can be opened.
+//
+// Jobs are canceled, then Close waits up to closeGrace for them to finish, so runner.Run's
+// deferred fetcher Close (the headless Chromium process) has run before the process exits.
 func (s *Server) Close() {
+	s.crawls.cancelAll()
+	s.redirects.cancelAll()
+	deadline := time.Now().Add(closeGrace)
+	for s.crawls.activeCount()+s.redirects.activeCount() > 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
 	s.logins.closeAll()
 }
+
+// closeGrace bounds how long Close waits for canceled jobs to wind down. A var so tests can
+// shorten it.
+var closeGrace = 5 * time.Second
 
 const (
 	maxLoginBody        = 16 << 10

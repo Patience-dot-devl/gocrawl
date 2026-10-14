@@ -171,6 +171,31 @@ func (m *jobManager[T]) cancel(id string) bool {
 	return true
 }
 
+// cancelAll asks every running or paused job to stop, as a user's cancel would.
+func (m *jobManager[T]) cancelAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, j := range m.jobs {
+		if j.active() {
+			j.cancelRequested = true
+			j.cancel()
+		}
+	}
+}
+
+// activeCount is the number of running or paused jobs.
+func (m *jobManager[T]) activeCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, j := range m.jobs {
+		if j.active() {
+			n++
+		}
+	}
+	return n
+}
+
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return ""

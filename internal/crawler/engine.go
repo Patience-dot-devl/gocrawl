@@ -22,7 +22,10 @@ import (
 // limiter's lock and ps.mu in turn, never together) but is never taken while a later one is
 // held. OnProgress runs with progMu held, plus the result mutex for page events; ps.mu and
 // the leaf locks are never held across it, and the activeClock's onLimit runs on a timer
-// goroutine holding nothing.
+// goroutine holding nothing. Callers outside the package add one edge: a job manager's lock
+// (the web server's, held while it reads Control.Active → Engine.ActiveTime) is taken before
+// ps.mu and then the activeClock's mutex, and no engine path takes a job lock while holding
+// either, because ps.mu and the leaf locks are never held across OnProgress.
 type Engine struct {
 	opts     Options
 	fetcher  Fetcher
