@@ -20,10 +20,13 @@ type progressView struct {
 	ActiveMS int64  `json:"active_ms"`
 }
 
-// crawlRunOptions are the runner options every web crawl gets.
-func (s *Server) crawlRunOptions(id string) []runner.RunOption {
+// crawlRunOptions are the runner options every web crawl gets. Someone can press Resume in the
+// UI, so a crawl the server keeps rate limiting pauses itself instead of grinding on.
+func (s *Server) crawlRunOptions(id string, ctl *runner.Control) []runner.RunOption {
 	return []runner.RunOption{
 		runner.WithProgress(func(p runner.Progress) { s.recordProgress(id, p) }),
+		runner.WithControl(ctl),
+		runner.WithPauseOnThrottle(),
 	}
 }
 
@@ -38,6 +41,16 @@ func (s *Server) recordProgress(id string, p runner.Progress) {
 		if p.Fetched > len(j.Data.Tape) {
 			j.Data.Tape = append(j.Data.Tape, crawler.TapeChar(p.Status))
 			j.Data.TapeOff = append(j.Data.TapeOff, p.TapeOffChar())
+		}
+		// Follow the engine's pause state, so an automatic pause (and the resume after it)
+		// shows in the job status. Only running/paused jobs move. A paused job only goes back
+		// to running on a crawling-phase event: during the sitemap phase a queued pause has not
+		// reached the engine yet, and its events still say "not paused".
+		switch {
+		case p.Paused && j.Status == StatusRunning:
+			j.Status = StatusPaused
+		case !p.Paused && j.Status == StatusPaused && p.Phase == runner.PhaseCrawling:
+			j.Status = StatusRunning
 		}
 	})
 }
@@ -61,8 +74,12 @@ func newProgressView(j *Job[crawlJob], tapeFrom int, now time.Time) *progressVie
 	}
 }
 
-// activeMS is how long the job has been running.
+// activeMS is the crawl phase's active time (pauses excluded). Control.Active is lock-free,
+// so this is safe inside s.crawls.with.
 func activeMS(j *Job[crawlJob], now time.Time) int64 {
+	if j.Data.control != nil {
+		return j.Data.control.Active().Milliseconds()
+	}
 	end := now
 	if !j.FinishedAt.IsZero() {
 		end = j.FinishedAt
