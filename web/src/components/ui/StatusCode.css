@@ -1,0 +1,22 @@
+.status-code {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-code-2 {
+  color: var(--s2);
+}
+
+.status-code-3 {
+  color: var(--s3);
+}
+
+.status-code-4 {
+  color: var(--s4);
+}
+
+.status-code-5,
+.status-code-x {
+  color: var(--s5);
+}

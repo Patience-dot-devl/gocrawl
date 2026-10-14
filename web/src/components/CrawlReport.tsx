@@ -1,61 +1,55 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { cancelCrawl, exportURL, getCrawl, listExplanations } from '../api'
+import { useEffect, useRef, useState } from 'react'
+import { cancelCrawl, exportURL, listExplanations } from '../api/crawls'
+import { ApiError } from '../api/client'
+import { usePageTitle } from '../pageTitle'
+import { href } from '../routes'
 import SiteMap from './SiteMap'
-import { useSort } from '../sort'
-import type { Explanation, Issue, JobView } from '../types'
+import { STATUS_PILL } from '../crawlStatus'
+import type { Explanation } from '../types/crawls'
+import IssueTable, { type ReviewMap } from './IssueTable'
+import Button from './ui/Button'
+import ConfirmDialog from './ui/ConfirmDialog'
+import Notice from './ui/Notice'
+import PhasePill from './ui/PhasePill'
+import StatusCode from './ui/StatusCode'
+import FinishedTape from './progress/FinishedTape'
+import AutoPauseNotice from './progress/AutoPauseNotice'
+import CrawlControls from './progress/CrawlControls'
+import RunningCrawl from './progress/RunningCrawl'
+import { runPill } from './progress/runPill'
+import { halfRate, hostOf } from './progress/tapeText'
+import { isLive, useCrawlPoll } from './progress/useCrawlPoll'
+import './CrawlReport.css'
 
-const POLL_MS = 1500
-const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 }
-
-interface ReviewState {
-  resolved: boolean
-  nonissue: boolean
-  note: string
+function formatCount(n: number): string {
+  return n.toLocaleString('en-US')
 }
 
-type IssueRow = Issue & { _key: number }
-
-function formatElapsed(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  return `${m}:${String(s).padStart(2, '0')}`
+// The noun in the right number: "1 error", "2 errors".
+function noun(n: number, singular: string): string {
+  return n === 1 ? singular : `${singular}s`
 }
 
-function issueSortValue(row: IssueRow, key: string): string | number {
-  switch (key) {
-    case 'severity':
-      return SEVERITY_RANK[row.severity] ?? 9
-    case 'analyzer':
-      return row.analyzer
-    case 'code':
-      return row.code
-    case 'url':
-      return row.url
-    case 'message':
-      return row.message
-    default:
-      return ''
-  }
+// An error message without its final full stop, so a sentence can follow it cleanly.
+function trimEnd(message: string): string {
+  return message.replace(/[.\s]+$/, '')
 }
 
 export default function CrawlReport({ id }: { id: string }) {
-  const [job, setJob] = useState<JobView | null>(null)
-  const [error, setError] = useState('')
-  const [severityOn, setSeverityOn] = useState<Record<string, boolean>>({ error: true, warning: true, info: true })
-  const [analyzerFilter, setAnalyzerFilter] = useState('')
-  const [search, setSearch] = useState('')
-  const [codeOn, setCodeOn] = useState<Record<string, boolean>>({})
-  const [codeMenuOpen, setCodeMenuOpen] = useState(false)
-  const [hideResolved, setHideResolved] = useState(false)
-  const [hideNonissue, setHideNonissue] = useState(false)
-  const [review, setReview] = useState<Record<number, ReviewState>>({})
-  const [selected, setSelected] = useState<Set<number>>(new Set())
+  // loadError replaces the whole view (nothing loaded, or the crawl does not exist); pollError
+  // is an inline notice above the report (a refresh failed, polling goes on); actionError is an
+  // inline notice for a failed action (Pause, Resume crawl, Stop crawl).
+  const { job, progress, tape, tapeOff, recent, receivedAt, loadError, pollError, refresh } = useCrawlPoll(id)
+  usePageTitle(loadError?.notFound ? 'Crawl not found' : job ? `${hostOf(job.seed)} - Crawl` : 'Crawl')
+  const [actionError, setActionError] = useState('')
+  const [confirmStop, setConfirmStop] = useState(false)
+  // null until the user edits "Resume at": the field then shows half the current rate.
+  const [resumeRateInput, setResumeRateInput] = useState<string | null>(null)
+  const [headingFocus, setHeadingFocus] = useState(0)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const [review, setReview] = useState<ReviewMap>({})
   const [tab, setTab] = useState<'issues' | 'sitemap'>('issues')
-  const [now, setNow] = useState(() => Date.now())
   const [explanations, setExplanations] = useState<Record<string, Explanation>>({})
-  const timer = useRef<number | undefined>(undefined)
-  const selectAllRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listExplanations()
@@ -63,139 +57,47 @@ export default function CrawlReport({ id }: { id: string }) {
       .catch(() => undefined)
   }, [])
 
-  useEffect(() => {
-    let stopped = false
-    async function poll() {
-      try {
-        const j = await getCrawl(id)
-        if (stopped) return
-        setJob(j)
-        if (j.status === 'running') {
-          timer.current = window.setTimeout(poll, POLL_MS)
-        }
-      } catch (err) {
-        if (!stopped) setError(String(err))
-      }
-    }
-    poll()
-    return () => {
-      stopped = true
-      window.clearTimeout(timer.current)
-    }
-  }, [id])
-
   // The server attaches the report once, when the crawl finishes, and App keys this component
   // by crawl id, so the report-derived UI state below starts fresh for every report without a
-  // reset effect. A code missing from codeOn counts as shown.
+  // reset effect.
   const report = job?.report
+  // runner.Run appends the same coverageNote() text to report.notes whenever coverage is
+  // incomplete, always prefixed "partial coverage: ", which the partial-coverage notice below
+  // already covers more richly, so it is filtered out. report.html.tmpl never renders .notes
+  // at all, so the duplication is specific to the live view. Any other note joins that notice
+  // when there is one, so a report never shows two boxes saying one thing.
+  const otherNotes = (report?.notes ?? []).filter((n) => !n.startsWith('partial coverage:'))
+  const partial = !!report?.coverage && !report.coverage.complete
 
+  // The dialog is only meaningful while the crawl runs: if the crawl finishes while it is open,
+  // it goes away, and the Stop crawl button that opened it goes with it. Focus then has nowhere
+  // to return to, so it moves to the report heading. Stopping the crawl moves it there too.
+  const live = isLive(job?.status)
+  const dialogOpen = confirmStop && live
+  const wasOpen = useRef(false)
   useEffect(() => {
-    if (job?.status !== 'running') return
-    const t = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(t)
-  }, [job?.status])
-
-  useEffect(() => {
-    if (!codeMenuOpen) return
-    function close() {
-      setCodeMenuOpen(false)
+    if (wasOpen.current && !dialogOpen && (!document.activeElement || document.activeElement === document.body)) {
+      headingRef.current?.focus()
     }
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [codeMenuOpen])
-
-  const codeCounts = useMemo(() => {
-    const counts: Record<string, number> = {}
-    report?.issues.forEach((i) => {
-      counts[i.code] = (counts[i.code] ?? 0) + 1
-    })
-    return counts
-  }, [report])
-  const codeList = useMemo(() => Object.keys(codeCounts).sort(), [codeCounts])
-  const hiddenCodeCount = codeList.filter((c) => codeOn[c] === false).length
-
-  const rows: IssueRow[] = useMemo(
-    () => (report ? report.issues.map((i, originalIndex) => ({ ...i, _key: originalIndex })) : []),
-    [report],
-  )
-
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return rows.filter((i) => {
-      if (severityOn[i.severity] === false) return false
-      if (analyzerFilter && i.analyzer !== analyzerFilter) return false
-      if (codeOn[i.code] === false) return false
-      if (term && !(i.url.toLowerCase().includes(term) || i.message.toLowerCase().includes(term) || i.code.toLowerCase().includes(term))) {
-        return false
-      }
-      const r = review[i._key]
-      if (hideResolved && r?.resolved) return false
-      if (hideNonissue && r?.nonissue) return false
-      return true
-    })
-  }, [rows, severityOn, analyzerFilter, codeOn, search, hideResolved, hideNonissue, review])
-
-  const { sorted, toggle, dirFor } = useSort(filtered, issueSortValue, { key: 'severity' })
-
-  const selectedShownCount = sorted.filter((r) => selected.has(r._key)).length
+    wasOpen.current = dialogOpen
+  }, [dialogOpen])
   useEffect(() => {
-    if (!selectAllRef.current) return
-    selectAllRef.current.indeterminate = selectedShownCount > 0 && selectedShownCount < sorted.length
-  }, [selectedShownCount, sorted.length])
+    if (headingFocus > 0) headingRef.current?.focus()
+  }, [headingFocus])
 
-  if (error) return <p className="error">{error}</p>
-  if (!job) return <p>Loading…</p>
-
-  const emptyReview: ReviewState = { resolved: false, nonissue: false, note: '' }
-
-  function setReviewFlag(key: number, patch: Partial<ReviewState>) {
-    setReview((prev) => ({
-      ...prev,
-      [key]: { ...emptyReview, ...prev[key], ...patch },
-    }))
+  if (loadError?.notFound) {
+    return (
+      <div className="cr">
+        <h1>Crawl not found</h1>
+        <p>It may have been removed, or it was never saved.</p>
+        <p>
+          <a href={href({ view: 'crawls' })}>Go to Crawls</a>
+        </p>
+      </div>
+    )
   }
-
-  function toggleSelected(key: number) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
-  function selectShown(checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      sorted.forEach((r) => (checked ? next.add(r._key) : next.delete(r._key)))
-      return next
-    })
-  }
-
-  function bulkApply(kind: 'resolved' | 'nonissue' | 'clear') {
-    setReview((prev) => {
-      const next = { ...prev }
-      sorted.forEach((r) => {
-        if (!selected.has(r._key)) return
-        if (kind === 'clear') {
-          next[r._key] = { ...emptyReview, note: prev[r._key]?.note ?? '' }
-        } else {
-          next[r._key] = { ...emptyReview, ...prev[r._key], [kind]: true }
-        }
-      })
-      return next
-    })
-    setSelected(new Set())
-  }
-
-  function clearFilters() {
-    setSeverityOn({ error: true, warning: true, info: true })
-    setAnalyzerFilter('')
-    setSearch('')
-    setCodeOn(Object.fromEntries(codeList.map((c) => [c, true])))
-    setHideResolved(false)
-    setHideNonissue(false)
-  }
+  if (loadError) return <Notice tone="error">{loadError.message}</Notice>
+  if (!job) return <p className="muted">Loading…</p>
 
   function exportReviewed() {
     if (!report) return
@@ -217,358 +119,254 @@ export default function CrawlReport({ id }: { id: string }) {
     URL.revokeObjectURL(a.href)
   }
 
-  const filtersActive =
-    search.trim() !== '' ||
-    analyzerFilter !== '' ||
-    hiddenCodeCount > 0 ||
-    hideResolved ||
-    hideNonissue ||
-    Object.values(severityOn).some((v) => v === false)
+  // One PhasePill for every state, so its live region persists and a screen reader hears
+  // "Crawling" become "Crawl stopped".
+  const pill = job.status === 'running' ? runPill(progress?.phase) : STATUS_PILL[job.status]
+
+  // A 404 or 409 means the crawl is no longer in the state the action needs, usually because it
+  // finished or changed phase meanwhile. That is not a failure for the user: show where it is now.
+  function actionFailed(label: string, err: unknown) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+      refresh()
+      return
+    }
+    setActionError(
+      `Could not ${label.toLowerCase()}: ${trimEnd(err instanceof Error ? err.message : String(err))}. Try ${label} again.`,
+    )
+  }
+
+  function stopCrawl() {
+    setConfirmStop(false)
+    setHeadingFocus((n) => n + 1)
+    setActionError('')
+    cancelCrawl(id)
+      .then(refresh)
+      .catch((err) => actionFailed('Stop crawl', err))
+  }
+
+  // An automatic pause after repeated 429/503 responses asks the user for a lower rate.
+  const autoPaused = job.status === 'paused' && progress?.pause_reason === 'rate_limited'
+  const rateText = resumeRateInput ?? (progress ? halfRate(progress.rate) : '')
 
   return (
-    <div className="card">
-      <div className="report-header">
-        <div>
-          <h2>{job.seed}</h2>
-          <p className={`status status-${job.status}`}>{job.status}</p>
-          {job.status === 'running' && job.started_at && (
-            <div className="progress">
-              <span className="progress-elapsed">{formatElapsed(now - Date.parse(job.started_at))} elapsed</span>
-              <span className="progress-bar" role="progressbar" aria-label="Crawl in progress" />
-            </div>
+    <div className="cr">
+      <header className="cr-head">
+        <h1 ref={headingRef} tabIndex={-1}>
+          {hostOf(job.seed)}
+        </h1>
+        <PhasePill phase={pill.phase} live>
+          {pill.label}
+        </PhasePill>
+        <div className="cr-actions">
+          {live && (
+            <CrawlControls
+              id={id}
+              status={job.status}
+              phase={progress?.phase}
+              resumeRate={autoPaused && Number(rateText) > 0 ? Number(rateText) : undefined}
+              onChanged={() => {
+                setActionError('')
+                setResumeRateInput(null)
+                refresh()
+              }}
+              onError={(verb, err) => actionFailed(verb === 'pause' ? 'Pause' : 'Resume crawl', err)}
+              onStop={() => setConfirmStop(true)}
+            />
+          )}
+          {report && (
+            <>
+              <a className="btn btn-secondary" href={exportURL(id, 'json')}>
+                Export JSON
+              </a>
+              <a className="btn btn-secondary" href={exportURL(id, 'csv')}>
+                Export CSV
+              </a>
+              <a className="btn btn-secondary" href={exportURL(id, 'html')}>
+                Export HTML
+              </a>
+              <Button onClick={exportReviewed} title="Download this report with your review marks and comments merged in">
+                Export reviewed JSON
+              </Button>
+            </>
           )}
         </div>
-        {job.status === 'running' && (
-          <button
-            onClick={() => {
-              if (!window.confirm('Cancel this crawl? The report will only include pages already fetched.')) return
-              cancelCrawl(id).catch((e) => setError(String(e)))
-            }}
-          >
-            Cancel
-          </button>
-        )}
-        {report && (
-          <div className="export-buttons">
-            <a href={exportURL(id, 'json')}>Export JSON</a>
-            <a href={exportURL(id, 'csv')}>Export CSV</a>
-            <a href={exportURL(id, 'html')}>Export HTML</a>
-            <button type="button" onClick={exportReviewed} title="Download this report with your resolved/non-issue/comment state merged in">
-              Export reviewed (JSON)
-            </button>
-          </div>
-        )}
-      </div>
+      </header>
+      <p className="cr-seed mono">{job.seed}</p>
 
-      {job.error && <p className="error">{job.error}</p>}
+      {dialogOpen && (
+        <ConfirmDialog
+          title="Stop this crawl?"
+          confirmLabel="Stop crawl"
+          confirmVariant="stop"
+          cancelLabel="Keep crawling"
+          onConfirm={stopCrawl}
+          onCancel={() => setConfirmStop(false)}
+        >
+          <p>The report keeps the pages fetched so far.</p>
+        </ConfirmDialog>
+      )}
+
+      {actionError && <Notice tone="error">{actionError}</Notice>}
+      {pollError && (
+        <Notice tone="warning">
+          {`Could not refresh this crawl: ${trimEnd(pollError)}. ${live ? 'Trying again.' : 'Reload the page to try again.'}`}
+        </Notice>
+      )}
+
+      {live && (
+        <RunningCrawl
+          job={job}
+          progress={progress}
+          tape={tape}
+          tapeOff={tapeOff}
+          recent={recent}
+          receivedAt={receivedAt}
+          notice={
+            autoPaused && progress ? (
+              <AutoPauseNotice progress={progress} rate={rateText} onRateChange={setResumeRateInput} />
+            ) : undefined
+          }
+        />
+      )}
+
+      {job.error && <Notice tone="error">{job.error}</Notice>}
 
       {report && (
         <>
+          <FinishedTape report={report} status={job.status} />
+
           {report.coverage && !report.coverage.complete && (
-            <div className="cov-banner" role="alert">
-              <strong>Partial coverage — this crawl did not reach the whole site.</strong>{' '}
-              {report.coverage.duration_limit_reached ? (
-                <>
-                  The crawl was stopped after reaching its max-duration time budget. Findings reflect only what was
-                  fetched within that window, and many in-scope pages may not have been discovered at all. Raise the
-                  max duration (or leave it unlimited) and re-run for full coverage.
-                </>
-              ) : report.coverage.interrupted ? (
-                <>
-                  The crawl was interrupted before it finished (e.g. the Cancel button). Findings reflect only what
-                  was fetched before the interruption, and many in-scope pages may not have been discovered at all.
-                  Re-run to completion for full coverage.
-                </>
-              ) : (
-                <>
-                  {report.coverage.discovered_not_crawled ?? 0} in-scope URL
-                  {report.coverage.discovered_not_crawled !== 1 ? 's were' : ' was'} discovered but not crawled
-                  {report.coverage.page_limit_reached && (
-                    <>
-                      , because the page limit (<code>--max-pages {report.coverage.max_pages}</code>) was reached
-                    </>
-                  )}
-                  {report.coverage.depth_limit_reached && (
-                    <>
-                      {report.coverage.page_limit_reached ? ' and' : ', because'} the depth limit (
-                      <code>--depth {report.coverage.max_depth}</code>) was reached
-                    </>
-                  )}
-                  . Page-level findings — <strong>broken links especially</strong> — may be incomplete. Re-crawl with
-                  a higher limit (or <code>0</code> for unlimited) for full coverage.
-                </>
-              )}
-            </div>
+            <Notice tone="warning">
+              <p>
+                <strong>Partial coverage: this crawl did not reach the whole site.</strong>{' '}
+                {report.coverage.duration_limit_reached ? (
+                  <>
+                    The crawl stopped when it reached its max duration. Findings cover only what was fetched in that
+                    time, and many pages may not have been discovered at all. Raise the max duration (or leave it
+                    empty for no limit) and crawl again for full coverage.
+                  </>
+                ) : report.coverage.interrupted ? (
+                  <>
+                    The crawl was stopped before it finished (for example with Stop crawl). Findings cover only what
+                    was fetched before that, and many pages may not have been discovered at all. Crawl again and let
+                    it finish for full coverage.
+                  </>
+                ) : (
+                  <>
+                    {formatCount(report.coverage.discovered_not_crawled ?? 0)} in-scope URL
+                    {report.coverage.discovered_not_crawled !== 1 ? 's were' : ' was'} discovered but not crawled
+                    {report.coverage.page_limit_reached &&
+                      `, because the page budget (${formatCount(report.coverage.max_pages ?? 0)}) was reached`}
+                    {report.coverage.depth_limit_reached &&
+                      `${report.coverage.page_limit_reached ? ' and' : ', because'} the depth limit (${formatCount(report.coverage.max_depth ?? 0)}) was reached`}
+                    . Page-level findings, broken links especially, may be incomplete.{' '}
+                    {report.coverage.page_limit_reached && report.coverage.depth_limit_reached
+                      ? 'Raise the page budget and the depth, or leave them empty for no limit,'
+                      : report.coverage.depth_limit_reached
+                        ? 'Raise the depth, or leave it empty for no limit,'
+                        : 'Raise the page budget, or leave it empty for no limit,'}{' '}
+                    and crawl again for full coverage.
+                  </>
+                )}
+              </p>
+              {otherNotes.map((n, i) => (
+                <p key={i}>{n}</p>
+              ))}
+            </Notice>
           )}
 
-          {(() => {
-            // runner.Run appends the same coverageNote() text to report.notes whenever
-            // coverage is incomplete — always prefixed "partial coverage: " — which the
-            // banner above already covers more richly. Filter it out here so the web view
-            // doesn't show it twice; report.html.tmpl never renders .notes at all, so this
-            // duplication is specific to the live view.
-            const otherNotes = (report.notes ?? []).filter((n) => !n.startsWith('partial coverage:'))
-            return (
-              otherNotes.length > 0 && (
-                <ul className="notes">
-                  {otherNotes.map((n, i) => (
-                    <li key={i}>{n}</li>
-                  ))}
-                </ul>
-              )
-            )
-          })()}
+          {otherNotes.length > 0 && !partial && (
+            <Notice tone="info">
+              <ul className="cr-notes">
+                {otherNotes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            </Notice>
+          )}
 
-          <div className="summary-cards">
-            <div className="stat">
-              <span className="stat-value">{report.pages_crawled}</span>
-              <span className="stat-label">pages crawled</span>
+          <div className="cr-stats">
+            <div className="cr-stat">
+              <b className="num">{formatCount(report.pages_crawled)}</b>
+              <span>{noun(report.pages_crawled, 'page')} crawled</span>
             </div>
-            {Object.entries(report.summary.by_severity).map(([sev, count]) => (
-              <div className="stat" key={sev}>
-                <span className={`stat-value severity-${sev}`}>{count}</span>
-                <span className="stat-label">{sev}</span>
-              </div>
-            ))}
+            {(['error', 'warning', 'info'] as const)
+              // Errors always show, even at 0, so the row keeps its shape between crawls.
+              .filter((sev) => sev === 'error' || report.summary.by_severity[sev] !== undefined)
+              .map((sev) => {
+                const count = report.summary.by_severity[sev] ?? 0
+                return (
+                  <div className="cr-stat" key={sev}>
+                    <b className={`num sev-${sev}`}>{formatCount(count)}</b>
+                    <span>{sev === 'info' ? 'info' : noun(count, sev)}</span>
+                  </div>
+                )
+              })}
           </div>
 
-          <div className="subcards">
-            <div className="subcard">
-              <h3>By analyzer</h3>
+          <div className="cr-panels">
+            <section className="cr-panel">
+              <h2>By analyzer</h2>
               {Object.keys(report.summary.by_analyzer).length > 0 ? (
                 <table>
                   <tbody>
                     {Object.entries(report.summary.by_analyzer).map(([a, count]) => (
                       <tr key={a}>
-                        <td>{a}</td>
-                        <td>{count}</td>
+                        <td className="mono">{a}</td>
+                        <td className="num cr-count">{count}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <p className="empty">No analyzers reported.</p>
+                <p className="muted">No analyzer reported an issue.</p>
               )}
-            </div>
-            <div className="subcard">
-              <h3>Pages by status</h3>
+            </section>
+            <section className="cr-panel">
+              <h2>Pages by status</h2>
               {Object.keys(report.summary.pages_by_status).length > 0 ? (
                 <table>
                   <tbody>
                     {Object.entries(report.summary.pages_by_status).map(([s, count]) => (
                       <tr key={s}>
-                        <td>{s}</td>
-                        <td>{count}</td>
+                        <td>{/^\d+$/.test(s) ? <StatusCode code={Number(s)} /> : s}</td>
+                        <td className="num cr-count">{count}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <p className="empty">No pages crawled.</p>
+                <p className="muted">No pages were crawled.</p>
               )}
-            </div>
+            </section>
           </div>
 
           {report.site_map && (
-            <nav className="tabs">
-              <button type="button" className={`tab${tab === 'issues' ? ' active' : ''}`} onClick={() => setTab('issues')}>
-                Issues &amp; summary
+            <div className="cr-tabs">
+              <button
+                type="button"
+                className={`cr-tab${tab === 'issues' ? ' cr-tab-on' : ''}`}
+                aria-pressed={tab === 'issues'}
+                onClick={() => setTab('issues')}
+              >
+                Issues
               </button>
-              <button type="button" className={`tab${tab === 'sitemap' ? ' active' : ''}`} onClick={() => setTab('sitemap')}>
+              <button
+                type="button"
+                className={`cr-tab${tab === 'sitemap' ? ' cr-tab-on' : ''}`}
+                aria-pressed={tab === 'sitemap'}
+                onClick={() => setTab('sitemap')}
+              >
                 Site map
               </button>
-            </nav>
+            </div>
           )}
 
-          {tab === 'sitemap' && report.site_map ? (
-            <SiteMap siteMap={report.site_map} />
-          ) : (
-            <>
-              <div className="filters">
-                <div className="sevfilters">
-                  {(['error', 'warning', 'info'] as const).map((sev) => (
-                    <button
-                      key={sev}
-                      type="button"
-                      className={`sevbtn sev-${sev}${severityOn[sev] ? ' active' : ''}`}
-                      onClick={() => setSeverityOn((prev) => ({ ...prev, [sev]: !prev[sev] }))}
-                    >
-                      {sev.charAt(0).toUpperCase() + sev.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                <label>
-                  Analyzer
-                  <select value={analyzerFilter} onChange={(e) => setAnalyzerFilter(e.target.value)}>
-                    <option value="">all</option>
-                    {Object.keys(report.summary.by_analyzer).map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className={`msel${hiddenCodeCount > 0 ? ' has-hidden' : ''}`}>
-                  <button
-                    type="button"
-                    aria-expanded={codeMenuOpen}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setCodeMenuOpen((v) => !v)
-                    }}
-                  >
-                    {hiddenCodeCount > 0 ? `Codes (${hiddenCodeCount} hidden)` : 'Codes'}
-                    <span className="caret">▾</span>
-                  </button>
-                  <div className="msel-panel" hidden={!codeMenuOpen} onClick={(e) => e.stopPropagation()}>
-                    <div className="msel-acts">
-                      <button type="button" onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, true])))}>
-                        Select all
-                      </button>
-                      <button type="button" onClick={() => setCodeOn(Object.fromEntries(codeList.map((c) => [c, false])))}>
-                        Hide all
-                      </button>
-                    </div>
-                    {codeList.map((c) => (
-                      <label key={c}>
-                        <input
-                          type="checkbox"
-                          checked={codeOn[c] !== false}
-                          onChange={(e) => setCodeOn((prev) => ({ ...prev, [c]: e.target.checked }))}
-                        />
-                        <code>{c}</code>
-                        <span className="msel-n">{codeCounts[c]}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <input
-                  type="search"
-                  placeholder="Search URL, message, code…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <label>
-                  <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} />
-                  Hide resolved
-                </label>
-                <label>
-                  <input type="checkbox" checked={hideNonissue} onChange={(e) => setHideNonissue(e.target.checked)} />
-                  Hide non-issues
-                </label>
-                <span className="filter-count">
-                  Showing {sorted.length.toLocaleString()} of {rows.length.toLocaleString()} issues
-                </span>
-                {filtersActive && (
-                  <button type="button" className="filter-clear" onClick={clearFilters}>
-                    Clear filters
-                  </button>
-                )}
-                <div className="bulkbar">
-                  <label>
-                    <input
-                      ref={selectAllRef}
-                      type="checkbox"
-                      checked={sorted.length > 0 && selectedShownCount === sorted.length}
-                      onChange={(e) => selectShown(e.target.checked)}
-                    />
-                    Select shown
-                  </label>
-                  <button type="button" disabled={selected.size === 0} onClick={() => bulkApply('nonissue')}>
-                    → Non-issue
-                  </button>
-                  <button type="button" disabled={selected.size === 0} onClick={() => bulkApply('resolved')}>
-                    → Resolved
-                  </button>
-                  <button type="button" disabled={selected.size === 0} onClick={() => bulkApply('clear')}>
-                    Clear
-                  </button>
-                  {selected.size > 0 && <span className="seln">{selected.size} selected</span>}
-                </div>
-              </div>
-
-              <div className="table-scroll">
-                <table className="issues">
-                  <thead>
-                    <tr>
-                      {(['severity', 'analyzer', 'code', 'url', 'message'] as const).map((col) => (
-                        <th key={col} className="sortable" onClick={() => toggle(col)} data-dir={dirFor(col)}>
-                          {col.charAt(0).toUpperCase() + col.slice(1)}
-                        </th>
-                      ))}
-                      <th className="nosort">Review</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sorted.map((i) => {
-                      const explanation = explanations[i.code]
-                      const r = review[i._key]
-                      return (
-                        <tr key={i._key} className={r?.resolved || r?.nonissue ? 'reviewed' : undefined}>
-                          <td className={`severity-${i.severity}`}>{i.severity}</td>
-                          <td>{i.analyzer}</td>
-                          <td>{i.code}</td>
-                          <td className="url-cell" title={i.url}>
-                            {i.url}
-                          </td>
-                          <td>
-                            {i.message}
-                            {explanation && (
-                              <details className="explain">
-                                <summary>what this means &amp; how to fix</summary>
-                                <dl>
-                                  <dt>What it is</dt>
-                                  <dd>{explanation.what}</dd>
-                                  <dt>Impact</dt>
-                                  <dd>{explanation.impact}</dd>
-                                  <dt>How to fix</dt>
-                                  <dd>{explanation.fix}</dd>
-                                </dl>
-                              </details>
-                            )}
-                            {i.data && (
-                              <details>
-                                <summary>data</summary>
-                                <pre>{JSON.stringify(i.data, null, 2)}</pre>
-                              </details>
-                            )}
-                          </td>
-                          <td className="review">
-                            <label>
-                              <input type="checkbox" checked={selected.has(i._key)} onChange={() => toggleSelected(i._key)} />
-                              Select
-                            </label>
-                            <label>
-                              <input
-                                type="checkbox"
-                                checked={!!r?.resolved}
-                                onChange={(e) => setReviewFlag(i._key, { resolved: e.target.checked })}
-                              />
-                              Resolved
-                            </label>
-                            <label>
-                              <input
-                                type="checkbox"
-                                checked={!!r?.nonissue}
-                                onChange={(e) => setReviewFlag(i._key, { nonissue: e.target.checked })}
-                              />
-                              Non-issue
-                            </label>
-                            <textarea
-                              rows={2}
-                              placeholder="Add a comment…"
-                              value={r?.note ?? ''}
-                              onChange={(e) => setReviewFlag(i._key, { note: e.target.value })}
-                            />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+          {tab === 'sitemap' && report.site_map && <SiteMap siteMap={report.site_map} />}
+          {/* Stays mounted behind the Site map tab, so its filters and search survive a tab switch. */}
+          <div hidden={tab === 'sitemap' && !!report.site_map}>
+            <IssueTable issues={report.issues} explanations={explanations} review={{ map: review, set: setReview }} />
+          </div>
         </>
       )}
     </div>

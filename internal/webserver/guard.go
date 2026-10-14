@@ -42,7 +42,7 @@ const DefaultMaxRunning = 4
 //     Browsers always attach Origin to cross-origin POSTs, so a hostile page cannot start or
 //     cancel a crawl.
 //
-// Content-Type enforcement for the crawl-start body lives in handleStartCrawl.
+// Content-Type enforcement for JSON bodies lives in requireJSON (request.go).
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.allowAnyHost && !isLoopbackHost(r.Host) {

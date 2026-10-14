@@ -5,7 +5,7 @@ scope: "What each of the twenty-five analyzers checks (technical SEO + SEA + AI 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-12
+updated: 2026-10-13
 depends_on: ["output.md", "configuration.md", "architecture.md", "roadmap.md"]
 sources: ["../internal/runner/runner.go", "../internal/analyze/seo/seo.go", "../internal/analyze/httpx/httpx.go", "../internal/analyze/links/links.go", "../internal/analyze/robotscheck/robotscheck.go", "../internal/analyze/sitemap/sitemap.go", "../internal/analyze/structured/", "../internal/analyze/schemaorg/", "../internal/analyze/perf/perf.go", "../internal/analyze/images/images.go", "../internal/analyze/urls/urls.go", "../internal/analyze/security/", "../internal/analyze/pagination/pagination.go", "../internal/analyze/hreflang/hreflang.go", "../internal/analyze/amp/amp.go", "../internal/analyze/duplicates/duplicates.go", "../internal/analyze/content/content.go", "../internal/analyze/botwall/botwall.go", "../internal/analyze/wordpress/wordpress.go", "../internal/analyze/shopify/", "../internal/analyze/utm/utm.go", "../internal/analyze/tracking/tracking.go", "../internal/analyze/datalayer/datalayer.go", "../internal/analyze/landing/landing.go", "../internal/analyze/consent/", "../internal/analyze/aeo/aeo.go", "../internal/analyze/geo/geo.go"]
 ---
@@ -140,7 +140,10 @@ Reports per host. Issue `url` is `host <hostname>` for the per-host findings.
 
 Source: [`internal/analyze/sitemap/sitemap.go`](../internal/analyze/sitemap/sitemap.go).
 Looks for sitemaps declared in `robots.txt` plus the conventional `/sitemap.xml` and
-`/sitemap_index.xml`, following sitemap-index files up to two levels deep.
+`/sitemap_index.xml`, following sitemap-index files up to two levels deep. The sitemap is
+discovered once before the crawl, from the seed host's `robots.txt` `Sitemap:` lines plus
+`/sitemap.xml` and `/sitemap_index.xml`; sitemaps declared only by another host's `robots.txt`
+are no longer read.
 
 | Code | Severity | Triggered when | `data` |
 | --- | --- | --- | --- |

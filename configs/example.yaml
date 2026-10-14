@@ -54,8 +54,13 @@ crawl:
   headers: []
   header_file: ""
   header_profile: ""
+  # Token sent as "Authorization: Bearer <token>", scoped and leak-guarded the same way as
+  # basic_auth, and not supported with render: "headless". Can't be combined with basic_auth
+  # or a custom Authorization header. Prefer GOCRAWL_CRAWL_BEARER_TOKEN or --bearer-token to
+  # writing the token into this file.
+  bearer_token: ""
   timeout: "15s"        # per-request timeout
-  max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
+  max_duration: "0s"    # budget for active crawl time, paused time excluded (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report
   max_body_bytes: 5242880  # 5 MiB cap on a single response body
   respect_robots: true  # obey robots.txt while crawling

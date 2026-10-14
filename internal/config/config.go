@@ -3,7 +3,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -66,12 +68,17 @@ type CrawlConfig struct {
 	// web APIs accept, so a caller can pick a header set without seeing (or being able to
 	// point gocrawl at) arbitrary files. All three may be combined; for a name set more than
 	// once, Headers beats HeaderFile, which beats HeaderProfile.
-	Headers       []string      `mapstructure:"headers"`
-	HeaderFile    string        `mapstructure:"header_file"`
-	HeaderProfile string        `mapstructure:"header_profile"`
-	Timeout       time.Duration `mapstructure:"timeout"`
-	// MaxDuration bounds the crawl's total wall-clock time (0 = unlimited). When it elapses,
-	// the crawl stops early and still produces a report from whatever was fetched so far.
+	Headers       []string `mapstructure:"headers"`
+	HeaderFile    string   `mapstructure:"header_file"`
+	HeaderProfile string   `mapstructure:"header_profile"`
+	// BearerToken is sent as "Authorization: Bearer <token>" through the custom-headers path,
+	// so it gets exactly the host restriction Headers get. It can't be combined with
+	// BasicAuth or a custom Authorization header, which set the same header.
+	BearerToken string        `mapstructure:"bearer_token"`
+	Timeout     time.Duration `mapstructure:"timeout"`
+	// MaxDuration bounds the crawl's active time, excluding time spent paused (0 = unlimited).
+	// When it elapses, the crawl stops early and still produces a report from whatever was
+	// fetched so far.
 	MaxDuration     time.Duration `mapstructure:"max_duration"`
 	MaxBodyBytes    int64         `mapstructure:"max_body_bytes"`
 	RespectRobots   bool          `mapstructure:"respect_robots"`
@@ -190,6 +197,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("crawl.headers", d.Crawl.Headers)
 	v.SetDefault("crawl.header_file", d.Crawl.HeaderFile)
 	v.SetDefault("crawl.header_profile", d.Crawl.HeaderProfile)
+	v.SetDefault("crawl.bearer_token", d.Crawl.BearerToken)
 	v.SetDefault("crawl.timeout", d.Crawl.Timeout)
 	v.SetDefault("crawl.max_duration", d.Crawl.MaxDuration)
 	v.SetDefault("crawl.max_body_bytes", d.Crawl.MaxBodyBytes)
@@ -291,6 +299,10 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	if headers.Get("Authorization") != "" && o.BasicAuthUser != "" {
 		return o, fmt.Errorf("a custom Authorization header can't be combined with basic_auth, which sets the same header")
 	}
+	headers, err = c.Crawl.withBearerToken(headers, o.BasicAuthUser != "")
+	if err != nil {
+		return o, err
+	}
 	o.Headers = headers
 
 	inc, err := compile(c.Crawl.Include)
@@ -321,15 +333,20 @@ func parseProxies(raw []string) ([]*url.URL, error) {
 		}
 		u, err := url.Parse(p)
 		if err != nil {
-			return nil, fmt.Errorf("invalid proxy %q: %w", p, err)
+			// url.Error quotes the whole URL, credentials included; keep only the cause.
+			var urlErr *url.Error
+			if errors.As(err, &urlErr) {
+				err = urlErr.Err
+			}
+			return nil, fmt.Errorf("invalid proxy URL (the credentials are not shown): %w", err)
 		}
 		switch u.Scheme {
 		case "http", "https", "socks5":
 		default:
-			return nil, fmt.Errorf("unsupported proxy scheme %q in %q (want http, https, or socks5)", u.Scheme, p)
+			return nil, fmt.Errorf("unsupported proxy scheme %q in %q (want http, https, or socks5)", u.Scheme, u.Redacted())
 		}
 		if u.Host == "" {
-			return nil, fmt.Errorf("proxy %q has no host", p)
+			return nil, fmt.Errorf("proxy %q has no host", u.Redacted())
 		}
 		out = append(out, u)
 	}
@@ -342,7 +359,7 @@ func parseProxies(raw []string) ([]*url.URL, error) {
 func parseBasicAuth(raw string) (user, pass string, err error) {
 	user, pass, ok := strings.Cut(raw, ":")
 	if !ok {
-		return "", "", fmt.Errorf(`want "user:pass", got %q`, raw)
+		return "", "", errors.New(`want "user:pass" (the value is not shown)`)
 	}
 	return user, pass, nil
 }
@@ -350,37 +367,83 @@ func parseBasicAuth(raw string) (user, pass string, err error) {
 // loadHeaders merges the header profile, header file, and inline headers, in that order, into
 // one validated http.Header (nil when none are configured).
 func (c CrawlConfig) loadHeaders() (http.Header, error) {
-	var lines []string
+	var merged http.Header
+	add := func(lines []string, from string) error {
+		h, err := crawler.ParseHeaderLines(lines)
+		if err != nil {
+			return fmt.Errorf("%s: %w", from, err)
+		}
+		for name, values := range h {
+			if merged == nil {
+				merged = http.Header{}
+			}
+			merged[name] = values
+		}
+		return nil
+	}
 	if name := strings.TrimSpace(c.HeaderProfile); name != "" {
 		path, err := HeaderProfilePath(name)
 		if err != nil {
 			return nil, fmt.Errorf("header_profile: %w", err)
 		}
 		profile, err := readHeaderFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("header_profile %q: %w", name, err)
+		if errors.Is(err, fs.ErrNotExist) {
+			// Not the OS error: it quotes the profile's path, and this reaches MCP and web responses.
+			return nil, fmt.Errorf("header profile %q not found", name)
 		}
-		lines = append(lines, profile...)
+		if err != nil {
+			return nil, fmt.Errorf("header profile %q could not be read (check its file permissions)", name)
+		}
+		if err := add(profile, fmt.Sprintf("header_profile %q", name)); err != nil {
+			return nil, err
+		}
 	}
 	if path := strings.TrimSpace(c.HeaderFile); path != "" {
 		file, err := readHeaderFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("header_file: %w", err)
 		}
-		lines = append(lines, file...)
+		if err := add(file, "header_file"); err != nil {
+			return nil, err
+		}
 	}
-	lines = append(lines, c.Headers...)
-	if len(lines) == 0 {
-		return nil, nil
+	if err := add(c.Headers, "headers"); err != nil {
+		return nil, err
 	}
-	h, err := crawler.ParseHeaderLines(lines)
+	return merged, nil
+}
+
+// withBearerToken adds BearerToken, when set, to headers as "Authorization: Bearer <token>".
+// A pasted "Bearer " prefix is dropped rather than doubled. The token never appears in an
+// error: these errors reach the CLI, MCP tool results and web API responses.
+func (c CrawlConfig) withBearerToken(headers http.Header, hasBasicAuth bool) (http.Header, error) {
+	token := strings.TrimSpace(c.BearerToken)
+	if token == "" {
+		return headers, nil
+	}
+	if hasBasicAuth {
+		return nil, errors.New("bearer_token can't be combined with basic_auth: both set the Authorization header")
+	}
+	if headers.Get("Authorization") != "" {
+		return nil, errors.New("bearer_token can't be combined with a custom Authorization header (from headers, header_file or header_profile)")
+	}
+	if strings.EqualFold(token, "bearer") {
+		token = ""
+	} else if strings.HasPrefix(strings.ToLower(token), "bearer ") {
+		token = strings.TrimSpace(token[len("bearer "):])
+	}
+	if token == "" {
+		return nil, errors.New("bearer_token is empty after removing the \"Bearer \" prefix")
+	}
+	parsed, err := crawler.ParseHeaderLines([]string{"Authorization: Bearer " + token})
 	if err != nil {
-		return nil, fmt.Errorf("headers: %w", err)
+		return nil, errors.New("bearer_token contains characters not allowed in an HTTP header")
 	}
-	if len(h) == 0 {
-		return nil, nil
+	if headers == nil {
+		headers = http.Header{}
 	}
-	return h, nil
+	headers.Set("Authorization", parsed.Get("Authorization"))
+	return headers, nil
 }
 
 // headerProfileName restricts profile names to a plain file-name stem, so a profile can only
@@ -401,7 +464,7 @@ func HeaderProfileDir() string {
 // HeaderProfilePath resolves a header profile name to <HeaderProfileDir>/<name>.headers.
 func HeaderProfilePath(name string) (string, error) {
 	if !headerProfileName.MatchString(name) {
-		return "", fmt.Errorf("invalid profile name %q (letters, digits, '.', '_' and '-' only, not starting with '.')", name)
+		return "", fmt.Errorf("%w: name %q (letters, digits, '.', '_' and '-' only, not starting with '.')", ErrInvalidHeaderProfile, name)
 	}
 	return filepath.Join(HeaderProfileDir(), name+".headers"), nil
 }

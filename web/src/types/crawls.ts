@@ -25,6 +25,10 @@ export interface Coverage {
   duration_limit_reached?: boolean
   max_pages?: number
   max_depth?: number
+  sitemap_total?: number
+  sitemap_fetched?: number
+  tape?: string
+  tape_off?: string
 }
 
 export interface PageIssue {
@@ -85,7 +89,7 @@ export interface Explanation {
   fix: string
 }
 
-export type CrawlStatus = 'running' | 'done' | 'error' | 'canceled'
+export type CrawlStatus = 'running' | 'paused' | 'done' | 'error' | 'canceled'
 
 export interface JobView {
   id: string
@@ -142,5 +146,11 @@ export interface StartCrawlParams {
   cookie?: string
   headers?: string[]
   header_profile?: string
+  strip_query?: boolean
+  adaptive_delay?: boolean
+  follow_nofollow?: boolean
+  timeout?: string
+  bearer_token?: string
+  login_session?: string
   save: boolean
 }

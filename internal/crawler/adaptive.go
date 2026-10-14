@@ -26,6 +26,9 @@ const (
 	// deadline to recover; five minutes is generous headroom for a genuine rate-limit window
 	// while still bounding the worst case.
 	maxRetryAfter = 5 * time.Minute
+	// throttleWindow is how far back RecentThrottled counts 429/503 responses. Live progress
+	// shows the count, and auto-pause (Options.PauseOnThrottle) triggers on it.
+	throttleWindow = 60 * time.Second
 )
 
 // AdaptiveLimiter is a requests-per-second limiter that halves its rate (down to a floor)
@@ -42,6 +45,13 @@ type AdaptiveLimiter struct {
 	curRate       float64 // current req/s after any backoff (0 = still unlimited)
 	lastAdjust    time.Time
 	throttleCount int
+	// debounce is backoffDebounce; a field so engine tests can turn it off.
+	debounce time.Duration
+	// recent holds the arrival time of every 429/503 response within throttleWindow, oldest
+	// first. Pruned on every write and read.
+	recent []time.Time
+	// lastRetryAfter is the most recent Retry-After (seconds, clamped) a 429/503 carried.
+	lastRetryAfter float64
 }
 
 // NewAdaptiveLimiter creates a limiter starting at ratePerSecond (0 = unlimited). Wait always
@@ -55,6 +65,7 @@ func NewAdaptiveLimiter(ratePerSecond float64, enabled bool) *AdaptiveLimiter {
 		limiter:  rate.NewLimiter(limit, 1),
 		enabled:  enabled,
 		baseRate: ratePerSecond,
+		debounce: backoffDebounce,
 	}
 }
 
@@ -66,11 +77,9 @@ func (a *AdaptiveLimiter) Wait(ctx context.Context) error {
 // OnResponse inspects a fetch outcome and, if it signals overload (429/503), halves the current
 // rate down to backoffMinRate, never faster than any Retry-After header demands. It reports
 // whether this call triggered an adjustment (false if disabled, the status wasn't 429/503, or a
-// trigger already landed within backoffDebounce) and the resulting rate.
+// trigger already landed within backoffDebounce) and the resulting rate. Every 429/503 is also
+// recorded for RecentThrottled and LastRetryAfter, whether or not adaptive delay is enabled.
 func (a *AdaptiveLimiter) OnResponse(statusCode int, header http.Header) (adjusted bool, newRate float64) {
-	if !a.enabled {
-		return false, 0
-	}
 	if statusCode != http.StatusTooManyRequests && statusCode != http.StatusServiceUnavailable {
 		return false, 0
 	}
@@ -79,7 +88,18 @@ func (a *AdaptiveLimiter) OnResponse(statusCode int, header http.Header) (adjust
 	defer a.mu.Unlock()
 
 	now := time.Now()
-	if !a.lastAdjust.IsZero() && now.Sub(a.lastAdjust) < backoffDebounce {
+	// Recorded whether or not adaptive delay is on: live progress reports how hard the server
+	// is pushing back even when the operator turned backoff off.
+	a.recent = append(pruneBefore(a.recent, now.Add(-throttleWindow)), now)
+	ra := retryAfterSeconds(header)
+	if ra > 0 {
+		a.lastRetryAfter = ra
+	}
+
+	if !a.enabled {
+		return false, 0
+	}
+	if !a.lastAdjust.IsZero() && now.Sub(a.lastAdjust) < a.debounce {
 		return false, 0
 	}
 	a.lastAdjust = now
@@ -100,7 +120,7 @@ func (a *AdaptiveLimiter) OnResponse(statusCode int, header http.Header) (adjust
 	}
 	// An explicit Retry-After is a direct server instruction, so honor it even below the
 	// heuristic floor: never go faster than it asks.
-	if ra := retryAfterSeconds(header); ra > 0 {
+	if ra > 0 {
 		if byRetry := 1.0 / ra; byRetry < next {
 			next = byRetry
 		}
@@ -109,6 +129,42 @@ func (a *AdaptiveLimiter) OnResponse(statusCode int, header http.Header) (adjust
 	a.throttleCount++
 	a.limiter.SetLimit(rate.Limit(next))
 	return true, next
+}
+
+// pruneBefore drops the leading timestamps older than cutoff. ts is oldest first.
+func pruneBefore(ts []time.Time, cutoff time.Time) []time.Time {
+	i := 0
+	for i < len(ts) && ts[i].Before(cutoff) {
+		i++
+	}
+	return ts[i:]
+}
+
+// RecentThrottled reports how many 429/503 responses arrived within the last throttleWindow.
+func (a *AdaptiveLimiter) RecentThrottled() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.recent = pruneBefore(a.recent, time.Now().Add(-throttleWindow))
+	return len(a.recent)
+}
+
+// LastRetryAfter reports the most recent Retry-After a 429/503 carried, in whole seconds
+// (rounded up, clamped to maxRetryAfter), or 0 when none did.
+func (a *AdaptiveLimiter) LastRetryAfter() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return int(math.Ceil(a.lastRetryAfter))
+}
+
+// EffectiveRate reports the requests-per-second limit in effect: the backed-off rate when
+// adaptive delay has lowered it, otherwise the configured rate. 0 means unlimited.
+func (a *AdaptiveLimiter) EffectiveRate() float64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.curRate > 0 {
+		return a.curRate
+	}
+	return a.baseRate
 }
 
 // ThrottleCount reports how many times OnResponse has backed off the rate.
@@ -169,4 +225,26 @@ func (f *AdaptiveFetcher) Fetch(ctx context.Context, rawURL string) (*Page, erro
 		f.Limiter.OnResponse(page.StatusCode, page.Header)
 	}
 	return page, err
+}
+
+// SetRate replaces the current rate (an operator resuming at a chosen speed). r <= 0 is
+// ignored. Later 429/503s halve from the new rate.
+func (a *AdaptiveLimiter) SetRate(r float64) {
+	if r <= 0 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.curRate = r
+	a.limiter.SetLimit(rate.Limit(r))
+}
+
+// ResetRecent forgets the recent 429/503 window and the last Retry-After, so a resumed crawl
+// gets a fresh minute before auto-pause can trigger again, and a second pause can't report the
+// previous pause's wait.
+func (a *AdaptiveLimiter) ResetRecent() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.recent = nil
+	a.lastRetryAfter = 0
 }

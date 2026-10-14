@@ -1,0 +1,85 @@
+/* Crawls list. */
+.hist-empty {
+  color: var(--ink-2);
+}
+
+.hist-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.hist-filters input {
+  min-width: 16rem;
+}
+
+.hist-table {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+.hist-table th,
+.hist-table td {
+  padding: 7px 8px;
+  border-top: 1px solid var(--rule);
+}
+
+.hist-table thead th {
+  white-space: nowrap;
+  border-top: 0;
+}
+
+.hist-num {
+  text-align: right;
+}
+
+/* The checkbox column: just wide enough for a 24px target. */
+.hist-table .hist-pick {
+  width: 40px;
+  padding-right: 4px;
+}
+
+.hist-table .hist-pick input {
+  width: 24px;
+  height: 24px;
+}
+
+/* The sort control is a button inside the header cell so the keyboard can reach it; it
+   looks like the header text. */
+.hist-sortable button {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hist-sortable button:hover {
+  color: var(--ink);
+}
+
+.hist-sortable[data-dir='asc'] button::after {
+  content: ' \25B2';
+  font-size: 0.7em;
+}
+
+.hist-sortable[data-dir='desc'] button::after {
+  content: ' \25BC';
+  font-size: 0.7em;
+}
+
+.hist-row {
+  cursor: pointer;
+}
+
+.hist-row:hover {
+  background: var(--raised);
+}

@@ -5,9 +5,9 @@ scope: "How the engine, analyzer pipeline, and report builder fit together; the 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-24
+updated: 2026-10-13
 depends_on: ["web.md", "configuration.md", "roadmap.md"]
-sources: ["../internal/runner/runner.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
+sources: ["../internal/runner/runner.go", "../internal/runner/options.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/progress.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
 ---
 # Architecture & developer guide
 
@@ -43,10 +43,13 @@ seed URL + config
  JSON / CSV / HTML  (file, stdout, MCP response, or web API response)
 ```
 
-[`runner.Run`](../internal/runner/runner.go) is the single orchestration point used by both
-the CLI (`gocrawl crawl`) and the MCP server. It compiles the config into
+[`runner.Run`](../internal/runner/runner.go) is the single orchestration point used by the
+CLI (`gocrawl crawl`), the MCP server, and the web API. It compiles the config into
 `crawler.Options`, builds the engine and analyzer registry, runs the crawl, runs the selected
-analyzers over the result, and hands everything to the report builder.
+analyzers over the result, and hands everything to the report builder. A caller that needs
+more than the finished report passes `RunOption` values
+([`internal/runner/options.go`](../internal/runner/options.go)) instead of new parameters;
+the CLI and MCP server pass none.
 
 ## Package map
 
@@ -78,18 +81,31 @@ breadth-first walk:
 - `inScope` filters each candidate URL by scheme, host (seed host ± subdomains, unless
   `FollowExternal`), and the exclude-then-include regex rules.
 - `RespectRobots` consults a per-host robots manager before fetching; `MaxPages` and
-  `MaxDepth` bound the walk. `MaxDuration` bounds the whole crawl's wall-clock time via a
-  context deadline.
+  `MaxDepth` bound the walk. `MaxDuration` bounds the
+  crawl's active time: a timer that stops while the crawl is paused cancels the crawl when the
+  budget is used up.
 - After fetching, links are extracted from the parsed document and pushed onto the frontier
   (skipping external links unless `FollowExternal`, and `nofollow` links unless
   `FollowNofollow`).
 - `robots.txt` is collected for every crawled host afterward, so the `robots` analyzer has
   data even when `RespectRobots` is off.
-- Analyzers that fetch extra resources after the crawl (`sitemap`, `geo`'s `llms.txt`, the
-  `--specialized` `wordpress` and `shopify` probes) get their fetcher from `Engine.Govern`,
+- Analyzers that fetch extra resources (`geo`'s `llms.txt`, the `--specialized` `wordpress` and
+  `shopify` probes) get their fetcher from `Engine.Govern`,
   which puts every request under the same rate limiter and `RespectRobots` policy as the
   crawl. A robots-disallowed probe returns `crawler.ErrRobotsDisallowed` without touching the
-  server, and a `429` seen by a probe backs off the shared adaptive limiter.
+  server, and a `429` seen by a probe backs off the shared adaptive limiter. The `sitemap`
+  analyzer fetches nothing after the crawl: it works from the pre-pass set (see below).
+- `Options.OnProgress`, when set, is called after each page is recorded with a
+  [`crawler.Progress`](../internal/crawler/progress.go) snapshot: pages recorded, queue length,
+  the page just recorded, the rate limit in effect, and 429/503 responses in the last minute.
+  Calls are serialized in recording order and run while the engine holds its locks, so the
+  callback must return quickly and never call back into the engine.
+- `Engine.Pause` and `Engine.Resume(rate)` hold back and release the frontier: in-flight
+  requests finish and are recorded, a task that was waiting on the rate limiter goes back to
+  the head of the queue, and cancellation still wakes a paused crawl. With
+  `Options.PauseOnThrottle` the engine pauses itself after sustained 429/503 responses.
+  `runner.Control` (through `runner.WithControl`) forwards pause and resume to the engine,
+  queueing a pause made during the sitemap pre-pass.
 - Stopping early (a canceled context, e.g. Ctrl-C or `MaxDuration`) still returns everything
   fetched so far as a result, flagged via `Result.Coverage.Interrupted` /
   `DurationLimitReached` rather than discarded as an error.
@@ -97,6 +113,13 @@ breadth-first walk:
 The engine produces a [`crawler.Result`](../internal/crawler/types.go): the list of pages
 (each with status, redirects, links, timing, parsed doc), the per-host robots data, and an
 index for looking up a page by URL.
+
+Before the crawl, [`runner.Run`](../internal/runner/runner.go) runs a sitemap pre-pass:
+`sitemap.DiscoverAll` on the governed analyzer fetcher, filtered through `Engine.InScope`. The
+`sitemap` analyzer gets the result through `sitemap.WithURLs`, so the sitemap is fetched once
+per crawl, and `Coverage.SitemapTotal` / `SitemapFetched` come from it. `runner.WithProgress`
+wraps the engine callback into a `runner.Progress` that adds the run phase (`sitemap`,
+`crawling`, `analyzing`) and the sitemap counts; the web server uses it for live progress.
 
 ## The analyzer seam
 

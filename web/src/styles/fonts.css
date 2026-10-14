@@ -1,0 +1,29 @@
+/*
+ * Atkinson Hyperlegible Next (text) and Atkinson Hyperlegible Mono (URLs, status codes),
+ * bundled so the UI never loads a font from a CDN and works offline in the desktop shell.
+ * They keep 0/O and 1/l/I distinct, which matters when reading URLs. Both are variable fonts:
+ * one file covers weights 200 to 800. Converted to WOFF2 from google/fonts at revision
+ * 95f4904fc8bcf26d3420fe315560c96417c6dec7 (ofl/atkinsonhyperlegiblenext,
+ * ofl/atkinsonhyperlegiblemono). SIL Open Font License 1.1: see ../fonts/OFL.txt.
+ */
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  src: url('../fonts/AtkinsonHyperlegibleNext.woff2') format('woff2');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible Mono';
+  src: url('../fonts/AtkinsonHyperlegibleMono.woff2') format('woff2');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-text: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+  --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, monospace;
+}

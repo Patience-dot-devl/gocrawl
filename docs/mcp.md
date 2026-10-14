@@ -5,7 +5,7 @@ scope: "Running gocrawl as an MCP server, registering it with clients, and the `
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-28
+updated: 2026-10-13
 depends_on: ["analyzers.md", "configuration.md", "output.md", "roadmap.md"]
 sources: ["../internal/mcpserver/server.go", "../cmd/gocrawl/mcp.go", "../internal/config/config.go"]
 ---
@@ -77,6 +77,10 @@ fields fall back to the built-in defaults:
 | `follow_external` | bool | `false` | Follow links that leave the seed host entirely. |
 | `include` | string[] | *(none)* | Only crawl URLs matching at least one regex. |
 | `exclude` | string[] | *(none)* | Skip URLs matching any regex. |
+| `follow_nofollow` | bool | `false` | Also follow links marked `rel="nofollow"`. |
+| `strip_query` | bool | `false` | Ignore query strings (treat `?a=1` and `?a=2` as one URL); skips the query-dependent `utm` / `tracking` analysis. |
+| `adaptive_delay` | bool | `true` | Slow the crawl automatically on HTTP 429/503, honoring `Retry-After`. |
+| `timeout` | string | `15s` | Per-request timeout as a Go duration string. |
 | `user_agent` | string | *(built-in)* | `User-Agent` header sent on every request. |
 | `user_agents` | string[] | *(none)* | Pool of `User-Agent` strings to rotate across; supersedes `user_agent`. |
 | `user_agent_rotation` | string | `round-robin` | `off`, `round-robin`, or `random`. |
@@ -85,6 +89,7 @@ fields fall back to the built-in defaults:
 | `proxy_rotation` | string | `round-robin` | `off`, `round-robin`, `random`, or `sticky-host`. |
 | `basic_auth` | string | *(none)* | HTTP Basic Auth credentials as `user:pass`, for sites gated by server-level Basic Auth (see [Configuration](configuration.md#http-basic-auth)). |
 | `cookie` | string | *(none)* | Raw `Cookie` header sent on every request, for sites gated by an app-level session cookie rather than server-level Basic Auth, e.g. a Shopify storefront password page (see [Configuration](configuration.md#cookie-gated-sites-eg-a-shopify-storefront-password)). |
+| `bearer_token` | string | *(none)* | Sent as `Authorization: Bearer <token>`, only to the seed host; raw render mode only. Can't be combined with `basic_auth` or a custom `Authorization` header (see [Bearer tokens](configuration.md#bearer-tokens)). The MCP server doesn't read `GOCRAWL_*` environment variables, so this value travels in the agent's tool arguments; prefer a `header_profile` containing an `Authorization: Bearer …` line. |
 | `headers` | string[] | *(none)* | Extra request headers as `"Name: value"`, sent only to the seed host; raw render mode only. For secrets prefer `header_profile`. |
 | `header_profile` | string | *(none)* | Name of a header file at `~/.gocrawl/headers/<name>.headers` on the server's machine, e.g. a Shopify crawler access signature. The agent passes only the name, so the secret never enters its context. A file path is deliberately not accepted (see [Custom request headers](configuration.md#custom-request-headers-eg-shopify-crawler-access-signatures)). |
 
@@ -123,6 +128,10 @@ Trimmed example response:
   }
 }
 ```
+
+The response's `coverage` omits `tape` and `tape_off` (the per-page crawl tape, one character
+per page, which only the web UI uses); the other [coverage fields](output.md#coverage) are
+included.
 
 ### `list_analyzers`
 

@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
-	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/redirectcheck"
 )
 
@@ -31,8 +29,8 @@ func newCheckRedirectsCmd() *cobra.Command {
 	f.Int("concurrency", 4, "parallel fetch workers")
 	f.Float64("rate", 0, "max requests per second (0 = unlimited)")
 	f.Bool("adaptive-delay", true, "automatically slow requests when the site returns HTTP 429/503")
-	f.Duration("timeout", 15*time.Second, "per-request timeout")
-	f.String("user-agent", "gocrawl/0.1 (+https://github.com/Patience-dot-devl/gocrawl)", "User-Agent header")
+	f.Duration("timeout", redirectcheck.DefaultTimeout, "per-request timeout")
+	f.String("user-agent", redirectcheck.DefaultUserAgent, "User-Agent header")
 	_ = cmd.MarkFlagRequired("input")
 	_ = cmd.MarkFlagRequired("domain")
 	return cmd
@@ -61,12 +59,7 @@ func runCheckRedirects(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("parsing input CSV: %w", err)
 	}
 
-	fetcher := crawler.NewHTTPFetcher(crawler.Options{
-		Timeout:      timeout,
-		UserAgent:    userAgent,
-		MaxRedirects: 10,
-		MaxBodyBytes: 5 << 20,
-	})
+	fetcher := redirectcheck.NewFetcher(timeout, userAgent)
 
 	var stats redirectcheck.RunStats
 	results, err := redirectcheck.Run(cmd.Context(), rules, redirectcheck.RunOptions{

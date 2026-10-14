@@ -1,343 +1,181 @@
-import { useEffect, useState } from 'react'
-import { listAnalyzers, startCrawl } from '../api'
-import type { AnalyzerInfo, StartCrawlParams } from '../types'
+import { useEffect, useRef, useState } from 'react'
+import { listAnalyzers, startCrawl } from '../api/crawls'
+import { listHeaderProfiles } from '../api/profiles'
+import type { AnalyzerInfo, StartCrawlParams } from '../types/crawls'
+import type { LoginSession } from '../types/login'
+import CrawlFields from './crawlform/CrawlFields'
+import LoginPanel from './crawlform/LoginPanel'
+import { LOGOUT_EXCLUDE, fromParams, hostOf, splitList, toParams, withLine, type FormValues } from './crawlform/values'
+import { usePageTitle } from '../pageTitle'
+import { useSettings } from '../settings/context'
+import SitemapPreviewLine from './progress/SitemapPreviewLine'
+import { DEFAULT_MAX_PAGES } from './progress/tapeText'
+import Button from './ui/Button'
+import Notice from './ui/Notice'
+import './CrawlForm.css'
+
+function message(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
 
 export default function CrawlForm({ onStarted }: { onStarted: (id: string) => void }) {
+  usePageTitle('New crawl')
+  const { settings, saveDefaults, error: settingsError } = useSettings()
+  const defaults = settings?.crawl_defaults
+  const [values, setValues] = useState<FormValues>(() => fromParams(defaults))
+  const [dirty, setDirty] = useState(false)
+  const [defaultsNote, setDefaultsNote] = useState('')
+  // Settings load after the first render. Until the user touches the form, follow them.
+  const [seenDefaults, setSeenDefaults] = useState(defaults)
+  if (defaults !== seenDefaults) {
+    setSeenDefaults(defaults)
+    if (!dirty) setValues(fromParams(defaults))
+  }
   const [analyzers, setAnalyzers] = useState<AnalyzerInfo[]>([])
-  const [url, setUrl] = useState('')
-  const [depth, setDepth] = useState('')
-  const [maxPages, setMaxPages] = useState('')
-  const [concurrency, setConcurrency] = useState('')
-  const [rate, setRate] = useState('')
-  const [maxDuration, setMaxDuration] = useState('')
-  const [render, setRender] = useState('raw')
-  const [respectRobots, setRespectRobots] = useState(true)
-  const [subdomains, setSubdomains] = useState(false)
-  const [followExternal, setFollowExternal] = useState(false)
-  const [specialized, setSpecialized] = useState(false)
-  const [securityAudit, setSecurityAudit] = useState(false)
-  const [ignoreExternalTagging, setIgnoreExternalTagging] = useState(true)
-  const [save, setSave] = useState(true)
-  const [include, setInclude] = useState('')
-  const [exclude, setExclude] = useState('')
-  const [userAgent, setUserAgent] = useState('')
-  const [userAgents, setUserAgents] = useState('')
-  const [userAgentRotation, setUserAgentRotation] = useState('round-robin')
-  const [proxy, setProxy] = useState('')
-  const [proxies, setProxies] = useState('')
-  const [proxyRotation, setProxyRotation] = useState('round-robin')
-  const [basicAuthUser, setBasicAuthUser] = useState('')
-  const [basicAuthPass, setBasicAuthPass] = useState('')
-  const [cookieAuth, setCookieAuth] = useState(false)
-  const [cookie, setCookie] = useState('')
-  const [customHeaders, setCustomHeaders] = useState(false)
-  const [headers, setHeaders] = useState('')
-  const [headerProfile, setHeaderProfile] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [profiles, setProfiles] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [profilesError, setProfilesError] = useState('')
+  // True once a crawl has started with the captured login; LoginPanel then keeps it on unmount.
+  const loginUsed = useRef(false)
+  const [login, setLogin] = useState<LoginSession | null>(null)
+  const loginBlocked =
+    values.render === 'headless'
+      ? 'Browser login works with raw rendering only. Set Render to raw first.'
+      : values.cookieAuth && values.cookie.trim()
+        ? 'Clear the cookie header first: the browser login supplies the cookies.'
+        : ''
+
+  function addLogoutExclude() {
+    setDirty(true)
+    setValues((v) => ({ ...v, exclude: withLine(v.exclude, LOGOUT_EXCLUDE) }))
+  }
 
   useEffect(() => {
     listAnalyzers()
       .then((r) => setAnalyzers(r.analyzers))
-      .catch((e) => setError(String(e)))
+      .catch((e: unknown) => setError(message(e)))
+    listHeaderProfiles()
+      .then((r) => setProfiles(r.profiles))
+      .catch((e: unknown) => setProfilesError(message(e)))
   }, [])
 
-  // Newline-separated rather than comma-separated: a comma is a completely ordinary character
-  // in a User-Agent string ("... (KHTML, like Gecko) ...") and in a regex ("{2,4}"), so
-  // splitting on it would silently corrupt otherwise-valid entries.
-  function splitList(s: string): string[] {
-    return s
-      .split('\n')
-      .map((v) => v.trim())
-      .filter(Boolean)
+  function update(patch: Partial<FormValues>) {
+    setDirty(true)
+    setDefaultsNote('')
+    setValues((v) => ({ ...v, ...patch }))
   }
 
-  function toggleAnalyzer(name: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
-
-  function selectAllAnalyzers() {
-    setSelected(new Set(analyzers.map((a) => a.name)))
-  }
-
-  function selectNoAnalyzers() {
-    setSelected(new Set())
+  async function handleSaveDefaults() {
+    setError('')
+    setDefaultsNote('')
+    try {
+      // The logout exclude is added automatically by Log in with browser; it belongs to that
+      // login, not to the defaults.
+      const exclude = splitList(values.exclude).filter((l) => l !== LOGOUT_EXCLUDE).join('\n')
+      await saveDefaults(toParams({ ...values, exclude }, 'defaults'))
+      setDefaultsNote(
+        'Saved. New crawls start with these settings. Passwords, cookies, tokens, inline headers and proxy credentials are never saved.',
+      )
+    } catch (err) {
+      setError(`Couldn't save the defaults: ${message(err)}`)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!url.trim()) return
+    if (!values.url.trim()) return
+    if (values.bearerToken.trim() && values.basicAuthUser.trim()) {
+      setError('Use a bearer token or Basic Auth, not both: they set the same Authorization header.')
+      return
+    }
+    if (login?.state === 'waiting') {
+      setError('Finish the browser login first: press "I\'m logged in", or cancel it.')
+      return
+    }
+    if (login?.state === 'captured' && hostOf(values.url) !== login.host) {
+      setError(`The browser login is for ${login.host}, but the seed URL is on ${hostOf(values.url) || 'another host'}. Log in again for this site.`)
+      return
+    }
     setSubmitting(true)
     setError('')
-    const params: StartCrawlParams = {
-      url: url.trim(),
-      render,
-      respect_robots: respectRobots,
-      subdomains,
-      follow_external: followExternal,
-      specialized,
-      security_audit: securityAudit,
-      ignore_external_tagging: ignoreExternalTagging,
-      save,
-    }
-    if (depth) params.depth = Number(depth)
-    if (maxPages) params.max_pages = Number(maxPages)
-    if (concurrency) params.concurrency = Number(concurrency)
-    if (rate) params.rate = Number(rate)
-    if (maxDuration.trim()) params.max_duration = maxDuration.trim()
-    if (selected.size > 0) params.analyzers = Array.from(selected)
-    if (include.trim()) params.include = splitList(include)
-    if (exclude.trim()) params.exclude = splitList(exclude)
-    if (userAgent.trim()) params.user_agent = userAgent.trim()
-    if (userAgents.trim()) {
-      params.user_agents = splitList(userAgents)
-      params.user_agent_rotation = userAgentRotation
-    }
-    if (proxy.trim()) params.proxy = proxy.trim()
-    if (proxies.trim()) {
-      params.proxies = splitList(proxies)
-      params.proxy_rotation = proxyRotation
-    }
-    if (basicAuthUser.trim()) params.basic_auth = `${basicAuthUser.trim()}:${basicAuthPass}`
-    if (cookieAuth && cookie.trim()) params.cookie = cookie.trim()
-    if (customHeaders) {
-      if (headers.trim()) params.headers = splitList(headers)
-      if (headerProfile.trim()) params.header_profile = headerProfile.trim()
+    const params: StartCrawlParams = { ...toParams(values, 'crawl'), url: values.url.trim(), save: values.save }
+    if (login?.state === 'captured') {
+      params.login_session = login.id
+      delete params.cookie
     }
     try {
       const job = await startCrawl(params)
+      if (login?.state === 'captured') loginUsed.current = true
       onStarted(job.id)
     } catch (err) {
-      setError(String(err))
+      setError(message(err))
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <form className="card crawl-form" onSubmit={handleSubmit}>
-      <h2>New crawl</h2>
-      <label>
-        Seed URL
+    <form className="cf" onSubmit={handleSubmit}>
+      <h1>New crawl</h1>
+      <label className="cf-field cf-url">
+        <span className="cf-label">Site URL</span>
         <input
           type="text"
+          inputMode="url"
+          name="url"
           placeholder="https://example.com"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          value={values.url}
+          onChange={(e) => update({ url: e.target.value })}
           required
         />
       </label>
-
-      <div className="form-section">
-        <p className="form-section-title">Crawl behavior</p>
-        <div className="grid">
-          <label>
-            Depth
-            <input type="number" min="0" placeholder="unlimited" value={depth} onChange={(e) => setDepth(e.target.value)} />
-          </label>
-          <label>
-            Max pages
-            <input type="number" min="0" placeholder="500" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} />
-          </label>
-          <label>
-            Concurrency
-            <input type="number" min="1" placeholder="4" value={concurrency} onChange={(e) => setConcurrency(e.target.value)} />
-          </label>
-          <label>
-            Rate limit
-            <input type="number" min="0" step="any" placeholder="unlimited" value={rate} onChange={(e) => setRate(e.target.value)} />
-          </label>
-          <label>
-            Max duration
-            <input type="text" placeholder="unlimited, e.g. 90m" value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} />
-          </label>
-          <label>
-            Render
-            <select value={render} onChange={(e) => setRender(e.target.value)}>
-              <option value="raw">raw</option>
-              <option value="headless">headless</option>
-            </select>
-          </label>
-        </div>
-        <label className="checkbox">
-          <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-          Save to history when finished
-        </label>
-      </div>
-
-      <div className="form-section">
-        <p className="form-section-title">Scope</p>
-        <label className="checkbox">
-          <input type="checkbox" checked={respectRobots} onChange={(e) => setRespectRobots(e.target.checked)} />
-          Respect robots.txt
-        </label>
-        <label className="checkbox">
-          <input type="checkbox" checked={subdomains} onChange={(e) => setSubdomains(e.target.checked)} />
-          Follow links to subdomains
-        </label>
-        <label className="checkbox">
-          <input type="checkbox" checked={followExternal} onChange={(e) => setFollowExternal(e.target.checked)} />
-          Crawl links that leave the seed host
-        </label>
-      </div>
-
-      <div className="form-section">
-        <p className="form-section-title">Analysis</p>
-        <label className="checkbox">
-          <input type="checkbox" checked={specialized} onChange={(e) => setSpecialized(e.target.checked)} />
-          Enable specialized checks (AEO/GEO heuristics, WordPress security probes)
-        </label>
-        <label className="checkbox">
-          <input type="checkbox" checked={securityAudit} onChange={(e) => setSecurityAudit(e.target.checked)} />
-          Enable security audit (TLS/certificate, cookies, response headers)
-        </label>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={ignoreExternalTagging}
-            onChange={(e) => setIgnoreExternalTagging(e.target.checked)}
+      <SitemapPreviewLine
+        url={values.url}
+        include={splitList(values.include)}
+        exclude={splitList(values.exclude)}
+        subdomains={values.subdomains}
+        maxPages={values.maxPages.trim() === '' ? DEFAULT_MAX_PAGES : Number(values.maxPages)}
+        onRaiseBudget={(pages) => update({ maxPages: String(pages) })}
+      />
+      <CrawlFields
+        values={values}
+        onChange={update}
+        mode="crawl"
+        analyzers={analyzers}
+        profiles={profiles}
+        cookieLocked={login?.state === 'captured'}
+        loginSlot={
+          <LoginPanel
+            url={values.url}
+            blockedReason={loginBlocked}
+            session={login}
+            onSession={setLogin}
+            onStarted={addLogoutExclude}
+            usedRef={loginUsed}
           />
-          Ignore UTM tagging issues on links leaving the domain
-        </label>
-
-        {analyzers.length > 0 && (
-          <fieldset className="analyzers">
-            <legend className="analyzers-head">
-              <span>Analyzers (none checked = run all)</span>
-              <span className="analyzers-actions">
-                <button type="button" onClick={selectAllAnalyzers}>
-                  Select all
-                </button>
-                <button type="button" onClick={selectNoAnalyzers}>
-                  Select none
-                </button>
-              </span>
-            </legend>
-            <div className="analyzer-grid">
-              {analyzers.map((a) => (
-                <label key={a.name} className="checkbox" title={a.description}>
-                  <input type="checkbox" checked={selected.has(a.name)} onChange={() => toggleAnalyzer(a.name)} />
-                  {a.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
+        }
+      />
+      {settingsError && (
+        <Notice tone="warning">
+          Couldn't load your saved defaults: {settingsError}. The form shows the built-in defaults.
+        </Notice>
+      )}
+      {profilesError && (
+        <Notice tone="warning">
+          Couldn't load your header profiles: {profilesError}. The Header profile list may be empty.
+        </Notice>
+      )}
+      {error && <Notice tone="error">{error}</Notice>}
+      {defaultsNote && <Notice tone="info">{defaultsNote}</Notice>}
+      <div className="cf-actions">
+        <Button type="submit" variant="go" disabled={submitting}>
+          {submitting ? 'Starting…' : 'Start crawl'}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => void handleSaveDefaults()}>
+          Save as defaults
+        </Button>
       </div>
-
-      <details className="advanced">
-        <summary>Advanced</summary>
-        <div className="grid">
-          <label>
-            Include (regex, one per line, matched against the full normalized URL — the seed must
-            match too, or the crawl returns zero pages; no trailing slash)
-            <textarea rows={2} placeholder="/blog" value={include} onChange={(e) => setInclude(e.target.value)} />
-          </label>
-          <label>
-            Exclude (regex, one per line, matched against the full URL)
-            <textarea rows={2} placeholder="/admin/" value={exclude} onChange={(e) => setExclude(e.target.value)} />
-          </label>
-          <label>
-            User-Agent
-            <input type="text" value={userAgent} onChange={(e) => setUserAgent(e.target.value)} />
-          </label>
-          <label>
-            User-Agent pool (one per line)
-            <textarea rows={2} value={userAgents} onChange={(e) => setUserAgents(e.target.value)} />
-          </label>
-          <label>
-            User-Agent rotation
-            <select value={userAgentRotation} onChange={(e) => setUserAgentRotation(e.target.value)}>
-              <option value="off">off</option>
-              <option value="round-robin">round-robin</option>
-              <option value="random">random</option>
-            </select>
-          </label>
-          <label>
-            Proxy
-            <input type="text" placeholder="http(s):// or socks5://" value={proxy} onChange={(e) => setProxy(e.target.value)} />
-          </label>
-          <label>
-            Proxy pool (one per line)
-            <textarea rows={2} value={proxies} onChange={(e) => setProxies(e.target.value)} />
-          </label>
-          <label>
-            Proxy rotation
-            <select value={proxyRotation} onChange={(e) => setProxyRotation(e.target.value)}>
-              <option value="off">off</option>
-              <option value="round-robin">round-robin</option>
-              <option value="random">random</option>
-              <option value="sticky-host">sticky-host</option>
-            </select>
-          </label>
-          <label>
-            Basic Auth username
-            <input type="text" value={basicAuthUser} onChange={(e) => setBasicAuthUser(e.target.value)} />
-          </label>
-          <label>
-            Basic Auth password
-            <input type="password" value={basicAuthPass} onChange={(e) => setBasicAuthPass(e.target.value)} />
-          </label>
-        </div>
-
-        <label className="checkbox">
-          <input type="checkbox" checked={cookieAuth} onChange={(e) => setCookieAuth(e.target.checked)} />
-          Site is gated by a session cookie (e.g. a Shopify storefront password page)
-        </label>
-        {cookieAuth && (
-          <label>
-            Cookie header (paste the session cookie from a browser that's already past the gate —
-            DevTools → Application/Storage → Cookies; sent only to the seed host, not supported
-            with headless rendering)
-            <textarea
-              rows={2}
-              placeholder="_shopify_essential=:AZ_..."
-              value={cookie}
-              onChange={(e) => setCookie(e.target.value)}
-            />
-          </label>
-        )}
-
-        <label className="checkbox">
-          <input type="checkbox" checked={customHeaders} onChange={(e) => setCustomHeaders(e.target.checked)} />
-          Send custom request headers (e.g. a Shopify crawler access signature)
-        </label>
-        {customHeaders && (
-          <>
-            <label>
-              Header profile (name of a file at ~/.gocrawl/headers/&lt;name&gt;.headers on this
-              machine — the way to use a stored secret without pasting it here)
-              <input
-                type="text"
-                placeholder="uk"
-                value={headerProfile}
-                onChange={(e) => setHeaderProfile(e.target.value)}
-              />
-            </label>
-            <label>
-              Extra headers (one "Name: value" per line; sent only to the seed host, override
-              the profile by name, not supported with headless rendering)
-              <textarea
-                rows={3}
-                placeholder="X-Access-Token: abc123"
-                value={headers}
-                onChange={(e) => setHeaders(e.target.value)}
-              />
-            </label>
-          </>
-        )}
-      </details>
-
-      {error && <p className="error">{error}</p>}
-      <button type="submit" disabled={submitting}>
-        {submitting ? 'Starting…' : 'Start crawl'}
-      </button>
     </form>
   )
 }

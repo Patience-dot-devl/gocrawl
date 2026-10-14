@@ -18,16 +18,16 @@ var expectedHeader = []string{
 // Rule is one row of the redirect-rule CSV. Columns are kept as raw strings so they can be
 // echoed back verbatim in the output report.
 type Rule struct {
-	Original            string
-	Target              string
-	RedirectType        string
-	RedirectStyle       string
-	Priority            string
-	MatchQueryStrings   string
-	IgnoreTrailingSlash string
-	IgnoreProtocol      string
-	DisableIfPageExists string
-	Note                string
+	Original            string `json:"original"`
+	Target              string `json:"target"`
+	RedirectType        string `json:"redirect_type"`
+	RedirectStyle       string `json:"redirect_style"`
+	Priority            string `json:"priority"`
+	MatchQueryStrings   string `json:"match_query_strings"`
+	IgnoreTrailingSlash string `json:"ignore_trailing_slash"`
+	IgnoreProtocol      string `json:"ignore_protocol"`
+	DisableIfPageExists string `json:"disable_if_page_exists"`
+	Note                string `json:"note"`
 }
 
 // ParseCSV reads a HubSpot-format redirect-rule export. It returns an error if the header

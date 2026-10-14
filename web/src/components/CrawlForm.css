@@ -1,0 +1,126 @@
+/* New crawl form. Labels sit above their field in sentence case; hints are secondary ink. */
+.cf {
+  max-width: 920px;
+}
+
+.cf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0 0;
+}
+
+.cf-field input,
+.cf-field select,
+.cf-field textarea {
+  width: 100%;
+}
+
+.cf-url input {
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+
+.cf-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cf-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.cf-section {
+  margin: 24px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.cf-section > legend,
+.cf-analyzers > legend {
+  padding: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cf-grid {
+  display: grid;
+  align-items: end; /* fields with a hint (Bearer token) keep their input level with the others */
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0 16px;
+}
+
+.cf-grid-wide {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.cf-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 14px;
+}
+
+.cf-analyzers {
+  margin: 16px 0 0;
+  padding: 12px 14px 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+.cf-analyzers > legend {
+  padding: 0 4px;
+  font-size: 15px;
+}
+
+.cf-analyzer-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.cf-analyzer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0 12px;
+}
+
+.cf-advanced {
+  margin: 24px 0 0;
+  padding: 10px 14px 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+.cf-advanced > summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 24px 0 0;
+}
+
+.cf-login {
+  margin: 16px 0 0;
+  padding: 12px 14px 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+.cf-login > legend {
+  padding: 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}

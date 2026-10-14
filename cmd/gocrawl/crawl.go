@@ -28,7 +28,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Int("max-pages", 0, "max pages to crawl")
 	f.Int("concurrency", 0, "parallel fetch workers")
 	f.Float64("rate", 0, "max requests per second (0 = unlimited)")
-	f.Duration("max-duration", 0, "wall-clock budget for the whole crawl, e.g. 90m (0 = unlimited); on expiry the crawl stops early and still writes a partial report")
+	f.Duration("max-duration", 0, "budget for active crawl time (paused time excluded), e.g. 90m (0 = unlimited); on expiry the crawl stops early and still writes a partial report")
 	f.String("render", "", "rendering mode: raw or headless")
 	f.StringP("out", "o", "", "output file (default: stdout)")
 	f.StringP("format", "f", "", "output format: json, csv, or html")
@@ -46,6 +46,7 @@ func newCrawlCmd() *cobra.Command {
 	f.StringArray("header", nil, `extra request header as "Name: value" (repeatable), sent only to the seed host like --cookie`)
 	f.String("header-file", "", `file of extra request headers, one "Name: value" per line ('#' comments allowed)`)
 	f.String("header-profile", "", "named header file at ~/.gocrawl/headers/<name>.headers")
+	f.String("bearer-token", "", `token sent as "Authorization: Bearer <token>", only to the seed host like --cookie (a flag value lands in shell history; GOCRAWL_CRAWL_BEARER_TOKEN doesn't)`)
 	f.Bool("respect-robots", true, "obey robots.txt while crawling")
 	f.Bool("subdomains", false, "follow links to subdomains of the seed")
 	f.Bool("external", false, "crawl links that leave the seed host")
@@ -179,6 +180,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("header-profile") {
 		cfg.Crawl.HeaderProfile, _ = f.GetString("header-profile")
+	}
+	if f.Changed("bearer-token") {
+		cfg.Crawl.BearerToken, _ = f.GetString("bearer-token")
 	}
 	if f.Changed("respect-robots") {
 		cfg.Crawl.RespectRobots, _ = f.GetBool("respect-robots")

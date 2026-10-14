@@ -15,12 +15,31 @@ import (
 )
 
 // Engine crawls a website concurrently within the configured scope.
+//
+// Lock order, outermost first: Crawl's result mutex → progMu → ps.mu → the leaf locks
+// (frontier.mu, activeClock.mu, and the AdaptiveLimiter's mutex and its rate.Limiter's).
+// A lock may skip levels (the result mutex reads frontier.queued directly; progMu takes the
+// limiter's lock and ps.mu in turn, never together) but is never taken while a later one is
+// held. OnProgress runs with progMu held, plus the result mutex for page events; ps.mu and
+// the leaf locks are never held across it, and the activeClock's onLimit runs on a timer
+// goroutine holding nothing. Callers outside the package add one edge: a job manager's lock
+// (the web server's, held while it reads Control.Active → Engine.ActiveTime) is taken before
+// ps.mu and then the activeClock's mutex, and no engine path takes a job lock while holding
+// either, because ps.mu and the leaf locks are never held across OnProgress.
 type Engine struct {
 	opts     Options
 	fetcher  Fetcher
 	robots   *robotsManager
 	limiter  *AdaptiveLimiter
 	seedHost string
+
+	// progMu serializes OnProgress calls and guards lastProgress, the snapshot that
+	// state-only events (pause, resume) re-send with fresh live fields.
+	progMu       sync.Mutex
+	lastProgress Progress
+
+	// ps is the pause state shared by Pause/Resume and the running crawl.
+	ps pauseState
 }
 
 // New creates an Engine. fetcher is used to retrieve pages (raw or headless); a separate
@@ -71,18 +90,16 @@ type task struct {
 
 // Crawl walks the site starting at seed and returns the collected Result.
 func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
-	if e.opts.MaxDuration > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, e.opts.MaxDuration)
-		defer cancel()
-	}
+	// MaxDuration counts active time only: the clock stops while the crawl is paused and
+	// cancels the crawl with errMaxDuration once the budget is used up.
+	ctx, cancelRun := context.WithCancelCause(ctx)
+	defer cancelRun(nil)
+	clock := newActiveClock(e.opts.MaxDuration, func() { cancelRun(errMaxDuration) })
 
-	seed = normalizeURL(seed, e.opts.StripQuery)
-	su, err := url.Parse(seed)
+	seed, err := e.SetSeed(seed)
 	if err != nil {
 		return nil, err
 	}
-	e.seedHost = su.Host
 
 	rateDesc := "unlimited"
 	if e.opts.RatePerSecond > 0 {
@@ -102,6 +119,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		Opts:      e.opts,
 		index:     make(map[string]*Page),
 	}
+	e.progMu.Lock()
+	e.lastProgress = Progress{}
+	e.progMu.Unlock()
 
 	var (
 		mu        sync.Mutex // guards visited, result.Pages, result.index, notCrawled, limit flags
@@ -119,6 +139,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	fr := newFrontier()
 	stopWatching := fr.watchCancellation(ctx)
 	defer stopWatching()
+	e.beginRun(fr, clock)
 
 	// enqueue applies dedup, scope/robots, and the page-budget check, then pushes an eligible
 	// task onto the frontier for a worker to pick up. Called for the seed and for every link
@@ -160,6 +181,13 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		if err := e.limiter.Wait(ctx); err != nil {
 			return
 		}
+		if e.Paused() {
+			// Paused while this task waited for the rate limiter: hand it back so it is the
+			// first fetch after Resume, instead of sending one more request to a server that
+			// may just have asked us to stop.
+			fr.pushFront(t)
+			return
+		}
 
 		page, _ := e.fetcher.Fetch(ctx, t.url)
 		if page == nil {
@@ -177,6 +205,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			}
 			e.logf("HTTP %d from %s — reducing crawl rate to %.3g req/s", page.StatusCode, target, next)
 		}
+		e.maybeAutoPause(page.StatusCode)
 		page.Depth = t.depth
 		page.Referrer = t.referrer
 		page.Links = e.extractLinks(page)
@@ -204,6 +233,18 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			// directly at it doesn't trigger a second fetch (and duplicate per-page
 			// issues) for content already covered by this page.
 			visited[finalNorm] = true
+		}
+		if e.opts.OnProgress != nil {
+			// Emitted under mu so events arrive in recording order: Fetched rises by exactly
+			// one per event, which is what lets a consumer append one tape tick per call.
+			e.emitPage(Progress{
+				Fetched:    len(result.Pages),
+				Queued:     fr.queued(),
+				CurrentURL: page.RequestedURL,
+				FinalURL:   page.FinalURL,
+				Status:     progressStatus(page),
+				DurationMS: page.Duration.Milliseconds(),
+			})
 		}
 		mu.Unlock()
 
@@ -256,6 +297,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	}
 
 	wg.Wait()
+	if e.endRun() {
+		e.emitState() // the crawl ended while paused: report it as no longer paused
+	}
 
 	result.ThrottleEvents = e.limiter.ThrottleCount()
 	result.FinalRate = e.limiter.CurrentRate()
@@ -270,9 +314,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		}
 	}
 	interrupted := ctx.Err() != nil
-	// A deadline (--max-duration) and an external cancellation (e.g. Ctrl-C) both stop the
-	// crawl via the same context-cancellation path, but are worth reporting distinctly.
-	durationLimitReached := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	// The duration limit (--max-duration) and an external cancellation (e.g. Ctrl-C) both stop
+	// the crawl via the same context-cancellation path, but are worth reporting distinctly.
+	durationLimitReached := errors.Is(context.Cause(ctx), errMaxDuration)
 	result.Coverage = Coverage{
 		Complete:             uncrawled == 0 && !interrupted,
 		DiscoveredNotCrawled: uncrawled,
@@ -312,6 +356,47 @@ func (e *Engine) crawlable(ctx context.Context, u *url.URL) bool {
 // seed's Authorization header to them.
 func (e *Engine) authHostAllowed(host string) bool {
 	return sameSite(e.seedHost, host, e.opts.AllowSubdomains)
+}
+
+// SetSeed normalizes seed and fixes the host scope that InScope, enqueue and the credential
+// guard check against. Crawl calls it itself; call it first only when something needs InScope
+// or RobotsFor before the crawl starts (runner.Run's sitemap pre-pass). It must not be called
+// while a crawl is running. It returns the normalized seed.
+func (e *Engine) SetSeed(seed string) (string, error) {
+	seed = normalizeURL(seed, e.opts.StripQuery)
+	su, err := url.Parse(seed)
+	if err != nil {
+		return "", err
+	}
+	e.seedHost = su.Host
+	return seed, nil
+}
+
+// InScope reports whether rawURL falls inside the crawl scope: the same scheme, host,
+// subdomain, include and exclude rules enqueue applies, after the same normalization. It does
+// not consult robots.txt or depth. Call SetSeed (or Crawl) first.
+func (e *Engine) InScope(rawURL string) bool {
+	u, err := url.Parse(normalizeURL(rawURL, e.opts.StripQuery))
+	if err != nil {
+		return false
+	}
+	return e.inScope(u)
+}
+
+// Normalize canonicalizes rawURL the way the crawl does for deduplication, so a URL from
+// outside the crawl (a sitemap <loc>) can be matched against recorded pages.
+func (e *Engine) Normalize(rawURL string) string {
+	return normalizeURL(rawURL, e.opts.StripQuery)
+}
+
+// RobotsFor returns the parsed robots.txt for rawURL's scheme and host, fetching and caching
+// it the way the crawl does (the crawl reuses the cached copy). Nil when rawURL has no host.
+func (e *Engine) RobotsFor(ctx context.Context, rawURL string) *RobotsData {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	return e.robots.get(ctx, u)
 }
 
 // inScope reports whether u should be crawled given host scope and include/exclude rules.

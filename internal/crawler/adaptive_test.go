@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestAdaptiveLimiterOnResponse(t *testing.T) {
@@ -112,4 +113,76 @@ type fakeFetcherFunc func(ctx context.Context, rawURL string) (*Page, error)
 
 func (f fakeFetcherFunc) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 	return f(ctx, rawURL)
+}
+
+func TestAdaptiveLimiterRecentThrottledCountsEvenWhenDisabled(t *testing.T) {
+	l := NewAdaptiveLimiter(0, false)
+	l.OnResponse(http.StatusTooManyRequests, nil)
+	l.OnResponse(http.StatusServiceUnavailable, nil)
+	l.OnResponse(http.StatusOK, nil)
+	if got := l.RecentThrottled(); got != 2 {
+		t.Fatalf("RecentThrottled = %d, want 2 (429 and 503 count, 200 does not)", got)
+	}
+}
+
+func TestAdaptiveLimiterRecentThrottledDropsEntriesOlderThanWindow(t *testing.T) {
+	l := NewAdaptiveLimiter(0, true)
+	l.mu.Lock()
+	l.recent = []time.Time{time.Now().Add(-2 * throttleWindow)}
+	l.mu.Unlock()
+	l.OnResponse(http.StatusTooManyRequests, nil)
+	if got := l.RecentThrottled(); got != 1 {
+		t.Fatalf("RecentThrottled = %d, want 1 (the old entry is outside the window)", got)
+	}
+}
+
+func TestAdaptiveLimiterLastRetryAfter(t *testing.T) {
+	l := NewAdaptiveLimiter(0, true)
+	if got := l.LastRetryAfter(); got != 0 {
+		t.Fatalf("LastRetryAfter before any 429 = %d, want 0", got)
+	}
+	h := http.Header{}
+	h.Set("Retry-After", "120")
+	l.OnResponse(http.StatusTooManyRequests, h)
+	if got := l.LastRetryAfter(); got != 120 {
+		t.Fatalf("LastRetryAfter = %d, want 120", got)
+	}
+	l.OnResponse(http.StatusTooManyRequests, nil) // no header: the last value stays
+	if got := l.LastRetryAfter(); got != 120 {
+		t.Fatalf("LastRetryAfter after a 429 without Retry-After = %d, want 120", got)
+	}
+}
+
+func TestAdaptiveLimiterEffectiveRate(t *testing.T) {
+	if got := NewAdaptiveLimiter(0, true).EffectiveRate(); got != 0 {
+		t.Fatalf("unlimited EffectiveRate = %v, want 0", got)
+	}
+	l := NewAdaptiveLimiter(4, true)
+	if got := l.EffectiveRate(); got != 4 {
+		t.Fatalf("EffectiveRate before backoff = %v, want the configured 4", got)
+	}
+	l.OnResponse(http.StatusTooManyRequests, nil)
+	if got := l.EffectiveRate(); got != 2 {
+		t.Fatalf("EffectiveRate after one backoff = %v, want 2", got)
+	}
+}
+
+func TestAdaptiveLimiterSetRateAndResetRecent(t *testing.T) {
+	l := NewAdaptiveLimiter(0, true)
+	l.OnResponse(http.StatusTooManyRequests, nil)
+	l.SetRate(0.25)
+	if got := l.EffectiveRate(); got != 0.25 {
+		t.Fatalf("EffectiveRate = %v, want 0.25", got)
+	}
+	if got := float64(l.limiter.Limit()); got != 0.25 {
+		t.Fatalf("limit = %v, want 0.25", got)
+	}
+	l.SetRate(0) // ignored
+	if got := l.EffectiveRate(); got != 0.25 {
+		t.Fatalf("SetRate(0) changed the rate to %v", got)
+	}
+	l.ResetRecent()
+	if got := l.RecentThrottled(); got != 0 {
+		t.Fatalf("RecentThrottled after ResetRecent = %d, want 0", got)
+	}
 }

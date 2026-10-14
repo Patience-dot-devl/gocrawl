@@ -119,3 +119,90 @@ func TestFrontierNextRespectsCancellation(t *testing.T) {
 		t.Fatal("next() did not wake up after ctx was canceled")
 	}
 }
+
+func TestFrontierPausedBlocksNextUntilResumed(t *testing.T) {
+	f := newFrontier()
+	f.push(task{url: "a"})
+	f.setPaused(true)
+	got := make(chan task, 1)
+	go func() {
+		if tk, ok := f.next(context.Background()); ok {
+			got <- tk
+		}
+	}()
+	select {
+	case tk := <-got:
+		t.Fatalf("next returned %q while paused", tk.url)
+	case <-time.After(100 * time.Millisecond):
+	}
+	f.setPaused(false)
+	select {
+	case tk := <-got:
+		if tk.url != "a" {
+			t.Fatalf("next = %q, want a", tk.url)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("next did not wake when the frontier resumed")
+	}
+}
+
+func TestFrontierPausedStillWakesOnCancel(t *testing.T) {
+	f := newFrontier()
+	f.push(task{url: "a"})
+	f.setPaused(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	stop := f.watchCancellation(ctx)
+	defer stop()
+	done := make(chan bool, 1)
+	go func() {
+		_, ok := f.next(ctx)
+		done <- ok
+	}()
+	cancel()
+	select {
+	case ok := <-done:
+		if ok {
+			t.Fatal("next returned a task after cancellation")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancellation did not wake a paused next()")
+	}
+}
+
+func TestFrontierPausedWithNothingPendingIsExhausted(t *testing.T) {
+	f := newFrontier()
+	f.setPaused(true)
+	done := make(chan bool, 1)
+	go func() {
+		_, ok := f.next(context.Background())
+		done <- ok
+	}()
+	select {
+	case ok := <-done:
+		if ok {
+			t.Fatal("next returned a task from an empty frontier")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a paused, empty frontier must still report exhaustion")
+	}
+}
+
+func TestFrontierPushFrontRequeuesAtHead(t *testing.T) {
+	f := newFrontier()
+	ctx := context.Background()
+	f.push(task{url: "a"})
+	f.push(task{url: "b"})
+	a, _ := f.next(ctx)
+	f.pushFront(a) // the worker hands the task back...
+	f.taskDone()   // ...then ends its turn for it
+	for _, want := range []string{"a", "b"} {
+		got, ok := f.next(ctx)
+		if !ok || got.url != want {
+			t.Fatalf("next = %+v ok=%v, want %q", got, ok, want)
+		}
+		f.taskDone()
+	}
+	if _, ok := f.next(ctx); ok {
+		t.Fatal("expected exhaustion after both tasks")
+	}
+}

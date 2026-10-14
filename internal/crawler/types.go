@@ -221,13 +221,26 @@ type Coverage struct {
 	// be far less covered than DiscoveredNotCrawled reflects, since much of it may never have
 	// been discovered at all.
 	Interrupted bool `json:"interrupted,omitempty"`
-	// DurationLimitReached is true when the crawl stopped because it hit its --max-duration
-	// wall-clock budget rather than being interrupted externally. Also implies Interrupted,
-	// since the same context-cancellation path stops the crawl either way.
+	// DurationLimitReached is true when the crawl stopped because it used up its --max-duration
+	// budget of active time (time spent paused doesn't count) rather than being interrupted
+	// externally. Also implies Interrupted, since the same context-cancellation path stops the
+	// crawl either way.
 	DurationLimitReached bool `json:"duration_limit_reached,omitempty"`
 	// MaxPages / MaxDepth echo the limits in effect (0 = unlimited), for the report message.
 	MaxPages int `json:"max_pages,omitempty"`
 	MaxDepth int `json:"max_depth,omitempty"`
+	// SitemapTotal is the number of in-scope URLs the site's sitemap lists, found by
+	// runner.Run's pre-pass; SitemapFetched is how many of them this crawl fetched. Both are 0,
+	// and omitted, when no sitemap was found. Set by runner.Run, not by Engine.Crawl.
+	SitemapTotal   int `json:"sitemap_total,omitempty"`
+	SitemapFetched int `json:"sitemap_fetched,omitempty"`
+	// Tape is the crawl tape: one character per recorded page in recording order, '2'..'5' for
+	// the status class or 'x' for a failed fetch (see TapeChar; a redirected page reports its
+	// first hop). TapeOff has the same length when a sitemap was found: '1' where the page is
+	// not in its in-scope part, else '0'; without a sitemap it is empty. Set by runner.Run from
+	// the same progress events the live web tape is built from. Omitted when empty.
+	Tape    string `json:"tape,omitempty"`
+	TapeOff string `json:"tape_off,omitempty"`
 }
 
 // Page looks up a crawled page by URL (matched against requested and final URLs after
@@ -332,11 +345,27 @@ type Options struct {
 	// AdaptiveDelay automatically slows the crawl (halving requests-per-second, honoring any
 	// Retry-After header) when the server responds with HTTP 429 or 503.
 	AdaptiveDelay bool
-	// MaxDuration bounds the crawl's total wall-clock time. Zero means unlimited. When it
-	// elapses, the crawl stops early and still returns everything fetched so far as a
-	// partial result (see Coverage.DurationLimitReached), the same way a canceled context
-	// (e.g. an operator's Ctrl-C) does.
+	// MaxDuration bounds the crawl's active time: wall-clock time minus time spent paused.
+	// Zero means unlimited. When it elapses, the crawl stops early and still returns
+	// everything fetched so far as a partial result (see Coverage.DurationLimitReached), the
+	// same way a canceled context (e.g. an operator's Ctrl-C) does.
 	MaxDuration time.Duration
+	// PauseOnThrottle makes the engine pause itself when the server keeps rate limiting it:
+	// ten or more 429/503 responses within a minute pause the crawl (Progress.PauseReason
+	// "rate_limited", with the latest Retry-After). With adaptive delay on, adaptive delay must
+	// also have lowered the rate at least twice; with it off there are no backoffs to wait for,
+	// so the responses alone trigger the pause. Only useful when someone can call Resume: the
+	// web UI turns it on, the CLI and MCP leave it off.
+	PauseOnThrottle bool
+	// OnProgress, when non-nil, is called with a snapshot of the crawl's progress after each
+	// page is recorded and on every pause and resume (Engine.Pause, Engine.Resume). Calls are
+	// serialized and arrive in recording order: Fetched rises by exactly one per page event,
+	// and a pause or resume event repeats the last page's Fetched with fresh Paused, Rate and
+	// Throttled fields. Page events run on a worker goroutine, pause and resume events on the
+	// goroutine that called Pause or Resume (or the crawl's own, when it ends while paused),
+	// in both cases while the engine holds internal locks: it must return quickly and must
+	// never call back into the Engine, Pause and Resume included.
+	OnProgress func(Progress)
 }
 
 // DefaultOptions returns conservative, polite defaults. By default the crawl is bounded by

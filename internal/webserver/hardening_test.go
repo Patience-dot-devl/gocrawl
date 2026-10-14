@@ -53,7 +53,7 @@ func TestRejectsCrossOriginMutation(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
 	}
-	if n := len(srv.jobs.list()); n != 0 {
+	if n := len(srv.crawls.list()); n != 0 {
 		t.Fatalf("%d job(s) started despite cross-origin rejection", n)
 	}
 }

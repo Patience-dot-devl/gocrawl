@@ -5,15 +5,16 @@ scope: "Checking a HubSpot-style redirect-rule CSV export against a live site wi
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-07-16
-depends_on: []
+updated: 2026-10-13
+depends_on: ["web.md"]
 sources: []
 ---
 # Verifying a redirect-rule export (`check-redirects`)
 
 `gocrawl check-redirects` verifies a redirect-rule CSV export — the format produced by
 HubSpot's URL Redirects tool — against a live site. It answers: are these redirects actually
-working, and do they point at live pages rather than 404s?
+working, and do they point at live pages rather than 404s? The same check is also available
+from the [web API](web.md).
 
 ## Usage
 
@@ -72,3 +73,15 @@ expected target, or the target itself returns a 4xx/5xx. A row is flagged `warni
 source no longer redirects but `Disable if page exists` is `TRUE` (HubSpot's own suppression —
 worth a look, not necessarily broken), the source is still listed in the sitemap as canonical
 (stale entry), or the target isn't found in the sitemap.
+
+## In the web UI
+
+`gocrawl serve` runs the same check as a background job behind a REST API
+(`/api/redirect-checks`, described in the [web UI guide](web.md)). The **Redirects** view that
+drives it lands with the rest of the new web views; until then the API is available but the
+page is still a placeholder. Once it lands: open **Redirects**, choose the CSV, enter
+the domain, and select **Check redirects**. The check runs as a background job with a progress
+bar. When it finishes, the results table can be filtered by verdict and scope, and **Export
+CSV** downloads the same file `--output` writes. The flags map to form fields: `--sitemap-url`,
+`--rate`, `--concurrency` and `--adaptive-delay`. `--timeout` and `--user-agent` keep their
+defaults.

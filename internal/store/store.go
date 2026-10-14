@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/atomicfile"
+	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 	"github.com/Patience-dot-devl/gocrawl/internal/report"
 )
 
@@ -64,7 +65,19 @@ type Entry struct {
 	FinishedAt   string         `json:"finished_at"`
 	PagesCrawled int            `json:"pages_crawled"`
 	BySeverity   map[string]int `json:"by_severity"`
-	Path         string         `json:"path"`
+	// ByStatus, SitemapTotal and SitemapFetched let a crawl list draw a status tape and
+	// sitemap coverage per crawl without loading the report again.
+	ByStatus       map[string]int `json:"pages_by_status,omitempty"`
+	SitemapTotal   int            `json:"sitemap_total,omitempty"`
+	SitemapFetched int            `json:"sitemap_fetched,omitempty"`
+	// StatusClasses counts the report's coverage.tape per status class, so a saved crawl shows
+	// the same classes the live tape did. Empty for reports saved before tapes were stored
+	// (use ByStatus then).
+	StatusClasses map[string]int `json:"status_classes,omitempty"`
+	// TapePreview is crawler.TapePreview of the report's coverage.tape (at most 160
+	// characters); empty for reports saved before tapes were stored.
+	TapePreview string `json:"tape_preview,omitempty"`
+	Path        string `json:"path"`
 }
 
 // Save writes rep to the store and returns its crawl ID. The host comes from the report's
@@ -158,6 +171,17 @@ func (s *Store) Resolve(ref string) (*report.Report, string, error) {
 		rep, rerr := readReport(ref)
 		return rep, "", rerr
 	}
+	return s.ResolveStored(ref)
+}
+
+// ResolveStored resolves ref the way Resolve does, but only inside the store: "latest", a
+// bare host, or a crawl ID. It never reads a file path. Callers that take refs from the
+// network (the web API's compare endpoint) use it, so a request cannot make the server read
+// an arbitrary JSON file from disk.
+func (s *Store) ResolveStored(ref string) (*report.Report, string, error) {
+	if ref == "" {
+		return nil, "", fmt.Errorf("empty crawl reference")
+	}
 	if strings.EqualFold(ref, "latest") {
 		return s.latest("")
 	}
@@ -199,15 +223,22 @@ func entryFor(root, path string, rep *report.Report) Entry {
 	if err != nil {
 		id = strings.TrimSuffix(filepath.Base(path), ".json")
 	}
-	return Entry{
+	e := Entry{
 		ID:           id,
 		Host:         hostOf(rep.Seed),
 		Seed:         rep.Seed,
 		FinishedAt:   rep.FinishedAt,
 		PagesCrawled: rep.PagesCrawled,
 		BySeverity:   rep.Summary.BySeverity,
+		ByStatus:     rep.Summary.ByStatus,
 		Path:         path,
 	}
+	if rep.Coverage != nil {
+		e.SitemapTotal, e.SitemapFetched = rep.Coverage.SitemapTotal, rep.Coverage.SitemapFetched
+		e.StatusClasses = crawler.TapeClasses(rep.Coverage.Tape)
+		e.TapePreview = crawler.TapePreview(rep.Coverage.Tape, crawler.TapePreviewLen)
+	}
+	return e
 }
 
 func readReport(path string) (*report.Report, error) {

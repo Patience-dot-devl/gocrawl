@@ -9,19 +9,46 @@ import (
 	"encoding/xml"
 	"io"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
-// Analyzer fetches and validates sitemaps. It uses a Fetcher to retrieve sitemap files.
+// Analyzer fetches and validates sitemaps. It uses a Fetcher to retrieve sitemap files,
+// unless it was handed a pre-fetched set through WithURLs.
 type Analyzer struct {
 	fetcher crawler.Fetcher
+	pre     *prefetched
+}
+
+// prefetched is a sitemap set discovered before the crawl (runner.Run's pre-pass).
+type prefetched struct {
+	urls                               map[string]bool
+	parsed                             int
+	invalidDeclared, truncatedDeclared []string
+}
+
+// Option configures an Analyzer.
+type Option func(*Analyzer)
+
+// WithURLs hands the analyzer a sitemap set someone already discovered (the values Discover
+// returns), so it cross-checks coverage without fetching the sitemap a second time.
+func WithURLs(urls map[string]bool, parsed int, invalidDeclared, truncatedDeclared []string) Option {
+	return func(a *Analyzer) {
+		a.pre = &prefetched{urls: urls, parsed: parsed, invalidDeclared: invalidDeclared, truncatedDeclared: truncatedDeclared}
+	}
 }
 
 // New returns a sitemap analyzer that fetches sitemaps with the given fetcher.
-func New(fetcher crawler.Fetcher) *Analyzer { return &Analyzer{fetcher: fetcher} }
+func New(fetcher crawler.Fetcher, opts ...Option) *Analyzer {
+	a := &Analyzer{fetcher: fetcher}
+	for _, o := range opts {
+		o(a)
+	}
+	return a
+}
 
 func (Analyzer) Name() string { return "sitemap" }
 func (Analyzer) Description() string {
@@ -51,7 +78,19 @@ type sitemapindex struct {
 // reported); truncatedDeclared lists declared candidates whose body was cut short by the
 // fetcher's size cap before it could be parsed, so they aren't misreported as invalid.
 func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]bool) (urls map[string]bool, parsed int, invalidDeclared, truncatedDeclared []string) {
-	urls = map[string]bool{}
+	r := fetchAll(ctx, fetcher, candidates)
+	return r.urls, r.parsed, r.invalidDeclared, r.truncatedDeclared
+}
+
+// fetchResult is Fetch's outcome plus the top-level candidates that parsed (sources).
+type fetchResult struct {
+	urls                                        map[string]bool
+	parsed                                      int
+	invalidDeclared, truncatedDeclared, sources []string
+}
+
+func fetchAll(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]bool) fetchResult {
+	r := fetchResult{urls: map[string]bool{}}
 	visited := map[string]bool{}
 
 	var fetchOne func(smURL string, depth int, declared bool)
@@ -67,21 +106,24 @@ func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]b
 		}
 		if page.Truncated {
 			if declared {
-				truncatedDeclared = append(truncatedDeclared, smURL)
+				r.truncatedDeclared = append(r.truncatedDeclared, smURL)
 			}
 			return
 		}
 		body, gzErr := maybeGunzip(smURL, page)
 		if gzErr != nil {
 			if declared {
-				invalidDeclared = append(invalidDeclared, smURL)
+				r.invalidDeclared = append(r.invalidDeclared, smURL)
 			}
 			return
 		}
 
 		var idx sitemapindex
 		if xml.Unmarshal(body, &idx) == nil && len(idx.Sitemaps) > 0 {
-			parsed++
+			r.parsed++
+			if depth == 0 {
+				r.sources = append(r.sources, smURL)
+			}
 			for _, s := range idx.Sitemaps {
 				if loc := strings.TrimSpace(s.Loc); loc != "" {
 					// Children referenced by an index are declared by it.
@@ -92,10 +134,13 @@ func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]b
 		}
 		var us urlset
 		if xml.Unmarshal(body, &us) == nil {
-			parsed++
+			r.parsed++
+			if depth == 0 {
+				r.sources = append(r.sources, smURL)
+			}
 			for _, u := range us.URLs {
 				if loc := strings.TrimSpace(u.Loc); loc != "" {
-					urls[normalize(loc)] = true
+					r.urls[normalize(loc)] = true
 				}
 			}
 			return
@@ -104,14 +149,77 @@ func Fetch(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]b
 		// explicitly declared (robots.txt or an index); a guessed conventional path that
 		// returns HTML is a soft-404, not a broken sitemap, so reporting it is noise.
 		if declared {
-			invalidDeclared = append(invalidDeclared, smURL)
+			r.invalidDeclared = append(r.invalidDeclared, smURL)
 		}
 	}
 
 	for c, declared := range candidates {
 		fetchOne(c, 0, declared)
 	}
-	return urls, parsed, invalidDeclared, truncatedDeclared
+	return r
+}
+
+// Discovery is everything DiscoverAll learned about a site's sitemap.
+type Discovery struct {
+	URLs                               map[string]bool // every <loc>, normalized; never nil
+	Parsed                             int
+	InvalidDeclared, TruncatedDeclared []string
+	// Sources are the top-level candidates that parsed as an urlset or index, sorted.
+	Sources []string
+	// ViaRobots is true when at least one source was declared in robots.txt.
+	ViaRobots bool
+}
+
+// Discover finds the sitemap for seed: the Sitemap: lines of every robots.txt in robots, then
+// the conventional /sitemap.xml and /sitemap_index.xml on the seed's host, following indexes.
+// The analyzer uses it when it has no pre-fetched set; runner.Run's pre-pass uses DiscoverAll.
+func Discover(ctx context.Context, fetcher crawler.Fetcher, seed string, robots map[string]*crawler.RobotsData) (urls map[string]bool, parsed int, invalidDeclared, truncatedDeclared []string) {
+	d := DiscoverAll(ctx, fetcher, seed, robots)
+	return d.URLs, d.Parsed, d.InvalidDeclared, d.TruncatedDeclared
+}
+
+// DiscoverAll is Discover plus where the sitemap came from.
+func DiscoverAll(ctx context.Context, fetcher crawler.Fetcher, seed string, robots map[string]*crawler.RobotsData) Discovery {
+	su, err := url.Parse(seed)
+	if err != nil || su.Host == "" {
+		return Discovery{URLs: map[string]bool{}}
+	}
+	// Candidate sitemap URLs: those declared in robots.txt (declared==true) plus common
+	// conventional paths we merely guess at (declared==false). The distinction matters for
+	// error reporting: a declared sitemap that won't parse is a real misconfiguration worth
+	// flagging, but a guessed path that returns non-XML is almost always a soft-404 (the
+	// server answers 200 with an HTML page for any unknown path), so we stay silent about it.
+	candidates := map[string]bool{}
+	for _, data := range robots {
+		if data == nil {
+			continue
+		}
+		for _, sm := range data.Sitemaps {
+			candidates[sm] = true
+		}
+	}
+	base := su.Scheme + "://" + su.Host
+	for _, path := range []string{"/sitemap.xml", "/sitemap_index.xml"} {
+		if _, ok := candidates[base+path]; !ok {
+			candidates[base+path] = false
+		}
+	}
+
+	r := fetchAll(ctx, fetcher, candidates)
+	sort.Strings(r.sources)
+	d := Discovery{
+		URLs:              r.urls,
+		Parsed:            r.parsed,
+		InvalidDeclared:   r.invalidDeclared,
+		TruncatedDeclared: r.truncatedDeclared,
+		Sources:           r.sources,
+	}
+	for _, s := range d.Sources {
+		if candidates[s] {
+			d.ViaRobots = true
+		}
+	}
+	return d
 }
 
 // maybeGunzip decompresses page.Body when smURL or the response's Content-Type indicates a
@@ -135,27 +243,20 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	if err != nil {
 		return nil
 	}
+	base := seed.Scheme + "://" + seed.Host
 	var issues []analyze.Issue
 
-	// Candidate sitemap URLs: those declared in robots.txt (declared==true) plus common
-	// conventional paths we merely guess at (declared==false). The distinction matters for
-	// error reporting: a declared sitemap that won't parse is a real misconfiguration worth
-	// flagging, but a guessed path that returns non-XML is almost always a soft-404 (the
-	// server answers 200 with an HTML page for any unknown path), so we stay silent about it.
-	candidates := map[string]bool{}
-	for _, data := range result.Robots {
-		for _, sm := range data.Sitemaps {
-			candidates[sm] = true
-		}
+	var (
+		sitemapURLs                        map[string]bool
+		parsed                             int
+		invalidDeclared, truncatedDeclared []string
+	)
+	if a.pre != nil {
+		sitemapURLs, parsed = a.pre.urls, a.pre.parsed
+		invalidDeclared, truncatedDeclared = a.pre.invalidDeclared, a.pre.truncatedDeclared
+	} else {
+		sitemapURLs, parsed, invalidDeclared, truncatedDeclared = Discover(ctx, a.fetcher, result.Seed, result.Robots)
 	}
-	base := seed.Scheme + "://" + seed.Host
-	for _, path := range []string{"/sitemap.xml", "/sitemap_index.xml"} {
-		if _, ok := candidates[base+path]; !ok {
-			candidates[base+path] = false
-		}
-	}
-
-	sitemapURLs, parsed, invalidDeclared, truncatedDeclared := Fetch(ctx, a.fetcher, candidates)
 	for _, u := range invalidDeclared {
 		issues = append(issues, analyze.Issue{
 			Analyzer: "sitemap", URL: u, Severity: analyze.Warning,

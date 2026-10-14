@@ -11,17 +11,18 @@ const (
 	VerdictSkippedDynamic  Verdict = "skipped-dynamic"
 )
 
-// RowResult is what checking one rule against the live site produced.
+// RowResult is what checking one rule against the live site produced. The JSON names are what
+// the web API returns for each row.
 type RowResult struct {
-	Scope               Scope
-	SourceStatus        int
-	SourceFinalURL      string
-	SourceMatchesTarget bool
-	TargetStatus        int
-	OriginalInSitemap   bool
-	TargetInSitemap     bool
-	Verdict             Verdict
-	Notes               []string
+	Scope               Scope    `json:"scope"`
+	SourceStatus        int      `json:"source_status"`
+	SourceFinalURL      string   `json:"source_final_url"`
+	SourceMatchesTarget bool     `json:"source_matches_target"`
+	TargetStatus        int      `json:"target_status"`
+	OriginalInSitemap   bool     `json:"original_in_sitemap"`
+	TargetInSitemap     bool     `json:"target_in_sitemap"`
+	Verdict             Verdict  `json:"verdict"`
+	Notes               []string `json:"notes,omitempty"`
 }
 
 var verdictRank = map[Verdict]int{

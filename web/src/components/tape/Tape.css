@@ -1,0 +1,164 @@
+/*
+ * The crawl tape. --u scales every tick height, so the compact tape is the same drawing at
+ * half size. Tick encoding (design spec, "The tape"):
+ *   2xx short green · 3xx mid yellow · 4xx tall orange · 5xx tall red with a light cap
+ *   no response (fetch error) tall slate · notch near the base: fetched, not in the sitemap
+ *   slate outline: sitemap page not fetched yet · amber outline: sitemap page past the budget
+ */
+.tape {
+  --u: 1px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  align-content: flex-start;
+  gap: 2px 1px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+.tape-compact {
+  --u: 0.5px;
+  flex-wrap: nowrap;
+  gap: 1px;
+  max-height: none;
+  overflow: hidden;
+  padding: 3px;
+}
+
+.tick {
+  display: block;
+  flex: none;
+  width: 3px;
+  height: calc(9 * var(--u));
+}
+
+.tick-2 {
+  height: calc(9 * var(--u));
+  background: var(--s2);
+}
+
+.tick-3 {
+  height: calc(15 * var(--u));
+  background: var(--s3);
+}
+
+.tick-4 {
+  height: calc(22 * var(--u));
+  background: var(--s4);
+}
+
+.tick-5 {
+  height: calc(22 * var(--u));
+  background: linear-gradient(var(--ink) 0 calc(5 * var(--u)), var(--s5) calc(5 * var(--u)));
+}
+
+.tick-x {
+  height: calc(22 * var(--u));
+  background: var(--ink-2);
+}
+
+.tick-todo {
+  height: calc(9 * var(--u));
+  box-shadow: inset 0 0 0 1px var(--todo);
+}
+
+.tick-cut {
+  height: calc(9 * var(--u));
+  box-shadow: inset 0 0 0 1px var(--cut);
+}
+
+.tick-off {
+  -webkit-mask-image: linear-gradient(
+    to top,
+    #000 0 calc(3 * var(--u)),
+    transparent calc(3 * var(--u)) calc(5 * var(--u)),
+    #000 calc(5 * var(--u))
+  );
+  mask-image: linear-gradient(
+    to top,
+    #000 0 calc(3 * var(--u)),
+    transparent calc(3 * var(--u)) calc(5 * var(--u)),
+    #000 calc(5 * var(--u))
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tape-live .tick-fetched {
+    animation: tick-drop 240ms ease-out;
+  }
+}
+
+@keyframes tick-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.tape-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 18px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.tape-legend li {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.tape-legend .tick {
+  --u: 1px;
+  width: 4px;
+}
+
+/*
+ * Windows High Contrast (forced colors) replaces every author background color and drops
+ * box-shadows, which would erase the ticks, the outline ticks and the legend swatches. They opt
+ * out of the adjustment and use system colors instead. Height already separates 2xx, 3xx and
+ * the taller classes; the colors below tell the tall ones apart, the same ticks serve the
+ * legend, and the status words stay in the text summary.
+ */
+@media (forced-colors: active) {
+  .tick {
+    forced-color-adjust: none;
+  }
+
+  .tick-2 {
+    background: CanvasText;
+  }
+
+  .tick-3 {
+    background: LinkText;
+  }
+
+  .tick-4 {
+    background: ActiveText;
+  }
+
+  .tick-5 {
+    background: linear-gradient(CanvasText 0 calc(5 * var(--u)), Highlight calc(5 * var(--u)));
+  }
+
+  .tick-x {
+    background: GrayText;
+  }
+
+  .tick-todo {
+    box-shadow: inset 0 0 0 1px GrayText;
+  }
+
+  .tick-cut {
+    box-shadow: inset 0 0 0 1px Highlight;
+  }
+}

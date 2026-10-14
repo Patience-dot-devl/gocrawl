@@ -1,12 +1,8 @@
 import { useState } from 'react'
-import type { PageIssue, SevCounts, SiteMap as SiteMapData, SiteMapNode } from '../types'
-
-function statusClass(status?: number): string {
-  if (!status) return 'st-none'
-  if (status >= 200 && status < 300) return 'st-ok'
-  if (status >= 300 && status < 400) return 'st-redirect'
-  return 'st-error'
-}
+import type { PageIssue, SevCounts, SiteMap as SiteMapData, SiteMapNode } from '../types/crawls'
+import Button from './ui/Button'
+import StatusCode from './ui/StatusCode'
+import './SiteMap.css'
 
 function healthClass(node: SiteMapNode): string {
   if (!node.url) return 'sm-h-none'
@@ -97,7 +93,7 @@ function TreeNode({
             <button
               type="button"
               className="sm-box-toggle"
-              title="collapse / expand subtree"
+              title="Collapse or expand this branch"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -121,7 +117,7 @@ function TreeNode({
           ) : (
             <span className="sm-box-label">{node.label}</span>
           )}
-          {node.status ? <span className={`sm-st ${statusClass(node.status)}`}>{node.status}</span> : null}
+          {node.status ? <StatusCode code={node.status} /> : null}
         </div>
         {node.title && (
           <div className="sm-box-title" title={node.title}>
@@ -207,7 +203,7 @@ export default function SiteMap({ siteMap }: { siteMap: SiteMapData }) {
     setCollapsed(s)
   }
 
-  if (!root) return <p className="empty">No site map available.</p>
+  if (!root) return <p className="muted">No site map available.</p>
 
   const hasTotals = total(siteMap.totals) > 0
 
@@ -224,13 +220,9 @@ export default function SiteMap({ siteMap }: { siteMap: SiteMapData }) {
         )}
       </div>
       <div className="sm-controls">
-        <button type="button" onClick={expandAll}>
-          Expand all
-        </button>
-        <button type="button" onClick={collapseAll}>
-          Collapse all
-        </button>
-        <span className="sm-hint">Click a node to see its issues · click a label to open the page · −/+ collapses a branch</span>
+        <Button onClick={expandAll}>Expand all</Button>
+        <Button onClick={collapseAll}>Collapse all</Button>
+        <span className="sm-hint">Click a page to see its issues. Click its label to open it. − and + collapse a branch.</span>
       </div>
       <div className="sm-chartwrap">
         <ul className="sm-chart">

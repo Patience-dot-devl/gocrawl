@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -249,5 +250,85 @@ func TestCrawlSiteMapTitleSurvivesBodyRelease(t *testing.T) {
 	}
 	if rep.SiteMap.Root.Title != "Home Sweet Home" {
 		t.Errorf("site_map.root.title = %q, want %q", rep.SiteMap.Root.Title, "Home Sweet Home")
+	}
+}
+
+// A bearer token goes to the seed host only: a crawl that follows a link to another host
+// (--external) must not send it there.
+func TestCrawlBearerTokenOnlyReachesSeedHost(t *testing.T) {
+	var mu sync.Mutex
+	var seedAuth, otherAuth string
+	otherHit := false
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		otherHit = true
+		otherAuth = r.Header.Get("Authorization")
+		mu.Unlock()
+		fmt.Fprint(w, `<html><head><title>Other</title></head><body>other</body></html>`)
+	}))
+	defer other.Close()
+	// Same IP, different host name: credential scoping compares host names without the
+	// port, so a second 127.0.0.1 server would count as the seed host.
+	otherURL := strings.Replace(other.URL, "127.0.0.1", "localhost", 1)
+	seed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			mu.Lock()
+			seedAuth = r.Header.Get("Authorization")
+			mu.Unlock()
+		}
+		fmt.Fprintf(w, `<html><head><title>Home</title></head><body><a href="%s/page">other</a></body></html>`, otherURL)
+	}))
+	defer seed.Close()
+
+	cmd := newCrawlCmd()
+	for name, value := range map[string]string{
+		"format":         "json",
+		"out":            filepath.Join(t.TempDir(), "report.json"),
+		"bearer-token":   "tok-123",
+		"external":       "true",
+		"respect-robots": "false",
+	} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd.SetContext(context.Background())
+	if err := runCrawl(cmd, []string{seed.URL}); err != nil {
+		t.Fatalf("runCrawl: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if seedAuth != "Bearer tok-123" {
+		t.Errorf("seed Authorization = %q, want %q", seedAuth, "Bearer tok-123")
+	}
+	if !otherHit {
+		t.Fatal("the crawl never reached the second host, so the test proves nothing")
+	}
+	if otherAuth != "" {
+		t.Errorf("second host got Authorization %q, want none", otherAuth)
+	}
+}
+
+func TestCrawlBearerTokenConflictsWithBasicAuth(t *testing.T) {
+	cmd := newCrawlCmd()
+	for name, value := range map[string]string{
+		"out":          filepath.Join(t.TempDir(), "report.json"),
+		"bearer-token": "tok-secret",
+		"basic-auth":   "alice:pw",
+	} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd.SetContext(context.Background())
+	err := runCrawl(cmd, []string{"http://127.0.0.1:1/"})
+	if err == nil {
+		t.Fatal("runCrawl succeeded with both --bearer-token and --basic-auth")
+	}
+	if !strings.Contains(err.Error(), "bearer_token") {
+		t.Errorf("error %q doesn't name bearer_token", err)
+	}
+	if strings.Contains(err.Error(), "tok-secret") {
+		t.Errorf("error %q leaks the token", err)
 	}
 }

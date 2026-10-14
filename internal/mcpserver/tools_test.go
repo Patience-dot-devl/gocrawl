@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/Patience-dot-devl/gocrawl/internal/runner"
 )
 
 // connect wires a client to New's server over an in-memory transport, so the tools are
@@ -125,4 +127,98 @@ func decode(t *testing.T, structured any, into any) {
 	if err := json.Unmarshal(b, into); err != nil {
 		t.Fatalf("decode structured content %s: %v", b, err)
 	}
+}
+
+// Coverage.Tape / TapeOff are for the web UI: the report keeps them, the MCP response must not
+// carry them (they grow with the page count and are noise to an agent).
+func TestCrawlToolOmitsTheTape(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/sitemap.xml" {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://%[1]s/</loc></url></urlset>`, r.Host)
+			return
+		}
+		fmt.Fprint(w, `<html><head><title>x</title></head><body><a href="/about">about</a></body></html>`)
+	}))
+	defer ts.Close()
+
+	maxPages := 5
+	cfg, seed, err := (CrawlInput{URL: ts.URL, MaxPages: &maxPages, Analyzers: []string{"seo"}}).ToConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := runner.Run(context.Background(), cfg, seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Coverage == nil || rep.Coverage.Tape == "" || rep.Coverage.TapeOff == "" {
+		t.Fatalf("report coverage = %+v, want the tape saved in the report itself", rep.Coverage)
+	}
+
+	cs := connect(t)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "crawl",
+		Arguments: map[string]any{"url": ts.URL, "max_pages": 5, "analyzers": []string{"seo"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("tool error: %v", res.Content)
+	}
+	b, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Report struct {
+			Coverage map[string]any `json:"coverage"`
+		} `json:"report"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw.Report.Coverage == nil {
+		t.Fatalf("MCP response has no coverage: %s", b)
+	}
+	for _, key := range []string{"tape", "tape_off"} {
+		if _, ok := raw.Report.Coverage[key]; ok {
+			t.Errorf("MCP coverage carries %q: %s", key, b)
+		}
+	}
+}
+
+// CrawlInput is crawlrequest.Params, so new crawl parameters reach MCP through the generated
+// input schema. login_session is web-only and must not.
+func TestCrawlToolSchemaListsCrawlParams(t *testing.T) {
+	cs := connect(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name != "crawl" {
+			continue
+		}
+		raw, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		if err := json.Unmarshal(raw, &schema); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"strip_query", "adaptive_delay", "follow_nofollow", "timeout", "bearer_token"} {
+			if _, ok := schema.Properties[name]; !ok {
+				t.Errorf("crawl input schema has no %q property", name)
+			}
+		}
+		if _, ok := schema.Properties["login_session"]; ok {
+			t.Error("crawl input schema exposes login_session, which is web-only")
+		}
+		return
+	}
+	t.Fatal("no crawl tool listed")
 }

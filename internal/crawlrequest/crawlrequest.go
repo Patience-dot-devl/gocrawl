@@ -5,7 +5,9 @@
 package crawlrequest
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -20,7 +22,7 @@ type Params struct {
 	MaxPages              *int     `json:"max_pages,omitempty" jsonschema:"Hard cap on the number of pages crawled (default 500)"`
 	Concurrency           *int     `json:"concurrency,omitempty" jsonschema:"Number of parallel fetch workers (default 4)"`
 	RatePerSecond         *float64 `json:"rate,omitempty" jsonschema:"Max requests per second (default 0 = unlimited)"`
-	MaxDuration           string   `json:"max_duration,omitempty" jsonschema:"Wall-clock budget for the whole crawl as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
+	MaxDuration           string   `json:"max_duration,omitempty" jsonschema:"Budget for active crawl time (time spent paused excluded) as a Go duration string, e.g. '90m' (default unlimited); on expiry the crawl stops early and still returns a partial report"`
 	Render                string   `json:"render,omitempty" jsonschema:"Rendering mode: 'raw' (default) or 'headless'"`
 	Analyzers             []string `json:"analyzers,omitempty" jsonschema:"Subset of analyzer names to run; empty runs all"`
 	Specialized           *bool    `json:"specialized,omitempty" jsonschema:"Enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes, Shopify /products.json probe); off by default"`
@@ -31,6 +33,10 @@ type Params struct {
 	FollowExternal        *bool    `json:"follow_external,omitempty" jsonschema:"Follow links that leave the seed host entirely (default false)"`
 	Include               []string `json:"include,omitempty" jsonschema:"Only crawl URLs matching at least one of these regexes"`
 	Exclude               []string `json:"exclude,omitempty" jsonschema:"Skip URLs matching any of these regexes"`
+	StripQuery            bool     `json:"strip_query,omitempty" jsonschema:"Ignore query strings, treating ?a=1 and ?a=2 as one URL; this skips the query-dependent utm/tracking analysis (default false)"`
+	AdaptiveDelay         *bool    `json:"adaptive_delay,omitempty" jsonschema:"Slow the crawl automatically when the server answers HTTP 429/503, honoring Retry-After (default true)"`
+	FollowNofollow        bool     `json:"follow_nofollow,omitempty" jsonschema:"Also follow links marked rel=nofollow (default false)"`
+	Timeout               string   `json:"timeout,omitempty" jsonschema:"Per-request timeout as a Go duration string, e.g. '10s' (default 15s)"`
 
 	UserAgent         string   `json:"user_agent,omitempty" jsonschema:"User-Agent header sent on every request"`
 	UserAgents        []string `json:"user_agents,omitempty" jsonschema:"Pool of User-Agent strings to rotate across (supersedes user_agent)"`
@@ -39,6 +45,7 @@ type Params struct {
 	Proxies           []string `json:"proxies,omitempty" jsonschema:"Pool of proxy URLs to rotate across"`
 	ProxyRotation     string   `json:"proxy_rotation,omitempty" jsonschema:"Rotation across proxies: off, round-robin, random, or sticky-host"`
 	BasicAuth         string   `json:"basic_auth,omitempty" jsonschema:"HTTP Basic Auth credentials as user:pass, for sites gated by server-level Basic Auth (e.g. a staging/acceptance environment)"`
+	BearerToken       string   `json:"bearer_token,omitempty" jsonschema:"Token sent as 'Authorization: Bearer <token>', only to the seed host (plus subdomains when subdomains is set); raw render mode only. Can't be combined with basic_auth or a custom Authorization header"`
 	Cookie            string   `json:"cookie,omitempty" jsonschema:"Raw Cookie header sent on every request, for sites gated by an app-level session cookie rather than server-level Basic Auth (e.g. a Shopify storefront password page) where a valid session cookie is already available"`
 	Headers           []string `json:"headers,omitempty" jsonschema:"Extra request headers as 'Name: value' strings, sent only to the seed host (plus subdomains when subdomains is set); raw render mode only. Prefer header_profile for secrets so their values stay out of the request"`
 	// HeaderProfile deliberately takes a profile name rather than a file path: a path would let
@@ -56,6 +63,11 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	}
 	if !strings.Contains(seed, "://") {
 		seed = "https://" + seed
+	}
+	// crawler.SanitizeSeed leaves a seed it can't parse unchanged, userinfo included, and the
+	// *url.Error from the first fetch would quote it. Refuse it here with a fixed message.
+	if _, perr := url.Parse(seed); perr != nil {
+		return config.Config{}, "", errors.New("url is not a valid web address (check for stray characters; the value is not shown)")
 	}
 
 	cfg := config.Default()
@@ -77,6 +89,21 @@ func (p Params) ToConfig() (config.Config, string, error) {
 			return config.Config{}, "", fmt.Errorf("max_duration %q: %w", p.MaxDuration, derr)
 		}
 		cfg.Crawl.MaxDuration = d
+	}
+	if t := strings.TrimSpace(p.Timeout); t != "" {
+		d, derr := time.ParseDuration(t)
+		if derr != nil {
+			return config.Config{}, "", fmt.Errorf("timeout %q: %w", p.Timeout, derr)
+		}
+		if d <= 0 {
+			return config.Config{}, "", fmt.Errorf("timeout %q: must be greater than zero", p.Timeout)
+		}
+		cfg.Crawl.Timeout = d
+	}
+	cfg.Crawl.StripQuery = p.StripQuery
+	cfg.Crawl.FollowNofollow = p.FollowNofollow
+	if p.AdaptiveDelay != nil {
+		cfg.Crawl.AdaptiveDelay = *p.AdaptiveDelay
 	}
 	if p.Render != "" {
 		cfg.Render = p.Render
@@ -111,6 +138,7 @@ func (p Params) ToConfig() (config.Config, string, error) {
 	cfg.Crawl.Proxies = p.Proxies
 	cfg.Crawl.ProxyRotation = p.ProxyRotation
 	cfg.Crawl.BasicAuth = p.BasicAuth
+	cfg.Crawl.BearerToken = strings.TrimSpace(p.BearerToken)
 	cfg.Crawl.Cookie = p.Cookie
 	cfg.Crawl.Headers = p.Headers
 	cfg.Crawl.HeaderProfile = p.HeaderProfile
