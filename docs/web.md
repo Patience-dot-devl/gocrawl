@@ -276,8 +276,8 @@ For sites behind a login form (staging, member areas, a Shopify password page), 
 borrow a real browser session: gocrawl opens a normal Chrome, Chromium or Edge window on the
 site in a fresh, temporary profile, you log in there (SSO, two-factor and CAPTCHAs work), and
 gocrawl reads that window's cookies when you say you're done. It keeps only the cookies a
-browser would send to the site's host, closes the window, and deletes the profile. The login
-UI lands with the GUI views; the API above is what it will call.
+browser would send to the site's host, closes the window, and deletes the profile. The New crawl
+form's **Log in with browser…** button drives this API.
 
 The flow, over the API:
 
@@ -305,7 +305,7 @@ the cookies are captured.
   cookie's `Path` and `Secure` attributes are ignored, and a host-only cookie may reach the
   subdomains too when `subdomains` is on.
 - The API does not add a logout exclusion. The UI adds the exclude pattern
-  `(?i)(log|sign)-?out` to the crawl form (it lands with the GUI views), so the crawl doesn't
+  `(?i)/(log|sign)-?out(/|$|\?)` to the crawl form, so the crawl doesn't
   follow a logout link and end the session. It stays visible in the exclude field; remove it
   if you need those pages. API clients should add their own `exclude`.
 - Each login window uses a temporary browser profile named `gocrawl-login-*` in the system
@@ -332,6 +332,5 @@ the cookies are captured.
   `basic_auth`, `cookie`, inline `headers`, or credentials embedded in a URL. Header profiles are
   the exception by design: they are the place for secrets, and `GET /api/header-profiles/{name}`
   returns a body as-is.
-- The Settings view that edits all of this lands with the GUI settings view; until then these
-  routes are the interface.
+- The Settings view edits all of this through these routes.
 - Redirect-check results live in memory only, like unsaved crawls.

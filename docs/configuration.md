@@ -54,7 +54,7 @@ default** (the value used when you set nothing).
 | `crawl.header_profile` | `--header-profile` | string | *(none)* | Name of a header file stored at `~/.gocrawl/headers/<name>.headers`, merged into `headers`. The only header source the MCP server and web API accept besides inline `headers`. |
 | `crawl.bearer_token` | `--bearer-token` | string | *(none)* | Token sent as `Authorization: Bearer <token>`, scoped like `basic_auth`. Can't be combined with `basic_auth` or a custom `Authorization` header. See [Bearer tokens](#bearer-tokens). |
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
-| `crawl.max_duration` | `--max-duration` | duration | `0` (unlimited) | Wall-clock budget for the whole crawl (e.g. `"90m"`). On expiry the crawl stops early and still writes a report from whatever was fetched, flagged as **partial coverage** (see [Output](output.md#coverage)) — the same mechanism a Ctrl-C interruption uses. |
+| `crawl.max_duration` | `--max-duration` | duration | `0` (unlimited) | Budget for the crawl's active time (e.g. `"90m"`); time spent paused in the web UI doesn't count. On expiry the crawl stops early and still writes a report from whatever was fetched, flagged as **partial coverage** (see [Output](output.md#coverage)) — the same mechanism a Ctrl-C interruption uses. |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
 | `crawl.respect_robots` | `--respect-robots` | bool | `true` | Obey `robots.txt` while crawling. |
 | `crawl.allow_subdomains` | `--subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
@@ -271,8 +271,8 @@ the agent's conversation and logs. One profile per domain (`uk`, `de`, …) matc
 issues signatures.
 
 The web UI's Settings view lists, creates, edits and deletes profiles; it validates each one with
-the same parser a crawl uses and writes the file with mode `0600`. The view lands with the GUI
-settings work; the same operations are already available as the `/api/header-profiles` routes of
+the same parser a crawl uses and writes the file with mode `0600`. The same operations are
+available as the `/api/header-profiles` routes of
 the [web API](web.md#api). Error messages about a profile never contain a header value.
 
 **Precedence.** Sources merge as profile, then file, then inline `--header`; for a header name
@@ -528,7 +528,7 @@ crawl:
   # writing the token into this file.
   bearer_token: ""
   timeout: "15s"        # per-request timeout
-  max_duration: "0s"    # wall-clock budget for the whole crawl (0 = unlimited); on expiry the
+  max_duration: "0s"    # budget for active crawl time, paused time excluded (0 = unlimited); on expiry the
                         # crawl stops early and still writes a partial report
   max_body_bytes: 5242880  # 5 MiB cap on a single response body
   respect_robots: true  # obey robots.txt while crawling

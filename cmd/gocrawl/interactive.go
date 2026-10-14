@@ -112,7 +112,7 @@ func runInteractive(cmd *cobra.Command) error {
 			huh.NewInput().Title("Max pages").Description("Hard cap on pages crawled (0 = unlimited).").Value(&maxPages).Validate(validInt),
 			huh.NewInput().Title("Concurrency").Description("Parallel fetch workers.").Value(&concurrency).Validate(validInt),
 			huh.NewInput().Title("Rate limit").Description("Max requests per second (0 = unlimited).").Value(&rate).Validate(validFloat),
-			huh.NewInput().Title("Max duration").Description("Wall-clock budget for the whole crawl, e.g. 90m (0s = unlimited).").Value(&maxDuration).Validate(validDuration),
+			huh.NewInput().Title("Max duration").Description("Budget for active crawl time (paused time excluded), e.g. 90m (0s = unlimited).").Value(&maxDuration).Validate(validDuration),
 		),
 		// Scope toggles kept in their own group: huh renders every field of a group on one
 		// screen, so an overcrowded group overflows a short terminal and clips the top fields.
