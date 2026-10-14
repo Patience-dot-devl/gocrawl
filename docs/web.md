@@ -114,7 +114,17 @@ already in the API below. The working views, all against the API below:
   raw `data` expandable inline, any notes advisories, and export links.
 - **Crawls** — every crawl saved to the store (`save: true` on start), reopen-able as a
   report. Each row shows a small tape (a 160-tick preview, worst status per tick) and its
-  sitemap coverage. Its old address, `#/history`, still opens it.
+  sitemap coverage. Tick two finished crawls and select **Compare selected** to open them in Compare. **Import report…**
+  uploads a gocrawl JSON report (for example one written with `-f json`), saves it to the
+  store, and opens it. Its old address, `#/history`, still opens it.
+- **Compare** — two pickers, defaulting to the newest two crawls of the same host, and a
+  **Swap** button. For each side it shows the crawl's tape from the saved report
+  (`coverage.tape`, in fetch order, notched where a page is not in the sitemap); a report saved
+  before tapes were stored gets a tape grouped by status instead. Then the issue counts by
+  severity (new, resolved, net change), the net change by analyzer and by page status, tabs
+  for new, resolved and persisting issues using the report's issue table and filters, and the
+  added and removed pages. The selection is in the URL (`#/compare?base=…&current=…`), so a
+  comparison can be bookmarked.
 - **Settings** — theme (dark, light, or match the system), crawl defaults
   (the New crawl fields, minus secrets), header profiles (list, create, edit, delete; each is
   validated like `--header-file` and stored with mode `0600` in `~/.gocrawl/headers`), and

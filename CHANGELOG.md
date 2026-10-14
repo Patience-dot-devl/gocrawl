@@ -8,6 +8,9 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Web UI: a Compare view (both crawls' tapes, summary deltas, new, resolved and persisting
+  issues, added and removed pages), plus compare checkboxes and **Import report…** on the
+  Crawls list.
 - Web UI: **Log in with browser…** in the New crawl form captures a real browser login (SSO, two-factor and CAPTCHAs work) and crawls with it, showing only cookie names, count and expiry, and excluding logout links by default.
 - Web UI: a Settings view (theme, crawl defaults, header profiles, store folder), and the New crawl form gains a request timeout, nofollow following, query-string stripping, the 429/503 slow-down toggle, a bearer token and a header-profile dropdown, pre-filled from saved defaults with **Save as defaults**.
 - Pause and resume crawls through the web API (`POST /api/crawls/{id}/pause`, `POST /api/crawls/{id}/resume` with an optional new `rate`, job status `paused`). Web crawls pause themselves after sustained 429/503 responses and report the server's `Retry-After`, and `max_duration` now counts only active time, so a paused crawl doesn't use up its budget.
