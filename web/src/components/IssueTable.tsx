@@ -16,6 +16,11 @@ export interface ReviewState {
 // Review state keyed by index into the issues array.
 export type ReviewMap = Record<number, ReviewState>
 
+// The table draws this many rows at a time. Filters, sort, counts and bulk review work on the
+// whole list; only the drawing is batched, so a 4,000-issue crawl stays responsive and keeps
+// a sane number of tab stops.
+const PAGE_SIZE = 100
+
 const EMPTY_REVIEW: ReviewState = { resolved: false, nonissue: false, note: '' }
 
 type IssueRow = Issue & { _key: number }
@@ -44,12 +49,14 @@ interface IssueTableProps {
   // hide-non-issue toggles, and writes review state here. Compare passes nothing: its issue
   // lists are read-only.
   review?: { map: ReviewMap; set: Dispatch<SetStateAction<ReviewMap>> }
+  // Shown instead of the table when there are no issues at all.
+  empty?: string
 }
 
 // The report's issue table, moved out of CrawlReport: severity / analyzer / code / text
 // filters, sortable columns, inline explanations and data, and (for a single crawl's report)
 // per-issue review state.
-export default function IssueTable({ issues, explanations, review }: IssueTableProps) {
+export default function IssueTable({ issues, explanations, review, empty = 'No issues were found.' }: IssueTableProps) {
   const [severityOn, setSeverityOn] = useState<Record<string, boolean>>({ error: true, warning: true, info: true })
   const [analyzerFilter, setAnalyzerFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -59,7 +66,9 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
   const [hideResolved, setHideResolved] = useState(false)
   const [hideNonissue, setHideNonissue] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [limit, setLimit] = useState(PAGE_SIZE)
   const selectAllRef = useRef<HTMLInputElement>(null)
+  const endRef = useRef<HTMLParagraphElement>(null)
   const reviewMap = review?.map
 
   useEffect(() => {
@@ -101,6 +110,17 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
   }, [rows, severityOn, analyzerFilter, codeOn, search, hideResolved, hideNonissue, reviewMap])
 
   const { sorted, toggle, dirFor } = useSort(filtered, issueSortValue, { key: 'severity' })
+
+  // A new filter starts again from the first batch. Review marks do not: marking a row
+  // resolved must not collapse the rows the user has paged through.
+  const filterSignature = JSON.stringify([severityOn, analyzerFilter, codeOn, search, hideResolved, hideNonissue])
+  const [signature, setSignature] = useState(filterSignature)
+  if (signature !== filterSignature) {
+    setSignature(filterSignature)
+    setLimit(PAGE_SIZE)
+  }
+  const visible = sorted.slice(0, limit)
+  const hiddenCount = sorted.length - visible.length
 
   const selectedShownCount = sorted.filter((r) => selected.has(r._key)).length
   useEffect(() => {
@@ -166,8 +186,13 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
     hideNonissue ||
     Object.values(severityOn).some((v) => v === false)
 
+  if (rows.length === 0) return <p className="muted">{empty}</p>
+
   return (
     <>
+      <button type="button" className="skip-link" onClick={() => endRef.current?.focus()}>
+        Skip the issue table
+      </button>
       <div className="cr-filters">
         <div className="cr-sevs" role="group" aria-label="Severity">
           {(['error', 'warning', 'info'] as const).map((sev) => (
@@ -184,7 +209,7 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
         </div>
         <label className="cr-inline">
           Analyzer
-          <select value={analyzerFilter} onChange={(e) => setAnalyzerFilter(e.target.value)}>
+          <select name="analyzer" value={analyzerFilter} onChange={(e) => setAnalyzerFilter(e.target.value)}>
             <option value="">All</option>
             {analyzers.map((a) => (
               <option key={a} value={a}>
@@ -217,6 +242,8 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
               <label key={c} className="cr-code-option">
                 <input
                   type="checkbox"
+                  name="code"
+                  value={c}
                   checked={codeOn[c] !== false}
                   onChange={(e) => setCodeOn((prev) => ({ ...prev, [c]: e.target.checked }))}
                 />
@@ -228,6 +255,7 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
         </div>
         <input
           type="search"
+          name="search"
           className="cr-search"
           placeholder="Search URL, message, code…"
           aria-label="Search issues"
@@ -237,11 +265,11 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
         {review && (
           <>
             <label className="cr-inline">
-              <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} />
+              <input type="checkbox" name="hide_resolved" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} />
               Hide resolved
             </label>
             <label className="cr-inline">
-              <input type="checkbox" checked={hideNonissue} onChange={(e) => setHideNonissue(e.target.checked)} />
+              <input type="checkbox" name="hide_nonissue" checked={hideNonissue} onChange={(e) => setHideNonissue(e.target.checked)} />
               Hide non-issues
             </label>
           </>
@@ -258,10 +286,11 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
             <input
               ref={selectAllRef}
               type="checkbox"
+              name="select_all"
               checked={sorted.length > 0 && selectedShownCount === sorted.length}
               onChange={(e) => selectShown(e.target.checked)}
             />
-            Select shown
+            Select all matching
           </label>
           <Button disabled={selected.size === 0} onClick={() => bulkApply('nonissue')}>
             Mark as non-issue
@@ -296,7 +325,7 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
             </tr>
           </thead>
           <tbody>
-            {sorted.map((i) => {
+            {visible.map((i) => {
               const explanation = explanations[i.code]
               const r = reviewMap?.[i._key]
               return (
@@ -334,12 +363,13 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
                   {review && (
                     <td className="cr-review">
                       <label className="cr-inline">
-                        <input type="checkbox" checked={selected.has(i._key)} onChange={() => toggleSelected(i._key)} />
+                        <input type="checkbox" name="select" checked={selected.has(i._key)} onChange={() => toggleSelected(i._key)} />
                         Select
                       </label>
                       <label className="cr-inline">
                         <input
                           type="checkbox"
+                          name="resolved"
                           checked={!!r?.resolved}
                           onChange={(e) => setReviewFlag(i._key, { resolved: e.target.checked })}
                         />
@@ -348,12 +378,14 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
                       <label className="cr-inline">
                         <input
                           type="checkbox"
+                          name="nonissue"
                           checked={!!r?.nonissue}
                           onChange={(e) => setReviewFlag(i._key, { nonissue: e.target.checked })}
                         />
                         Non-issue
                       </label>
                       <textarea
+                        name="comment"
                         rows={2}
                         placeholder="Add a comment…"
                         aria-label="Comment"
@@ -368,6 +400,20 @@ export default function IssueTable({ issues, explanations, review }: IssueTableP
           </tbody>
         </table>
       </div>
+      <p className="cr-more num muted" ref={endRef} tabIndex={-1}>
+        {sorted.length === 0
+          ? 'No issues match these filters.'
+          : `Showing ${formatCount(visible.length)} of ${formatCount(sorted.length)} matching ${sorted.length === 1 ? 'issue' : 'issues'}.`}
+        {hiddenCount > 0 && (
+          <>
+            {' '}
+            <Button onClick={() => setLimit((n) => n + PAGE_SIZE)}>
+              Show {formatCount(Math.min(PAGE_SIZE, hiddenCount))} more
+            </Button>
+            {hiddenCount > PAGE_SIZE && <Button onClick={() => setLimit(sorted.length)}>Show all {formatCount(sorted.length)}</Button>}
+          </>
+        )}
+      </p>
     </>
   )
 }

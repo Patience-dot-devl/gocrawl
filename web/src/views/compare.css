@@ -33,6 +33,7 @@
 .compare-deltas {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 2rem;
   margin: 1rem 0;
 }

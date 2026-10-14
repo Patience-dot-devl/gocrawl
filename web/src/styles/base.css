@@ -65,6 +65,26 @@ pre,
   outline-offset: 2px;
 }
 
+/* Skip links: off-screen until they take focus, then pinned top left above everything. */
+.skip-link {
+  position: fixed;
+  left: 8px;
+  top: -64px;
+  z-index: 100;
+  padding: 8px 12px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
 input,
 select,
 textarea,

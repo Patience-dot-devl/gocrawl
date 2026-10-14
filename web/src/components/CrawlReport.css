@@ -134,6 +134,23 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 24px;
+}
+
+/* WCAG 2.2 target size (2.5.8): the 16px box is a 24px target. */
+.cr-inline input[type='checkbox'],
+.cr-code-option input[type='checkbox'] {
+  width: 24px;
+  height: 24px;
+}
+
+.cr-more {
+  margin: 10px 0 0;
+  font-size: 14px;
+}
+
+.cr-more .btn {
+  margin-right: 6px;
 }
 
 .cr-sevs {
@@ -327,7 +344,7 @@
 
 .cr-review .cr-inline {
   display: flex;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 
 .cr-review textarea {
