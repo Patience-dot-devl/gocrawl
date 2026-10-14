@@ -256,7 +256,7 @@ export default function CrawlFields({ values: v, onChange, mode, analyzers, prof
           </fieldset>
         ) : (
           <p className="cf-hint">
-            Passwords, cookies, bearer tokens and inline headers are never saved as defaults. Put headers every crawl
+            Passwords, cookies, bearer tokens, inline headers and proxy credentials are never saved as defaults. Put headers every crawl
             needs in a header profile.
           </p>
         )}

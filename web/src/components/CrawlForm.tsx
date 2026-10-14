@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { listAnalyzers, startCrawl } from '../api/crawls'
 import { listHeaderProfiles } from '../api/profiles'
 import type { AnalyzerInfo, StartCrawlParams } from '../types/crawls'
 import type { LoginSession } from '../types/login'
 import CrawlFields from './crawlform/CrawlFields'
 import LoginPanel from './crawlform/LoginPanel'
-import { LOGOUT_EXCLUDE, fromParams, hostOf, loginExpired, splitList, toParams, withLine, type FormValues } from './crawlform/values'
+import { LOGOUT_EXCLUDE, fromParams, hostOf, splitList, toParams, withLine, type FormValues } from './crawlform/values'
 import { useSettings } from '../settings/context'
 import SitemapPreviewLine from './progress/SitemapPreviewLine'
 import { DEFAULT_MAX_PAGES } from './progress/tapeText'
@@ -18,7 +18,7 @@ function message(e: unknown): string {
 }
 
 export default function CrawlForm({ onStarted }: { onStarted: (id: string) => void }) {
-  const { settings, saveDefaults } = useSettings()
+  const { settings, saveDefaults, error: settingsError } = useSettings()
   const defaults = settings?.crawl_defaults
   const [values, setValues] = useState<FormValues>(() => fromParams(defaults))
   const [dirty, setDirty] = useState(false)
@@ -33,6 +33,9 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   const [profiles, setProfiles] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [profilesError, setProfilesError] = useState('')
+  // True once a crawl has started with the captured login; LoginPanel then keeps it on unmount.
+  const loginUsed = useRef(false)
   const [login, setLogin] = useState<LoginSession | null>(null)
   const loginBlocked =
     values.render === 'headless'
@@ -52,7 +55,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       .catch((e: unknown) => setError(message(e)))
     listHeaderProfiles()
       .then((r) => setProfiles(r.profiles))
-      .catch((e: unknown) => setError(message(e)))
+      .catch((e: unknown) => setProfilesError(message(e)))
   }, [])
 
   function update(patch: Partial<FormValues>) {
@@ -65,8 +68,13 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
     setError('')
     setDefaultsNote('')
     try {
-      await saveDefaults(toParams(values, 'defaults'))
-      setDefaultsNote('Saved. New crawls start with these settings. Passwords, cookies, tokens and inline headers are never saved.')
+      // The logout exclude is added automatically by Log in with browser; it belongs to that
+      // login, not to the defaults.
+      const exclude = splitList(values.exclude).filter((l) => l !== LOGOUT_EXCLUDE).join('\n')
+      await saveDefaults(toParams({ ...values, exclude }, 'defaults'))
+      setDefaultsNote(
+        'Saved. New crawls start with these settings. Passwords, cookies, tokens, inline headers and proxy credentials are never saved.',
+      )
     } catch (err) {
       setError(`Couldn't save the defaults: ${message(err)}`)
     }
@@ -83,10 +91,6 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       setError('Finish the browser login first: press "I\'m logged in", or cancel it.')
       return
     }
-    if (login?.state === 'captured' && loginExpired(login)) {
-      setError('Login expired — log in again.')
-      return
-    }
     if (login?.state === 'captured' && hostOf(values.url) !== login.host) {
       setError(`The browser login is for ${login.host}, but the seed URL is on ${hostOf(values.url) || 'another host'}. Log in again for this site.`)
       return
@@ -100,6 +104,7 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
     }
     try {
       const job = await startCrawl(params)
+      if (login?.state === 'captured') loginUsed.current = true
       onStarted(job.id)
     } catch (err) {
       setError(message(err))
@@ -145,9 +150,20 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
             session={login}
             onSession={setLogin}
             onStarted={addLogoutExclude}
+            usedRef={loginUsed}
           />
         }
       />
+      {settingsError && (
+        <Notice tone="warning">
+          Couldn't load your saved defaults: {settingsError}. The form shows the built-in defaults.
+        </Notice>
+      )}
+      {profilesError && (
+        <Notice tone="warning">
+          Couldn't load your header profiles: {profilesError}. The Header profile list may be empty.
+        </Notice>
+      )}
       {error && <Notice tone="error">{error}</Notice>}
       {defaultsNote && <Notice tone="info">{defaultsNote}</Notice>}
       <div className="cf-actions">

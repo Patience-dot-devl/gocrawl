@@ -183,8 +183,9 @@ export function toParams(v: FormValues, mode: FieldsMode): CrawlDefaults {
 }
 
 // Added to the exclude field when a browser login starts, so the crawl doesn't follow a
-// logout link and end the session. It stays visible in the field and can be removed.
-export const LOGOUT_EXCLUDE = '(?i)(log|sign)-?out'
+// logout link and end the session. It matches a whole path segment (/logout, /sign-out/),
+// not /design-outlet or /blog-outreach. It stays visible in the field and can be removed.
+export const LOGOUT_EXCLUDE = '(?i)/(log|sign)-?out(/|$|\\?)'
 
 // withLine appends line to a newline-separated list unless it is already there.
 export function withLine(list: string, line: string): string {
@@ -204,9 +205,8 @@ export function hostOf(url: string): string {
   }
 }
 
-// loginExpired is true once a captured login's earliest cookie has expired. A session without
-// expires_at (only session cookies) lasts until the server drops it, which the panel's poll
-// and the start request report.
+// loginExpired is true once a captured login's earliest cookie has expired. That is a warning,
+// not a block: the server drops expired cookies and only fails a crawl when none remain.
 export function loginExpired(session: LoginSession, now: number = Date.now()): boolean {
   if (!session.expires_at) return false
   const t = Date.parse(session.expires_at)

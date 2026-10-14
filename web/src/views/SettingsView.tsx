@@ -21,6 +21,9 @@ function message(e: unknown): string {
 
 export default function SettingsView() {
   const { settings, error: loadError } = useSettings()
+  // Nothing below may save until the settings answered (or failed): saving earlier would
+  // write the built-in defaults over the file.
+  const locked = settings === null && !loadError
   const [profiles, setProfiles] = useState<string[]>([])
   const [profilesError, setProfilesError] = useState('')
 
@@ -48,8 +51,8 @@ export default function SettingsView() {
           Couldn't load your settings: {loadError}. Saving any setting below replaces the settings file.
         </Notice>
       )}
-      <ThemeSection />
-      <DefaultsSection profiles={profiles} />
+      <ThemeSection locked={locked} />
+      <DefaultsSection profiles={profiles} locked={locked} />
       <ProfilesSection profiles={profiles} loadError={profilesError} onChanged={reloadProfiles} />
       <section className="set-panel">
         <h2>Crawl store</h2>
@@ -62,7 +65,7 @@ export default function SettingsView() {
   )
 }
 
-function ThemeSection() {
+function ThemeSection({ locked }: { locked: boolean }) {
   const { settings, save } = useSettings()
   const [status, setStatus] = useState('')
   const theme: Theme = settings?.theme ?? 'dark'
@@ -84,7 +87,7 @@ function ThemeSection() {
       <h2>Theme</h2>
       <label className="cf-field">
         <span className="cf-label">Theme</span>
-        <select value={theme} onChange={(e) => void choose(e.target.value as Theme)}>
+        <select value={theme} disabled={locked} onChange={(e) => void choose(e.target.value as Theme)}>
           <option value="dark">Dark</option>
           <option value="light">Light</option>
           <option value="system">Match the system</option>
@@ -95,7 +98,7 @@ function ThemeSection() {
   )
 }
 
-function DefaultsSection({ profiles }: { profiles: string[] }) {
+function DefaultsSection({ profiles, locked }: { profiles: string[]; locked: boolean }) {
   const { settings, save } = useSettings()
   const defaults = settings?.crawl_defaults
   const [values, setValues] = useState<FormValues>(() => fromParams(defaults))
@@ -103,10 +106,12 @@ function DefaultsSection({ profiles }: { profiles: string[] }) {
   const [analyzers, setAnalyzers] = useState<AnalyzerInfo[]>([])
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
-  // Follow the saved defaults (first load, and the server's stripped copy after each save).
+  const [dirty, setDirty] = useState(false)
+  // Follow the saved defaults (first load, and the server's stripped copy after each save),
+  // but never overwrite edits that were not saved yet, such as when the theme changes.
   if (defaults !== seenDefaults) {
     setSeenDefaults(defaults)
-    setValues(fromParams(defaults))
+    if (!dirty) setValues(fromParams(defaults))
   }
 
   useEffect(() => {
@@ -120,6 +125,8 @@ function DefaultsSection({ profiles }: { profiles: string[] }) {
     setNote('')
     try {
       await save({ theme: settings?.theme ?? 'dark', crawl_defaults: crawlDefaults })
+      setDirty(false)
+      setValues(fromParams(crawlDefaults))
       setNote(done)
     } catch (e) {
       setError(message(e))
@@ -136,23 +143,29 @@ function DefaultsSection({ profiles }: { profiles: string[] }) {
     >
       <h2>Crawl defaults</h2>
       <p>These values pre-fill the New crawl form.</p>
-      <CrawlFields
-        values={values}
-        onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-        mode="defaults"
-        analyzers={analyzers}
-        profiles={profiles}
-      />
-      {error && <Notice tone="error">{error}</Notice>}
-      {note && <Notice tone="info">{note}</Notice>}
-      <div className="cf-actions">
-        <Button type="submit" variant="primary">
-          Save defaults
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => void store({}, 'Reset to the built-in defaults.')}>
-          Reset to built-in defaults
-        </Button>
-      </div>
+      <fieldset className="set-lock" disabled={locked}>
+        <CrawlFields
+          values={values}
+          onChange={(patch) => {
+            setDirty(true)
+            setNote('')
+            setValues((v) => ({ ...v, ...patch }))
+          }}
+          mode="defaults"
+          analyzers={analyzers}
+          profiles={profiles}
+        />
+        {error && <Notice tone="error">{error}</Notice>}
+        {note && <Notice tone="info">{note}</Notice>}
+        <div className="cf-actions">
+          <Button type="submit" variant="primary">
+            Save defaults
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => void store({}, 'Reset to the built-in defaults.')}>
+            Reset to built-in defaults
+          </Button>
+        </div>
+      </fieldset>
     </form>
   )
 }

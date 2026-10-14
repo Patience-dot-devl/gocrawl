@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ApiError } from '../../api/client'
 import { cancelLogin, captureLogin, getLogin, loginAvailability, startLogin } from '../../api/login'
 import type { LoginAvailability, LoginSession } from '../../types/login'
 import Button from '../ui/Button'
@@ -19,9 +20,12 @@ interface Props {
   onSession: (s: LoginSession | null) => void
   // Called once a browser window has opened, so the form can add the logout exclude.
   onStarted: () => void
+  // Set to true by the form once a crawl has started with the captured login, so leaving the
+  // form keeps that login instead of cancelling it.
+  usedRef: { current: boolean }
 }
 
-export default function LoginPanel({ url, blockedReason, session, onSession, onStarted }: Props) {
+export default function LoginPanel({ url, blockedReason, session, onSession, onStarted, usedRef }: Props) {
   const [availability, setAvailability] = useState<LoginAvailability | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -34,29 +38,43 @@ export default function LoginPanel({ url, blockedReason, session, onSession, onS
 
   // Poll while the window is open, so closing it or the one-hour expiry shows without a click.
   const waitingId = session?.state === 'waiting' ? session.id : ''
+  // The id Forget/Cancel was pressed for: a poll answer for it that arrives late is ignored.
+  const forgottenRef = useRef('')
   useEffect(() => {
     if (!waitingId) return
+    let active = true
     const timer = window.setInterval(() => {
       getLogin(waitingId)
         .then((s) => {
+          if (!active || forgottenRef.current === waitingId) return
           if (s.state !== 'waiting') onSession(s)
         })
-        .catch(() => undefined)
+        .catch((e: unknown) => {
+          if (!active || forgottenRef.current === waitingId) return
+          // 404: the server no longer knows this session. Other failures are transient; keep polling.
+          if (e instanceof ApiError && e.status === 404) {
+            setError('This login session ended. Log in again.')
+            onSession(null)
+          }
+        })
     }, POLL_MS)
-    return () => window.clearInterval(timer)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
   }, [waitingId, onSession])
 
-  // Leaving the form while a window waits closes that window. A captured login is kept: the
-  // crawl the form just started uses it.
-  const waitingRef = useRef('')
+  // Leaving the form closes a window that still waits and discards a captured login, unless a
+  // crawl was started with it (usedRef): that crawl owns the cookies from then on.
+  const openRef = useRef('')
   useEffect(() => {
-    waitingRef.current = waitingId
-  }, [waitingId])
+    openRef.current = session && (session.state === 'waiting' || session.state === 'captured') ? session.id : ''
+  }, [session])
   useEffect(
     () => () => {
-      if (waitingRef.current) void cancelLogin(waitingRef.current).catch(() => undefined)
+      if (openRef.current && !usedRef.current) void cancelLogin(openRef.current).catch(() => undefined)
     },
-    [],
+    [usedRef],
   )
 
   async function start() {
@@ -80,10 +98,11 @@ export default function LoginPanel({ url, blockedReason, session, onSession, onS
       onSession(await captureLogin(session.id))
     } catch (e) {
       setError(message(e))
-      // The window may have been closed; show the session's real state.
+      // The window may have been closed; show the session's real state. If that lookup fails
+      // too, keep the session (and its id) so Cancel or another try still works.
       getLogin(session.id)
         .then(onSession)
-        .catch(() => onSession(null))
+        .catch(() => undefined)
     } finally {
       setBusy(false)
     }
@@ -91,6 +110,7 @@ export default function LoginPanel({ url, blockedReason, session, onSession, onS
 
   async function forget() {
     if (!session) return
+    forgottenRef.current = session.id
     setBusy(true)
     setError('')
     try {
@@ -123,23 +143,21 @@ export default function LoginPanel({ url, blockedReason, session, onSession, onS
       </>
     )
   } else if (session?.state === 'captured') {
-    const expired = loginExpired(session)
     body = (
       <>
-        {expired ? (
-          <Notice tone="warning">Login expired — log in again. The cookies for {session.host} have expired.</Notice>
-        ) : (
-          <p role="status">
-            Logged in to {session.host}: {session.cookie_count} {session.cookie_count === 1 ? 'cookie' : 'cookies'} (
-            {session.cookie_names.join(', ')}). This login expires{' '}
-            {session.expires_at
-              ? new Date(session.expires_at).toLocaleString()
-              : 'within an hour of opening the login window'}
-            . gocrawl keeps the cookies in memory only and sends them to {session.host} only.
-          </p>
+        <p role="status">
+          Logged in to {session.host}: {session.cookie_count} {session.cookie_count === 1 ? 'cookie' : 'cookies'} (
+          {session.cookie_names.join(', ')}). Some cookies expire{' '}
+          {session.expires_at
+            ? new Date(session.expires_at).toLocaleString()
+            : 'within an hour of opening the login window'}
+          . gocrawl keeps the cookies in memory only and sends them to {session.host} only.
+        </p>
+        {loginExpired(session) && (
+          <Notice tone="warning">Some login cookies have expired. If the crawl isn't logged in, log in again.</Notice>
         )}
         <Button type="button" variant="secondary" disabled={busy} onClick={() => void forget()}>
-          {expired ? 'Clear this login' : 'Forget this login'}
+          Forget this login
         </Button>
       </>
     )

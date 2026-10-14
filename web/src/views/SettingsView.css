@@ -28,3 +28,11 @@
 .set-editor textarea {
   font-family: var(--font-mono);
 }
+
+/* Wraps a form so one disabled attribute locks every control inside it. */
+.set-lock {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
