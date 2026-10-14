@@ -5,7 +5,7 @@ scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-10-14
 depends_on: ["mcp.md", "output.md", "redirect-check.md"]
 sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
 ---
@@ -89,14 +89,26 @@ already in the API below. The working views, all against the API below:
   field (inline `Name: value` lines and/or a stored header profile name, e.g. for a Shopify
   crawler access signature). (A few CLI-only flags
   with no menu equivalent, like `--strip-query` and `--adaptive-delay`, aren't in the form
-  either.) Starts a job and jumps to its report.
-- **Report** — polls the running job (with a Stop crawl button while it runs), then shows a partial-coverage banner when the crawl
-  didn't reach the whole site, summary counts by severity/analyzer/page-status, an issues
-  table (filterable by severity, analyzer, and free-text search) with each issue's
-  what/impact/fix explanation and raw `data` expandable inline, any notes advisories, and
-  export links.
+  either.) Under the URL, a line reports the site's sitemap as you type (for example
+  "Found sitemap.xml via robots.txt: 1,240 pages in scope"), and when the page budget is
+  smaller, a notice offers **Raise budget to 1,240**. Starts a job and jumps to its report.
+- **Crawl (running)** — The header shows the host, a phase pill (Reading sitemap, Crawling,
+  Analyzing) and **Stop crawl**. Below it: a notice when the budget is below the sitemap
+  total, the crawl tape (one tick per page, colored and sized by status class, notched when
+  the page isn't in the sitemap, with outline ticks for sitemap pages not fetched yet or past
+  the budget), counts (sitemap pages fetched of the total, fetched pages not in the sitemap,
+  queue, elapsed time, request rate), status-class totals, and a "Fetching now" table of the
+  last eight pages with status and timing.
+- **Crawl (finished)** — The tape sits at the top of the report, followed by the sitemap
+  coverage line. The report saves the tape (`coverage.tape` / `tape_off`), so a crawl reopened
+  later, even after a server restart, shows the same tape; reports saved before this version
+  get a status-only tape. Then: a partial-coverage banner when the crawl didn't reach the
+  whole site, summary counts by severity/analyzer/page-status, an issues table (filterable by
+  severity, analyzer, and free-text search) with each issue's what/impact/fix explanation and
+  raw `data` expandable inline, any notes advisories, and export links.
 - **Crawls** — every crawl saved to the store (`save: true` on start), reopen-able as a
-  report. Its old address, `#/history`, still opens it.
+  report. Each row shows a small tape (a 160-tick preview, worst status per tick) and its
+  sitemap coverage. Its old address, `#/history`, still opens it.
 
 ## Look and feel
 
