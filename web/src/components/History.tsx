@@ -112,7 +112,7 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
         </Button>
         <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
       </div>
-      {importError && <Notice tone="error">Could not import that file: {importError}</Notice>}
+      {importError && <Notice tone="error">Could not import that file: {importError}. Choose a JSON report written by gocrawl.</Notice>}
     </>
   )
 

@@ -53,7 +53,7 @@ export default function CrawlReport({ id }: { id: string }) {
 
   // The server attaches the report once, when the crawl finishes, and App keys this component
   // by crawl id, so the report-derived UI state below starts fresh for every report without a
-  // reset effect. A code missing from codeOn counts as shown.
+  // reset effect.
   const report = job?.report
 
   // The dialog is only meaningful while the crawl runs: if the crawl finishes while it is open,
@@ -337,7 +337,7 @@ export default function CrawlReport({ id }: { id: string }) {
 
           {tab === 'sitemap' && report.site_map && <SiteMap siteMap={report.site_map} />}
           {/* Stays mounted behind the Site map tab, so its filters and search survive a tab switch. */}
-          <div hidden={tab === 'sitemap'}>
+          <div hidden={tab === 'sitemap' && !!report.site_map}>
             <IssueTable issues={report.issues} explanations={explanations} review={{ map: review, set: setReview }} />
           </div>
         </>

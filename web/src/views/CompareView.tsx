@@ -32,8 +32,8 @@ function errorText(e: unknown): string {
 }
 
 function signed(n: number): string {
-  if (n > 0) return `+${n.toLocaleString()}`
-  if (n < 0) return `−${Math.abs(n).toLocaleString()}`
+  if (n > 0) return `+${n.toLocaleString('en-US')}`
+  if (n < 0) return `−${Math.abs(n).toLocaleString('en-US')}`
   return '0'
 }
 
