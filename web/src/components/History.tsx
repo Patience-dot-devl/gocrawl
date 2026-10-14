@@ -3,12 +3,14 @@ import { listCrawls } from '../api/crawls'
 import { STATUS_PILL } from '../crawlStatus'
 import { href } from '../routes'
 import { useSort } from '../sort'
-import type { CrawlListItem } from '../types/crawls'
+import type { CrawlListItemWithProgress } from '../types/progress'
 import Notice from './ui/Notice'
 import PhasePill from './ui/PhasePill'
+import MiniTape from './progress/MiniTape'
+import { percentOf, sitemapCoverageText } from './progress/tapeText'
 import './History.css'
 
-function historySortValue(item: CrawlListItem, key: string): string | number {
+function historySortValue(item: CrawlListItemWithProgress, key: string): string | number {
   switch (key) {
     case 'seed':
       return item.seed
@@ -16,6 +18,8 @@ function historySortValue(item: CrawlListItem, key: string): string | number {
       return item.status
     case 'pages_crawled':
       return item.pages_crawled ?? -1
+    case 'sitemap':
+      return item.sitemap_total ? percentOf(item.sitemap_fetched ?? 0, item.sitemap_total) : -1
     case 'errors':
       return item.by_severity?.error ?? 0
     case 'warnings':
@@ -37,13 +41,14 @@ const COLUMNS: { key: string; label: string; numeric?: boolean }[] = [
   { key: 'seed', label: 'Site' },
   { key: 'status', label: 'Status' },
   { key: 'pages_crawled', label: 'Pages', numeric: true },
+  { key: 'sitemap', label: 'Sitemap coverage' },
   { key: 'errors', label: 'Errors', numeric: true },
   { key: 'warnings', label: 'Warnings', numeric: true },
   { key: 'finished_at', label: 'Finished' },
 ]
 
 export default function History({ onSelect }: { onSelect: (id: string) => void }) {
-  const [items, setItems] = useState<CrawlListItem[]>([])
+  const [items, setItems] = useState<CrawlListItemWithProgress[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -98,6 +103,7 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
                       </button>
                     </th>
                   ))}
+                  <th scope="col">Pages by status</th>
                 </tr>
               </thead>
               <tbody>
@@ -114,9 +120,13 @@ export default function History({ onSelect }: { onSelect: (id: string) => void }
                         <PhasePill phase={pill.phase}>{pill.label}</PhasePill>
                       </td>
                       <td className="hist-num num">{item.pages_crawled?.toLocaleString() ?? '—'}</td>
+                      <td>{sitemapCoverageText(item.sitemap_total, item.sitemap_fetched)}</td>
                       <td className="hist-num num">{item.by_severity?.error ?? 0}</td>
                       <td className="hist-num num">{item.by_severity?.warning ?? 0}</td>
                       <td className="muted">{formatFinished(item.finished_at)}</td>
+                      <td className="mini-tape-cell">
+                        <MiniTape item={item} />
+                      </td>
                     </tr>
                   )
                 })}

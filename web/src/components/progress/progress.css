@@ -124,3 +124,17 @@
   font-size: 14px;
   color: var(--ink-2);
 }
+
+/* Crawls list: the mini tape stays one short line whatever the crawl size. */
+.mini-tape-cell {
+  width: 280px;
+  max-width: 280px;
+}
+.mini-tape-cell .tape {
+  width: 264px;
+  max-width: 264px;
+  overflow: hidden;
+}
+.mini-tape-empty {
+  color: var(--ink-2);
+}
