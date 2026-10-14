@@ -132,3 +132,30 @@ func TestRunCanceledWhileQueuedPauseHolds(t *testing.T) {
 		t.Error("Pause/Resume after Run returned must be false")
 	}
 }
+
+func TestControlResumeRateBeforeAttachReachesTheEngine(t *testing.T) {
+	c := NewControl()
+	c.Pause()
+	c.Resume(2.5) // cancels the queued pause but keeps the chosen rate
+	e := newEngine()
+	c.attach(e)
+	defer c.detach()
+	if e.Paused() {
+		t.Error("the cancelled pause reached the engine")
+	}
+	if got := e.EffectiveRate(); got != 2.5 {
+		t.Errorf("EffectiveRate = %v, want 2.5", got)
+	}
+
+	// A later Resume(0) must not discard a pending rate before attach, and a rate of 0 alone
+	// leaves the engine's configured rate alone.
+	c = NewControl()
+	c.Resume(0)
+	e = newEngine()
+	want := e.EffectiveRate()
+	c.attach(e)
+	defer c.detach()
+	if got := e.EffectiveRate(); got != want {
+		t.Errorf("EffectiveRate = %v, want the configured %v", got, want)
+	}
+}

@@ -239,10 +239,12 @@ func (a *AdaptiveLimiter) SetRate(r float64) {
 	a.limiter.SetLimit(rate.Limit(r))
 }
 
-// ResetRecent forgets the recent 429/503 window, so a resumed crawl gets a fresh minute before
-// auto-pause can trigger again.
+// ResetRecent forgets the recent 429/503 window and the last Retry-After, so a resumed crawl
+// gets a fresh minute before auto-pause can trigger again, and a second pause can't report the
+// previous pause's wait.
 func (a *AdaptiveLimiter) ResetRecent() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.recent = nil
+	a.lastRetryAfter = 0
 }

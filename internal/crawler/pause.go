@@ -59,7 +59,7 @@ func (e *Engine) pauseWith(reason string, retryAfter int) bool {
 }
 
 // Resume continues a paused crawl. rate > 0 replaces the request rate; 0 keeps it. It also
-// clears the recent-429 window so auto-pause doesn't fire again on the old responses. It does
+// clears the recent-429 window and the remembered Retry-After so auto-pause doesn't fire again on the old responses. It does
 // nothing unless the crawl is paused (or queued to start paused). Resume must not be called
 // from Options.OnProgress.
 func (e *Engine) Resume(rate float64) {
@@ -83,6 +83,13 @@ func (e *Engine) Resume(rate float64) {
 	e.logf("crawl resumed")
 	e.emitState()
 }
+
+// SetRate replaces the request rate without touching the pause state; r <= 0 is ignored. Unlike
+// Resume it works before Crawl too, for a caller that picks a rate while a crawl is still queued.
+func (e *Engine) SetRate(r float64) { e.limiter.SetRate(r) }
+
+// EffectiveRate reports the requests-per-second limit in effect (0 = unlimited).
+func (e *Engine) EffectiveRate() float64 { return e.limiter.EffectiveRate() }
 
 // Paused reports whether the crawl is paused (or queued to start paused).
 func (e *Engine) Paused() bool {

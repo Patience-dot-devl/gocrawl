@@ -21,7 +21,9 @@ type Control struct {
 	mu      sync.Mutex
 	engine  *crawler.Engine // set during the crawl phase
 	pending bool            // pause requested before the crawl phase began
-	ended   bool
+	// pendingRate is a Resume rate given before the crawl phase began; attach applies it.
+	pendingRate float64
+	ended       bool
 
 	live   atomic.Pointer[crawler.Engine] // mirrors engine for the lock-free Active
 	frozen atomic.Int64                   // active time in ns, fixed when the crawl phase ends
@@ -47,7 +49,7 @@ func (c *Control) Pause() bool {
 }
 
 // Resume resumes a paused crawl at rate requests per second (0 keeps the current rate), or
-// cancels a queued pause. It returns false once the crawl phase is over.
+// cancels a queued pause (a rate given then is kept and applied when crawling starts). It returns false once the crawl phase is over.
 func (c *Control) Resume(rate float64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -56,6 +58,9 @@ func (c *Control) Resume(rate float64) bool {
 	}
 	if c.engine == nil {
 		c.pending = false
+		if rate > 0 {
+			c.pendingRate = rate
+		}
 		return true
 	}
 	c.engine.Resume(rate)
@@ -80,6 +85,10 @@ func (c *Control) attach(e *crawler.Engine) {
 	defer c.mu.Unlock()
 	c.engine = e
 	c.live.Store(e)
+	if c.pendingRate > 0 {
+		e.SetRate(c.pendingRate)
+		c.pendingRate = 0
+	}
 	if c.pending {
 		c.pending = false
 		e.Pause()

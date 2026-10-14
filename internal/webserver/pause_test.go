@@ -305,3 +305,43 @@ func TestPauseResumeWhilePollingDoesNotDeadlock(t *testing.T) {
 	doJSON(t, srv, http.MethodPost, "/api/crawls/"+id+"/cancel", nil)
 	pollUntilFinished(t, srv, id)
 }
+
+// The handler only records a pause that is still queued (sitemap phase, nothing attached to the
+// engine yet). Once the crawl phase has begun, the engine's own events own the job status; a
+// handler write after Control.Pause returned could leave a job "paused" through the analysis
+// phase when the pause raced the last in-flight page. An unattached Control stands in for both
+// cases here, so the test needs no timing: only the recorded phase differs.
+func TestPauseHandlerOnlyRecordsAQueuedPause(t *testing.T) {
+	pause := func(phase runner.Phase) Job[crawlJob] {
+		srv := newTestServer(t)
+		ctl := runner.NewControl()
+		job, _ := srv.crawls.start(crawlJob{Seed: "https://example.com/", control: ctl}, func() {}, srv.maxRunning)
+		srv.recordProgress(job.ID, runner.Progress{Phase: phase})
+		if code := serveCrawlRequest(srv, http.MethodPost, "/api/crawls/"+job.ID+"/pause", "", ""); code != http.StatusNoContent {
+			t.Fatalf("pause in %s phase: %d, want 204", phase, code)
+		}
+		got, _ := srv.crawls.get(job.ID)
+		return got
+	}
+
+	if got := pause(runner.PhaseSitemap); got.Status != StatusPaused || !got.Data.Progress.Paused || got.Data.Progress.PauseReason != crawler.PauseReasonUser {
+		t.Errorf("queued pause: status %s, progress %+v, want paused by the user", got.Status, got.Data.Progress)
+	}
+	for _, phase := range []runner.Phase{runner.PhaseCrawling, runner.PhaseAnalyzing} {
+		if got := pause(phase); got.Status != StatusRunning || got.Data.Progress.Paused {
+			t.Errorf("%s phase: status %s, paused %v; the engine's events own the state, not the handler", phase, got.Status, got.Data.Progress.Paused)
+		}
+	}
+}
+
+func TestPauseAndResumeBodyTooLarge(t *testing.T) {
+	srv := newTestServer(t)
+	id := startSlowCrawl(t, srv, slowSite(t, 30, 30*time.Millisecond))
+	pauseAndWait(t, srv, id)
+	big := `{"rate": 1, "pad": "` + strings.Repeat("x", 5<<10) + `"}`
+	if code := serveCrawlRequest(srv, http.MethodPost, "/api/crawls/"+id+"/resume", "application/json", big); code != http.StatusRequestEntityTooLarge {
+		t.Errorf("oversized resume body: %d, want 413", code)
+	}
+	doJSON(t, srv, http.MethodPost, "/api/crawls/"+id+"/cancel", nil)
+	pollUntilFinished(t, srv, id)
+}

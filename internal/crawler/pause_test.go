@@ -507,3 +507,17 @@ func TestEngineAutoPausesOnSustained429(t *testing.T) {
 		t.Fatal("cancel did not end the auto-paused crawl")
 	}
 }
+
+func TestResumeClearsTheStaleRetryAfter(t *testing.T) {
+	opts := DefaultOptions()
+	e := New(opts, NewHTTPFetcher(opts))
+	e.limiter.OnResponse(http.StatusTooManyRequests, http.Header{"Retry-After": {"120"}})
+	if got := e.limiter.LastRetryAfter(); got != 120 {
+		t.Fatalf("LastRetryAfter = %d, want 120", got)
+	}
+	e.Pause()
+	e.Resume(0)
+	if got := e.limiter.LastRetryAfter(); got != 0 {
+		t.Errorf("LastRetryAfter after Resume = %d, want 0 so a second auto-pause can't report it", got)
+	}
+}
