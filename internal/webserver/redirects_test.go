@@ -260,6 +260,9 @@ func TestRedirectCheckWithoutSitemapEndsInError(t *testing.T) {
 	if msg, _ := job["error"].(string); !strings.Contains(msg, "sitemap") {
 		t.Fatalf("error = %q, want it to explain the sitemap was not found", msg)
 	}
+	if msg, _ := job["error"].(string); strings.Contains(msg, "--sitemap-url") || !strings.Contains(msg, "set a sitemap URL") {
+		t.Fatalf("error = %q, want web wording (\"set a sitemap URL\"), not the CLI flag", msg)
+	}
 	if _, ok := job["rows"]; ok {
 		t.Fatal("a failed check must not carry rows")
 	}

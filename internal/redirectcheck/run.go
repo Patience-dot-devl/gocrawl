@@ -9,8 +9,11 @@ import (
 
 // RunOptions configures a check-redirects run.
 type RunOptions struct {
-	Domain        string
-	SitemapURL    string
+	Domain     string
+	SitemapURL string
+	// SitemapHint is the remedy named in the "no sitemap found" error. Empty means
+	// DefaultSitemapHint, which names the CLI flag.
+	SitemapHint   string
 	Fetcher       crawler.Fetcher
 	Concurrency   int
 	RatePerSecond float64
@@ -46,7 +49,11 @@ func Run(ctx context.Context, rules []Rule, opts RunOptions) ([]RowResult, error
 	limiter := crawler.NewAdaptiveLimiter(opts.RatePerSecond, opts.AdaptiveDelay)
 	fetcher := &crawler.AdaptiveFetcher{Fetcher: opts.Fetcher, Limiter: limiter}
 
-	sitemapURLs, err := DiscoverSitemap(ctx, fetcher, opts.Domain, opts.SitemapURL)
+	hint := opts.SitemapHint
+	if hint == "" {
+		hint = DefaultSitemapHint
+	}
+	sitemapURLs, err := discoverSitemap(ctx, fetcher, opts.Domain, opts.SitemapURL, hint)
 	if err != nil {
 		return nil, err
 	}

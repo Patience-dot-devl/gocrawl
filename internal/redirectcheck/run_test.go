@@ -2,6 +2,7 @@ package redirectcheck_test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -41,6 +42,21 @@ func TestRunErrorsWhenSitemapUnreachable(t *testing.T) {
 	rules := []redirectcheck.Rule{{Original: "/old", Target: "/new"}}
 	if _, err := redirectcheck.Run(context.Background(), rules, redirectcheck.RunOptions{Domain: "example.com", Fetcher: ff}); err == nil {
 		t.Fatal("expected an error when the sitemap can't be reached")
+	}
+}
+
+func TestRunSitemapErrorNamesTheCLIFlagUnlessHintOverridden(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{}}
+	rules := []redirectcheck.Rule{{Original: "/old", Target: "/new"}}
+	_, err := redirectcheck.Run(context.Background(), rules, redirectcheck.RunOptions{Domain: "example.com", Fetcher: ff})
+	if err == nil || !strings.Contains(err.Error(), "--sitemap-url") {
+		t.Fatalf("default error = %v, want it to name --sitemap-url", err)
+	}
+	_, err = redirectcheck.Run(context.Background(), rules, redirectcheck.RunOptions{
+		Domain: "example.com", Fetcher: ff, SitemapHint: "set a sitemap URL to point at the right location",
+	})
+	if err == nil || strings.Contains(err.Error(), "--sitemap-url") || !strings.Contains(err.Error(), "set a sitemap URL") {
+		t.Fatalf("hinted error = %v, want the custom hint and no CLI flag", err)
 	}
 }
 

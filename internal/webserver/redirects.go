@@ -222,6 +222,7 @@ func (s *Server) handleStartRedirectCheck(w http.ResponseWriter, r *http.Request
 	go s.runRedirectCheck(ctx, cancel, job.ID, rules, redirectcheck.RunOptions{
 		Domain:        params.domain,
 		SitemapURL:    params.sitemapURL,
+		SitemapHint:   "set a sitemap URL to point at the right location",
 		Fetcher:       fetcher,
 		Concurrency:   params.concurrency,
 		RatePerSecond: params.rate,
