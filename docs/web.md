@@ -5,7 +5,7 @@ scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-10-14
 depends_on: ["mcp.md", "output.md", "redirect-check.md"]
 sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
 ---
@@ -115,7 +115,10 @@ already in the API below. The working views, all against the API below:
   get a status-only tape. Then: a partial-coverage banner when the crawl didn't reach the
   whole site, summary counts by severity/analyzer/page-status, an issues table (filterable by
   severity, analyzer, and free-text search) with each issue's what/impact/fix explanation and
-  raw `data` expandable inline, any notes advisories, and export links.
+  raw `data` expandable inline, any notes advisories, and export links. The table draws 100
+  issues at a time (**Show 100 more**, or **Show all**); filters, sort, the counts and the bulk
+  review actions (**Select all matching**) apply to every matching issue, not just the rows
+  drawn. Compare's issue lists work the same way.
 - **Crawls** — every crawl saved to the store (`save: true` on start), reopen-able as a
   report. Each row shows a small tape (a 160-tick preview, worst status per tick) and its
   sitemap coverage. Tick two finished crawls and select **Compare selected** to open them in Compare. **Import report…**

@@ -56,6 +56,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 - `docs/analyzers.md` now lists the `http-body-truncated` and `sitemap-truncated` codes.
 - Web UI and API: a failed or late Stop crawl no longer replaces the report, Stop crawl asks in an in-app dialog, `GET /api/crawls/{id}` and the export answer an unknown id with a fixed `crawl not found` (no store path), report counts are singular or plural with thousands separators, the coverage notice uses UI wording, and the crawl form's fields have names.
+- Web UI accessibility and layout pass: the issue table draws 100 rows at a time (**Show 100 more**), so a crawl with thousands of issues stays responsive; Pause and Resume crawl keep keyboard focus; review checkboxes are 24px targets; each view sets the page title; a skip link, moved focus after a view change, field hints tied to their fields, and named form controls; the tape, legend and phase dots stay visible in Windows High Contrast; readable redirect result columns, a Crawls table that fits at 1200px, and clearer wording in the redirect, Settings, paused and coverage views.
 
 ## [0.10.0] - 2026-10-12
 
