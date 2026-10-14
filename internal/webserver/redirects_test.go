@@ -260,6 +260,9 @@ func TestRedirectCheckWithoutSitemapEndsInError(t *testing.T) {
 	if msg, _ := job["error"].(string); !strings.Contains(msg, "sitemap") {
 		t.Fatalf("error = %q, want it to explain the sitemap was not found", msg)
 	}
+	if msg, _ := job["error"].(string); strings.Contains(msg, "--sitemap-url") || !strings.Contains(msg, "check the sitemap URL") {
+		t.Fatalf("error = %q, want web wording for a given sitemap URL (\"check the sitemap URL\"), not the CLI flag", msg)
+	}
 	if _, ok := job["rows"]; ok {
 		t.Fatal("a failed check must not carry rows")
 	}
@@ -567,5 +570,14 @@ func TestCancelRedirectCheckRejectsCrossOrigin(t *testing.T) {
 	}
 	if job, _ := srv.redirects.get(id); job.Status != StatusRunning {
 		t.Fatalf("status = %s after a rejected cancel, want running", job.Status)
+	}
+}
+
+func TestRedirectSitemapHint(t *testing.T) {
+	if got := redirectSitemapHint(""); !strings.Contains(got, "set a sitemap URL") {
+		t.Errorf("no sitemap URL: hint = %q, want it to suggest setting one", got)
+	}
+	if got := redirectSitemapHint("https://example.com/sm.xml"); got != "check the sitemap URL" {
+		t.Errorf("given sitemap URL: hint = %q, want %q", got, "check the sitemap URL")
 	}
 }

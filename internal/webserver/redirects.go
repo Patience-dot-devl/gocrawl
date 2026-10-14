@@ -222,6 +222,7 @@ func (s *Server) handleStartRedirectCheck(w http.ResponseWriter, r *http.Request
 	go s.runRedirectCheck(ctx, cancel, job.ID, rules, redirectcheck.RunOptions{
 		Domain:        params.domain,
 		SitemapURL:    params.sitemapURL,
+		SitemapHint:   redirectSitemapHint(params.sitemapURL),
 		Fetcher:       fetcher,
 		Concurrency:   params.concurrency,
 		RatePerSecond: params.rate,
@@ -318,4 +319,13 @@ func safeFileNamePart(s string) string {
 		}
 		return '-'
 	}, s)
+}
+
+// redirectSitemapHint is the remedy the web API's "no sitemap found" error suggests: set a
+// sitemap URL, or check the one that was given.
+func redirectSitemapHint(sitemapURL string) string {
+	if sitemapURL != "" {
+		return "check the sitemap URL"
+	}
+	return "set a sitemap URL to point at the right location"
 }

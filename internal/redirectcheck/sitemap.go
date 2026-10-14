@@ -14,6 +14,14 @@ import (
 // error is returned if nothing usable is found at any candidate — callers should treat this
 // as fatal, since sitemap-membership columns would otherwise be silently wrong for every row.
 func DiscoverSitemap(ctx context.Context, fetcher crawler.Fetcher, domain, override string) (map[string]bool, error) {
+	return discoverSitemap(ctx, fetcher, domain, override, DefaultSitemapHint)
+}
+
+// DefaultSitemapHint is the remedy the "no sitemap found" error suggests, worded for the CLI.
+// A caller without that flag (the web API) passes its own through RunOptions.SitemapHint.
+const DefaultSitemapHint = "pass --sitemap-url to point at the right location"
+
+func discoverSitemap(ctx context.Context, fetcher crawler.Fetcher, domain, override, hint string) (map[string]bool, error) {
 	candidates := map[string]bool{}
 	where := domain + "'s default sitemap locations (/sitemap.xml, /sitemap_index.xml)"
 	if override != "" {
@@ -29,7 +37,7 @@ func DiscoverSitemap(ctx context.Context, fetcher crawler.Fetcher, domain, overr
 		if len(truncated) > 0 {
 			return nil, fmt.Errorf("sitemap at %s exceeds the fetch size limit and was cut off before it could be parsed; raise crawl.max_body_bytes and retry", where)
 		}
-		return nil, fmt.Errorf("could not fetch/parse a sitemap at %s; pass --sitemap-url to point at the right location", where)
+		return nil, fmt.Errorf("could not fetch/parse a sitemap at %s; %s", where, hint)
 	}
 
 	urls := make(map[string]bool, len(rawURLs))
