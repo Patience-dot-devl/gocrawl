@@ -90,7 +90,12 @@ already in the API below. The working views, all against the API below:
   crawler access signature). It also has a per-request timeout, nofollow following, query-string stripping, the
   429/503 slow-down, a bearer token, and a header-profile dropdown filled from Settings. It
   opens pre-filled with your saved defaults; **Save as defaults** stores the current values
-  (never passwords, cookies, tokens or inline headers). Under the URL, a line reports the site's sitemap as you type (for example
+  (never passwords, cookies, tokens or inline headers). Under Advanced, **Log in with browser…** opens a real
+  browser window for sites behind a login form (see
+  [Logging in with a browser](#logging-in-with-a-browser)); the form then shows the captured
+  cookie names, adds a logout exclude pattern you can remove, and starts the crawl with that
+  session. The button is disabled, with the reason, when no Chromium-class browser is installed
+  or Render is headless. Under the URL, a line reports the site's sitemap as you type (for example
   "Found sitemap.xml via robots.txt: 1,240 pages in scope"), and when the page budget is
   smaller, a notice offers **Raise budget to 1,240**. Starts a job and jumps to its report.
 - **Crawl (running)** — The header shows the host, a phase pill (Reading sitemap, Crawling,
