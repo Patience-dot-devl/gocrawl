@@ -93,7 +93,8 @@ export default function SitemapPreviewLine({ url, include, exclude, subdomains, 
         >
           <p>
             The page budget ({formatCount(maxPages)}) is below the sitemap total ({formatCount(preview.total)}). This crawl would
-            cover at most {budgetPercent(maxPages, preview.total)}% of the sitemap.
+            cover at most {budgetPercent(maxPages, preview.total)}% of the sitemap. Pages the crawl finds that are not in the sitemap use
+            the budget too, so allow a little more.
           </p>
         </Notice>
       )}

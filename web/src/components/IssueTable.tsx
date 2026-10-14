@@ -301,7 +301,7 @@ export default function IssueTable({ issues, explanations, review, empty = 'No i
           <Button disabled={selected.size === 0} onClick={() => bulkApply('clear')}>
             Clear review
           </Button>
-          {selected.size > 0 && <span className="num muted">{selected.size} selected</span>}
+          {selected.size > 0 && <span className="num muted">{formatCount(selected.size)} selected</span>}
         </div>
       )}
 

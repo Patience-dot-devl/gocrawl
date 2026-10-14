@@ -84,8 +84,7 @@ export default function RedirectsView() {
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
           <span className="redirect-hint" id={`${uid}-file-hint`}>
-            A HubSpot URL Redirects export, up to 10 MB. The rules need full URLs (https://example.com/old); a path alone
-            counts as external and is skipped.
+            A HubSpot URL Redirects export, up to 10 MB. A path such as /old is checked on https:// plus the domain below.
           </span>
         </div>
         <div className="redirect-field">
@@ -101,8 +100,8 @@ export default function RedirectsView() {
             onChange={(e) => setDomain(e.target.value)}
           />
           <span className="redirect-hint" id={`${uid}-domain-hint`}>
-            Subdomains count as in scope. Rules that point at other domains are skipped. For a site on http or a custom
-            port, also fill in the sitemap URL below.
+            The host only, such as example.com, with no https:// and no port. Subdomains count as in scope. Rules that
+            point at other domains are skipped.
           </span>
         </div>
         <div className="redirect-field">
@@ -117,7 +116,7 @@ export default function RedirectsView() {
             onChange={(e) => setSitemapURL(e.target.value)}
           />
           <span className="redirect-hint" id={`${uid}-sitemap-hint`}>
-            Leave empty to try /sitemap.xml and /sitemap_index.xml.
+            Leave empty to try /sitemap.xml and /sitemap_index.xml on https://. Fill it in for a site without https.
           </span>
         </div>
         <div className="redirect-row">

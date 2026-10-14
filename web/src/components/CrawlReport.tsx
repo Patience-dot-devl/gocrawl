@@ -61,6 +61,13 @@ export default function CrawlReport({ id }: { id: string }) {
   // by crawl id, so the report-derived UI state below starts fresh for every report without a
   // reset effect.
   const report = job?.report
+  // runner.Run appends the same coverageNote() text to report.notes whenever coverage is
+  // incomplete, always prefixed "partial coverage: ", which the partial-coverage notice below
+  // already covers more richly, so it is filtered out. report.html.tmpl never renders .notes
+  // at all, so the duplication is specific to the live view. Any other note joins that notice
+  // when there is one, so a report never shows two boxes saying one thing.
+  const otherNotes = (report?.notes ?? []).filter((n) => !n.startsWith('partial coverage:'))
+  const partial = !!report?.coverage && !report.coverage.complete
 
   // The dialog is only meaningful while the crawl runs: if the crawl finishes while it is open,
   // it goes away, and the Stop crawl button that opened it goes with it. Focus then has nowhere
@@ -229,7 +236,7 @@ export default function CrawlReport({ id }: { id: string }) {
           <FinishedTape report={report} status={job.status} />
 
           {report.coverage && !report.coverage.complete && (
-            <Notice tone="warning" role="alert">
+            <Notice tone="warning">
               <p>
                 <strong>Partial coverage: this crawl did not reach the whole site.</strong>{' '}
                 {report.coverage.duration_limit_reached ? (
@@ -262,28 +269,21 @@ export default function CrawlReport({ id }: { id: string }) {
                   </>
                 )}
               </p>
+              {otherNotes.map((n, i) => (
+                <p key={i}>{n}</p>
+              ))}
             </Notice>
           )}
 
-          {(() => {
-            // runner.Run appends the same coverageNote() text to report.notes whenever
-            // coverage is incomplete, always prefixed "partial coverage: ", which the
-            // notice above already covers more richly. Filter it out here so the web view
-            // doesn't show it twice; report.html.tmpl never renders .notes at all, so this
-            // duplication is specific to the live view.
-            const otherNotes = (report.notes ?? []).filter((n) => !n.startsWith('partial coverage:'))
-            return (
-              otherNotes.length > 0 && (
-                <Notice tone="info">
-                  <ul className="cr-notes">
-                    {otherNotes.map((n, i) => (
-                      <li key={i}>{n}</li>
-                    ))}
-                  </ul>
-                </Notice>
-              )
-            )
-          })()}
+          {otherNotes.length > 0 && !partial && (
+            <Notice tone="info">
+              <ul className="cr-notes">
+                {otherNotes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            </Notice>
+          )}
 
           <div className="cr-stats">
             <div className="cr-stat">

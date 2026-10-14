@@ -96,7 +96,7 @@ export default function RunningCrawl({ job, progress, tape, tapeOff, recent, rec
         {sitemapFound && <Stat value={formatCount(offSitemap)} label="fetched pages not in the sitemap" />}
         <Stat value={formatCount(progress?.queued ?? 0)} label="in queue" />
         <Stat value={formatElapsed(elapsed)} label="elapsed (pauses don't count)" />
-        <Stat value={rate > 0 ? `${formatRate(rate)}/s` : 'Unlimited'} label={paused ? 'request rate when paused' : 'request rate'} />
+        <Stat value={rate > 0 ? `${formatRate(rate)}/s` : 'Unlimited'} label={paused ? 'request rate when it resumes' : 'request rate'} />
         {throttled > 0 && <Stat value={formatCount(throttled)} label="429 or 503 responses in the last minute" />}
       </div>
       <ul className="rc-classes" aria-label="Pages by status class">
@@ -107,7 +107,7 @@ export default function RunningCrawl({ job, progress, tape, tapeOff, recent, rec
           </li>
         ))}
       </ul>
-      <h2 className="rc-h2">Fetching now</h2>
+      <h2 className="rc-h2">{paused ? 'Last fetches' : 'Fetching now'}</h2>
       {recent.length === 0 ? (
         <p className="rc-sub">
           {progress?.phase === 'sitemap' ? 'Pages appear here once the crawl starts.' : 'Waiting for the first page…'}

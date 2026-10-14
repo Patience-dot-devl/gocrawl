@@ -190,8 +190,8 @@ export default function RedirectView({ id }: { id: string }) {
         <>
           {rows.length > 0 && rows.every((r) => r.verdict === 'skipped-external') && (
             <Notice tone="warning">
-              Every rule was skipped as external. Check that the domain matches the URLs in the file, and that the file
-              uses full URLs (https://example.com/old), not paths.
+              Every rule was skipped as external. Check that the domain is the host only (example.com, with no https:// and
+              no port) and that it matches the URLs in the file, then run the check again.
             </Notice>
           )}
           <p>
