@@ -53,3 +53,25 @@
     opacity: 0.35;
   }
 }
+
+/* Forced colors drop the dot's background; draw it in system colors so the pill keeps its
+   mark. The dot is solid, and a ring for a stopped crawl. */
+@media (forced-colors: active) {
+  .phase::before {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .phase-paused::before {
+    background: Highlight;
+  }
+
+  .phase-stopped::before {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px CanvasText;
+  }
+
+  .phase-failed::before {
+    background: LinkText;
+  }
+}
