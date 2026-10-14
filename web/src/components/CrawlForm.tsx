@@ -3,7 +3,8 @@ import { listAnalyzers, startCrawl } from '../api/crawls'
 import { listHeaderProfiles } from '../api/profiles'
 import type { AnalyzerInfo, StartCrawlParams } from '../types/crawls'
 import CrawlFields from './crawlform/CrawlFields'
-import { blankValues, splitList, toParams, type FormValues } from './crawlform/values'
+import { fromParams, splitList, toParams, type FormValues } from './crawlform/values'
+import { useSettings } from '../settings/context'
 import SitemapPreviewLine from './progress/SitemapPreviewLine'
 import { DEFAULT_MAX_PAGES } from './progress/tapeText'
 import Button from './ui/Button'
@@ -15,7 +16,17 @@ function message(e: unknown): string {
 }
 
 export default function CrawlForm({ onStarted }: { onStarted: (id: string) => void }) {
-  const [values, setValues] = useState<FormValues>(blankValues)
+  const { settings, saveDefaults } = useSettings()
+  const defaults = settings?.crawl_defaults
+  const [values, setValues] = useState<FormValues>(() => fromParams(defaults))
+  const [dirty, setDirty] = useState(false)
+  const [defaultsNote, setDefaultsNote] = useState('')
+  // Settings load after the first render. Until the user touches the form, follow them.
+  const [seenDefaults, setSeenDefaults] = useState(defaults)
+  if (defaults !== seenDefaults) {
+    setSeenDefaults(defaults)
+    if (!dirty) setValues(fromParams(defaults))
+  }
   const [analyzers, setAnalyzers] = useState<AnalyzerInfo[]>([])
   const [profiles, setProfiles] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -31,7 +42,20 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
   }, [])
 
   function update(patch: Partial<FormValues>) {
+    setDirty(true)
+    setDefaultsNote('')
     setValues((v) => ({ ...v, ...patch }))
+  }
+
+  async function handleSaveDefaults() {
+    setError('')
+    setDefaultsNote('')
+    try {
+      await saveDefaults(toParams(values, 'defaults'))
+      setDefaultsNote('Saved. New crawls start with these settings. Passwords, cookies, tokens and inline headers are never saved.')
+    } catch (err) {
+      setError(`Couldn't save the defaults: ${message(err)}`)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -79,9 +103,13 @@ export default function CrawlForm({ onStarted }: { onStarted: (id: string) => vo
       />
       <CrawlFields values={values} onChange={update} mode="crawl" analyzers={analyzers} profiles={profiles} />
       {error && <Notice tone="error">{error}</Notice>}
+      {defaultsNote && <Notice tone="info">{defaultsNote}</Notice>}
       <div className="cf-actions">
         <Button type="submit" variant="go" disabled={submitting}>
           {submitting ? 'Starting…' : 'Start crawl'}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => void handleSaveDefaults()}>
+          Save as defaults
         </Button>
       </div>
     </form>
