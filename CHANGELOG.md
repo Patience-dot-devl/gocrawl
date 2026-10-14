@@ -6,6 +6,8 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0-beta.1] - 2026-10-14
+
 ### Added
 
 - Pause, Resume crawl and Stop crawl buttons in the web UI. When a crawl pauses itself because the site keeps rate limiting it, the UI explains why, shows the server's Retry-After, and offers to resume at half the current rate.
@@ -430,7 +432,8 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.1...HEAD
+[1.0.0-beta.1]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.10.0...v1.0.0-beta.1
 [0.10.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.7.0...v0.8.0
