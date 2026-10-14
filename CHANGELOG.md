@@ -8,6 +8,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- Pause, Resume crawl and Stop crawl buttons in the web UI. When a crawl pauses itself because the site keeps rate limiting it, the UI explains why, shows the server's Retry-After, and offers to resume at half the current rate.
 - Web UI: a Redirects view to upload a redirect-rule CSV, follow the check's progress, filter
   the results by verdict and scope, and export them as CSV.
 - Web UI: a Compare view (both crawls' tapes, summary deltas, new, resolved and persisting

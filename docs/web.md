@@ -98,13 +98,17 @@ already in the API below. The working views, all against the API below:
   or Render is headless. Under the URL, a line reports the site's sitemap as you type (for example
   "Found sitemap.xml via robots.txt: 1,240 pages in scope"), and when the page budget is
   smaller, a notice offers **Raise budget to 1,240**. Starts a job and jumps to its report.
-- **Crawl (running)** — The header shows the host, a phase pill (Reading sitemap, Crawling,
-  Analyzing) and **Stop crawl**. Below it: a notice when the budget is below the sitemap
+- **Crawl (running)** — The header shows the host, a phase pill, a yellow
+  **Pause** and a red **Stop crawl**. Below it: a notice when the budget is below the sitemap
   total, the crawl tape (one tick per page, colored and sized by status class, notched when
   the page isn't in the sitemap, with outline ticks for sitemap pages not fetched yet or past
   the budget), counts (sitemap pages fetched of the total, fetched pages not in the sitemap,
   queue, elapsed time, request rate), status-class totals, and a "Fetching now" table of the
   last eight pages with status and timing.
+- **Crawl (paused)** — the pill reads **Paused** and the actions become a green **Resume
+  crawl** and **Stop crawl**. Elapsed time stops while paused. When the crawl paused itself
+  because the site kept answering 429 or 503, a notice explains it, shows the server's
+  `Retry-After`, and offers a **Resume at** rate prefilled at half the current rate.
 - **Crawl (finished)** — The tape sits at the top of the report, followed by the sitemap
   coverage line. The report saves the tape (`coverage.tape` / `tape_off`), so a crawl reopened
   later, even after a server restart, shows the same tape; reports saved before this version
