@@ -1,0 +1,38 @@
+/* Settings view: one panel per section. Form fields reuse the New crawl form's cf- classes
+   (CrawlForm.css, imported by CrawlFields). */
+.set-panel {
+  margin: 0 0 20px;
+  padding: 14px 18px 18px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+.set-panel > h2 {
+  margin-top: 0;
+}
+
+.set-profiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.set-editor {
+  margin: 16px 0 0;
+}
+
+.set-editor textarea {
+  font-family: var(--font-mono);
+}
+
+/* Wraps a form so one disabled attribute locks every control inside it. */
+.set-lock {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
