@@ -7,8 +7,8 @@ toolchain go1.27.2
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/charmbracelet/huh v1.0.0
-	github.com/chromedp/cdproto v0.157.6
-	github.com/chromedp/chromedp v0.19.1
+	github.com/chromedp/cdproto v0.157.9
+	github.com/chromedp/chromedp v0.21.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -38,6 +38,7 @@ require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260213210345-44df1a37e875 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
