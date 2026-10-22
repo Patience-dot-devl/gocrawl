@@ -7,7 +7,7 @@ toolchain go1.27.2
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/charmbracelet/huh v1.0.0
-	github.com/chromedp/cdproto v0.157.9
+	github.com/chromedp/cdproto v0.158.2
 	github.com/chromedp/chromedp v0.21.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/spf13/cobra v1.10.2
