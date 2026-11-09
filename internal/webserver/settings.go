@@ -2,6 +2,7 @@ package webserver
 
 import (
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -85,7 +86,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in GUISettings
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSettingsBody)).Decode(&in); err != nil {
+	if err := jsonv2.UnmarshalRead(http.MaxBytesReader(w, r.Body, maxSettingsBody), &in); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
 			writeError(w, http.StatusRequestEntityTooLarge, fmt.Errorf("settings are larger than %d bytes", maxSettingsBody))
@@ -135,7 +136,7 @@ func loadGUISettings(path string) (GUISettings, error) {
 		return GUISettings{}, fmt.Errorf("reading %s: %w", path, err)
 	}
 	var g GUISettings
-	if err := json.Unmarshal(data, &g); err != nil {
+	if err := jsonv2.Unmarshal(data, &g); err != nil {
 		return GUISettings{}, fmt.Errorf("reading %s: %w (save the settings again to replace the file)", path, err)
 	}
 	if !validThemes[g.Theme] {

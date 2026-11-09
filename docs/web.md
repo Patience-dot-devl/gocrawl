@@ -5,9 +5,9 @@ scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-14
+updated: 2026-11-09
 depends_on: ["mcp.md", "output.md", "redirect-check.md"]
-sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go"]
+sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go", "../internal/jsonopts"]
 ---
 # Web UI guide
 
@@ -194,6 +194,10 @@ cap.
 ## API
 
 All endpoints are under `/api`; everything else falls through to the embedded frontend.
+
+JSON request bodies are decoded strictly ([`encoding/json/v2`](../internal/jsonopts) defaults): field
+names must match exactly (`url`, not `URL`), and a repeated key, invalid UTF-8, or data after the
+JSON value is a `400`.
 
 | Method & path | Description |
 | --- | --- |

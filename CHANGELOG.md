@@ -6,6 +6,14 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- gocrawl now decodes JSON with `encoding/json/v2`. Web API request bodies are stricter: field
+  names must match exactly (`url`, not `URL`), and a repeated key, invalid UTF-8, or data after
+  the JSON value is refused with `400`. JSON taken from crawled pages (JSON-LD, dataLayer,
+  Shopify and WordPress endpoints) is still read as leniently as before. Report output is
+  unchanged, and a new golden test locks its bytes.
+
 ## [1.0.0-beta.1] - 2026-10-14
 
 ### Added

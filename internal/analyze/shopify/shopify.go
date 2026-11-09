@@ -9,7 +9,7 @@ package shopify
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"regexp"
 	"sort"
 	"strconv"
@@ -18,6 +18,7 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze/schemaorg"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/jsonopts"
 )
 
 // Option configures the analyzer.
@@ -92,7 +93,7 @@ func (a Analyzer) productsJSONProbe(ctx context.Context, base string) []analyze.
 			Handle string `json:"handle"`
 		} `json:"products"`
 	}
-	if err := json.Unmarshal(page.Body, &payload); err != nil {
+	if err := json.Unmarshal(page.Body, &payload, jsonopts.Crawled); err != nil {
 		return nil
 	}
 	if len(payload.Products) == 0 {
@@ -203,7 +204,7 @@ func parseTheme(html string) (name, id string) {
 		return "", ""
 	}
 	var obj map[string]any
-	if err := json.Unmarshal([]byte(m[1]), &obj); err != nil {
+	if err := json.Unmarshal([]byte(m[1]), &obj, jsonopts.Crawled); err != nil {
 		return "", ""
 	}
 	name, _ = obj["name"].(string)

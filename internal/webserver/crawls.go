@@ -2,7 +2,7 @@ package webserver
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -54,7 +54,7 @@ func (s *Server) handleStartCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req startCrawlRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("decoding request body: %w", err))
 		return
 	}

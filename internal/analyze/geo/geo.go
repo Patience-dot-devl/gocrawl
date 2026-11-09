@@ -12,7 +12,7 @@ package geo
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"net/url"
 	"regexp"
 	"sort"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/jsonopts"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -307,7 +308,7 @@ func jsonldObjects(doc *goquery.Document) []map[string]any {
 			return
 		}
 		var v any
-		if json.Unmarshal([]byte(raw), &v) != nil {
+		if json.Unmarshal([]byte(raw), &v, jsonopts.Crawled) != nil {
 			return
 		}
 		out = append(out, flattenObjects(v)...)

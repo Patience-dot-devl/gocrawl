@@ -6,11 +6,13 @@
 package schemaorg
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"sort"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"github.com/Patience-dot-devl/gocrawl/internal/jsonopts"
 )
 
 // jsonLDSelector matches the script elements that carry JSON-LD. Node.Block indexes into the
@@ -77,7 +79,7 @@ func Parse(doc *goquery.Document) (Graph, []ParseError) {
 			return
 		}
 		var v any
-		if err := json.Unmarshal([]byte(raw), &v); err != nil {
+		if err := json.Unmarshal([]byte(raw), &v, jsonopts.Crawled); err != nil {
 			errs = append(errs, ParseError{Block: block, Err: err.Error()})
 			return
 		}

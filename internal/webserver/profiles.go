@@ -1,7 +1,7 @@
 package webserver
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -54,7 +54,7 @@ func (s *Server) handlePutProfile(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Body string `json:"body"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxProfileBody)).Decode(&in); err != nil {
+	if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, maxProfileBody), &in); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
 			writeError(w, http.StatusRequestEntityTooLarge, fmt.Errorf("a header profile can't be larger than %d bytes", maxProfileBody))

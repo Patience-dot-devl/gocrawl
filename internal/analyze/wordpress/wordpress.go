@@ -22,7 +22,7 @@ package wordpress
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"net/url"
 	"regexp"
 	"sort"
@@ -30,6 +30,7 @@ import (
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/jsonopts"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -415,7 +416,7 @@ func (a Analyzer) securityProbes(ctx context.Context, base string) []analyze.Iss
 // restUserSlugs parses a /wp-json/wp/v2/users response and returns the slugs (login names).
 func restUserSlugs(body []byte) []string {
 	var users []map[string]any
-	if json.Unmarshal(body, &users) != nil {
+	if json.Unmarshal(body, &users, jsonopts.Crawled) != nil {
 		return nil
 	}
 	var out []string

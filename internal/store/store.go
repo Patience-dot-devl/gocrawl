@@ -13,6 +13,7 @@ package store
 
 import (
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io"
 	"net/url"
@@ -247,7 +248,7 @@ func readReport(path string) (*report.Report, error) {
 		return nil, err
 	}
 	var rep report.Report
-	if err := json.Unmarshal(data, &rep); err != nil {
+	if err := jsonv2.Unmarshal(data, &rep); err != nil {
 		return nil, fmt.Errorf("parsing report %q as JSON: %w", path, err)
 	}
 	return &rep, nil
