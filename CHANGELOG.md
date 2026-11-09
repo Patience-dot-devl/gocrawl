@@ -6,6 +6,13 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `structured` ranks missing structured data by fix: the new `structured-opportunity` finding
+  groups the pages that earn no rich result by URL section, schema.org type, and gap (no
+  markup, or markup missing a required field), scores each group from the type, page count,
+  and internal links, and names up to five example pages. The top 20 groups are reported.
+
 ## [1.0.0-beta.1] - 2026-10-14
 
 ### Added
