@@ -5,7 +5,7 @@ scope: "Per-platform install on Windows, macOS, and Linux — `go install`, buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-12
+updated: 2026-11-09
 depends_on: ["web.md", "configuration.md", "mcp.md"]
 sources: ["../.goreleaser.yaml", "../Makefile"]
 ---
@@ -128,7 +128,20 @@ go install ./cmd/gocrawl
 
 `make build` alone embeds a placeholder page for `gocrawl serve`'s web UI, needing no Node. To
 build the real UI in (requires Node), run `make web-build` first — see the
-[Web UI guide](web.md).
+[Web UI guide](web.md). `make build` prints a warning when it embeds the placeholder.
+
+## Run with Docker
+
+Each release also publishes a container image with the web UI built in:
+
+```sh
+docker run --rm -p 127.0.0.1:8080:8080 -v gocrawl:/home/nonroot/.gocrawl \
+  ghcr.io/patience-dot-devl/gocrawl:latest
+```
+
+It starts `gocrawl serve`; see [Running in Docker](web.md#running-in-docker) for what the
+volume holds, why the port is published on loopback, and what the image can't do (headless
+rendering). `make docker` builds the same image from a checkout.
 
 ## Verify the install
 
