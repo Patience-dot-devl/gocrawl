@@ -48,7 +48,10 @@ Pushing a tag matching `v*.*.*` triggers [`.github/workflows/release.yml`](.gith
 which runs [GoReleaser](https://goreleaser.com) (config: [`.goreleaser.yaml`](.goreleaser.yaml)) to
 build the web UI, cross-compile binaries for linux/darwin/windows (amd64/arm64) with it embedded,
 and publish them to a GitHub Release. The same workflow builds the [`Dockerfile`](Dockerfile) for
-linux/amd64 and linux/arm64 and pushes it to `ghcr.io/patience-dot-devl/gocrawl`. The release body is pulled straight from the tagged
+linux/amd64 and linux/arm64 and pushes it to `ghcr.io/patience-dot-devl/gocrawl`. GHCR makes a
+new package private, so after the first image push, set the package's visibility to public in
+its GitHub package settings, or `docker pull` needs a login. GitHub cannot make a public
+package private again. The release body is pulled straight from the tagged
 version's `## [x.y.z]` section in [`CHANGELOG.md`](CHANGELOG.md) — update the changelog before
 tagging, not after. To cut a release:
 

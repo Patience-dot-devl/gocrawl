@@ -86,14 +86,17 @@ server (`npm run dev` in `web/`) on `:5173`, which proxies `/api/*` to the Go se
 `http://localhost:5173`. Ctrl-C stops both, and so does either process exiting. It runs
 `npm ci` the first time, when `web/node_modules` does not exist. To use another API port, set
 `DEV_ADDR` (`make dev DEV_ADDR=127.0.0.1:9090`); `make dev` passes it to the Vite proxy as
-`GOCRAWL_API`. Changes to Go code need a restart of `make dev`.
+`GOCRAWL_API`. Changes to Go code need a restart of `make dev`. The target needs `bash`, so on
+Windows run it from WSL or Git Bash, or start `gocrawl serve` and `npm run dev` in `web/` in two
+terminals.
 
 ## Running in Docker
 
 The [`Dockerfile`](../Dockerfile) builds the web UI and a static binary that embeds it, on a
 distroless base. Each release publishes it for `linux/amd64` and `linux/arm64` as
 `ghcr.io/patience-dot-devl/gocrawl:<version>` (stable releases also move `latest` and
-`<major>.<minor>`).
+`<major>.<minor>`; a pre-release gets only its version tag, so until the first stable
+release, use the version tag in place of `latest`).
 
 ```sh
 docker run --rm -p 127.0.0.1:8080:8080 -v gocrawl:/home/nonroot/.gocrawl \
@@ -107,8 +110,9 @@ docker run --rm -p 127.0.0.1:8080:8080 -v gocrawl:/home/nonroot/.gocrawl \
   of it.
 - `/home/nonroot/.gocrawl` holds the crawl store, `gui.json` and header profiles. Mount a
   volume there to keep them.
-- Any other subcommand works too: `docker run --rm ghcr.io/patience-dot-devl/gocrawl crawl
-  https://example.com -f json`.
+- Any other subcommand works too. The report goes to stdout, so redirect it to a file on the
+  host: `docker run --rm ghcr.io/patience-dot-devl/gocrawl crawl https://example.com -f json >
+  report.json`.
 - The image has no browser, so `--render headless` and **Log in with browser…** do not work in
   it.
 

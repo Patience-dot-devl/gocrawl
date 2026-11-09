@@ -23,13 +23,15 @@ How to install, build, and run `gocrawl` on **Windows**, **macOS**, and **Linux*
 | [**Go 1.27+**](https://go.dev/dl/) | To `go install` or build from source | Not needed if you download a prebuilt binary. Check with `go version`. |
 | **Git** | Only to build from source | [git-scm.com/downloads](https://git-scm.com/downloads) |
 | **Chrome / Chromium / Edge** | Only for `--render headless` | Must be on `PATH`. See [Headless rendering](#headless-rendering-optional). |
+| **Docker** | Only to [run the container image](#run-with-docker) | Not needed for the binary. |
 
 ## Download a prebuilt binary (all platforms)
 
 Every tagged release publishes binaries for linux/darwin/windows (amd64/arm64) on the
 [GitHub Releases page](https://github.com/Patience-dot-devl/gocrawl/releases), built by
-[GoReleaser](../.goreleaser.yaml). These are the only builds with the [web UI](web.md) baked
-in — download the archive for your platform, extract it, and put `gocrawl` on your `PATH`.
+[GoReleaser](../.goreleaser.yaml). These binaries and the [container image](#run-with-docker)
+are the only builds with the [web UI](web.md) baked in. Download the archive for your
+platform, extract it, and put `gocrawl` on your `PATH`.
 
 ## Install with `go install` (all platforms)
 
@@ -142,6 +144,10 @@ docker run --rm -p 127.0.0.1:8080:8080 -v gocrawl:/home/nonroot/.gocrawl \
 It starts `gocrawl serve`; see [Running in Docker](web.md#running-in-docker) for what the
 volume holds, why the port is published on loopback, and what the image can't do (headless
 rendering). `make docker` builds the same image from a checkout.
+
+`latest` moves only on stable releases. While every release is a pre-release (such as
+`1.0.0-beta.2`), `latest` does not exist yet: use the version tag, for example
+`ghcr.io/patience-dot-devl/gocrawl:1.0.0-beta.2`.
 
 ## Verify the install
 

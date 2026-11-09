@@ -54,7 +54,7 @@ Plain `make build` without `make web-build` first still works — it embeds a pl
 for `gocrawl serve` instead of the real UI, and prints a warning that says so. For frontend
 work, `make dev` runs `gocrawl serve` and the Vite dev server together with hot reload. To run
 the web UI in a container instead, use the published image
-(`docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/patience-dot-devl/gocrawl:latest`) or
+(`docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/patience-dot-devl/gocrawl:<version>`) or
 `make docker`; see [docs/web.md](docs/web.md#running-in-docker). Run `gocrawl path` after building to add the
 binary's directory to your shell PATH.
 
