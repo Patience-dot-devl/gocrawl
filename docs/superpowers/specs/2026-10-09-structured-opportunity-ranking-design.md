@@ -1,18 +1,18 @@
 ---
 id: "2026-10-09-structured-opportunity-ranking-design"
 title: "Ranking structured-data opportunities"
-scope: "Proposal to rank missing-structured-data findings by fix, not by URL; approved, not yet built"
+scope: "Proposal to rank missing-structured-data findings by fix, not by URL; implemented"
 topic: "spec"
-status: "current"
+status: "archived"
 superseded_by: []
-updated: 2026-10-12
+updated: 2026-11-09
 depends_on: []
 sources: []
 ---
 # Ranking structured-data opportunities
 
 Date: 2026-10-09
-Status: approved, not yet implemented
+Status: implemented
 
 ## Problem
 
