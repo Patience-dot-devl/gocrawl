@@ -233,7 +233,9 @@ top of them. It is on by default, pure, and adds no fetches.
 
 - **Group.** A group is a URL `section`, a schema.org `type`, and a `gap`. The section comes
   from the page's canonical URL path: `/` for the homepage, `/*` for a single-segment path,
-  `/<first-segment>/*` otherwise. On a Shopify store the sections match the templates
+  `/<first-segment>/*` otherwise. The canonical, not the crawled URL, decides the section, so
+  a product reached at `/products/<h>` and `/collections/<c>/products/<h>` is one page in
+  `/products/*`, not one page in each section. On a Shopify store the sections match the templates
   (`/products/*`, `/blogs/*`, ...). The article candidate is recorded as `Article`. A
   locale prefix such as `/fr/` makes its own section.
 - **Pages.** A page counts only if it is HTML with status 200 and has no `noindex` (meta
