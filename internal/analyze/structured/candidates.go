@@ -66,8 +66,9 @@ var videoHostRe = regexp.MustCompile(`(?i)youtube(-nocookie)?\.com|vimeo\.com`)
 // The breadcrumb check is the exception to per-page reporting: a breadcrumb trail is template
 // chrome, so a theme without BreadcrumbList lacks it on every page. It feeds roll and surfaces
 // as one site-wide finding. The product, article and video checks depend on page content and
-// stay per page.
-func candidateIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.Issue {
+// stay per page. Every check that fires also records an absent opportunity in opp; the article
+// family is recorded as Article.
+func candidateIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup, opp *opportunities) []analyze.Issue {
 	doc := p.Doc
 	var issues []analyze.Issue
 	add := func(code, msg string, data map[string]any) {
@@ -79,6 +80,7 @@ func candidateIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze
 	if !g.HasType("BreadcrumbList") {
 		if links, ok := hasBreadcrumbMarkup(doc); ok {
 			roll.addBreadcrumb(p.FinalURL, analyze.CanonicalURL(p), links)
+			opp.add(p, "BreadcrumbList", gapAbsent, nil)
 		}
 	}
 
@@ -86,6 +88,7 @@ func candidateIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze
 		if signal, ok := hasProductSignal(doc); ok {
 			add("structured-product-candidate", "Page reads like a product page but has no Product structured data",
 				map[string]any{"signal": signal})
+			opp.add(p, "Product", gapAbsent, nil)
 		}
 	}
 
@@ -94,6 +97,7 @@ func candidateIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze
 		if words, ok := hasArticleSignal(doc); ok {
 			add("structured-article-candidate", "Page reads like an article but has no Article/NewsArticle/BlogPosting structured data",
 				map[string]any{"words": words})
+			opp.add(p, "Article", gapAbsent, nil)
 		}
 	}
 
@@ -101,6 +105,7 @@ func candidateIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze
 		if src, ok := findVideoEmbed(doc); ok {
 			add("structured-video-candidate", "Page embeds a video but has no VideoObject structured data",
 				map[string]any{"src": src})
+			opp.add(p, "VideoObject", gapAbsent, nil)
 		}
 	}
 

@@ -5,7 +5,7 @@ scope: "What's shipped (incl. the SEA and AI-search analyzers), what's in progre
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-09-17
+updated: 2026-11-09
 depends_on: ["analyzers.md", "architecture.md", "output.md", "mcp.md", "configuration.md"]
 sources: ["../internal/crawler", "../internal/store", "../internal/diff"]
 ---
@@ -45,7 +45,9 @@ The current baseline. Everything here works today.
   schema.org graph parser (`schemaorg`), tiers fields by rich-result requirement
   (required / recommended / Google Merchant), rolls template-wide gaps up per site, and checks
   markup integrity (duplicate and conflicting types, dangling `@id`, URL/date/price formats,
-  price-vs-page agreement). The `shopify` analyzer classifies store URLs by template and
+  price-vs-page agreement). It also ranks the missing markup by fix
+  (`structured-opportunity`): pages grouped by URL section, type, and gap, scored by type
+  weight, page count, and internal links, with example pages. The `shopify` analyzer classifies store URLs by template and
   reports per-template schema gaps, theme/app schema conflicts, flattened variants, and
   Shopify crawl-hygiene issues.
 - **Headless rendering (chromedp)** — `--render headless` (or `render: headless` in YAML)
@@ -121,14 +123,14 @@ config / report / MCP surface produced 28 verified findings, since fixed across 
 [#45]: https://github.com/Patience-dot-devl/gocrawl/pull/45
 [#47]: https://github.com/Patience-dot-devl/gocrawl/pull/47
 
-Remaining follow-ups from the review, still open:
+Follow-ups from the review, done later:
 
-- 📋 **Per-host politeness / `Crawl-delay`** — the frontier worker pool was built as the
-  natural home for per-host rate limiting and robots.txt `Crawl-delay`, but neither is
-  enforced yet.
-- 📋 **Distinguish sitemap fetch failures from a missing sitemap** — a transport error on
-  every sitemap candidate currently produces the same `sitemap-missing` warning as a
-  genuine 404, so a network blip can falsely report "no sitemap".
+- ✅ **Per-host politeness / `Crawl-delay`** — with `respect_robots` on, the crawl and every
+  governed fetch wait out each host's robots.txt `Crawl-delay` (capped at 60 seconds), on
+  top of the global rate limit.
+- ✅ **Distinguish sitemap fetch failures from a missing sitemap** — a transport error, a
+  5xx, or a robots.txt refusal on a sitemap candidate is now `sitemap-unreachable`, and
+  `sitemap-missing` no longer fires when a candidate could not be fetched.
 
 ## 📋 Planned — engine & data model
 
@@ -159,6 +161,8 @@ Broader capabilities beyond individual checks.
 - **API integrations** — Google Search Console (incl. URL Inspection), PageSpeed Insights /
   CrUX, and backlink data (Ahrefs/Majestic/Moz). Subsumes the earlier "export integrations"
   item.
+  Search Console impressions are the planned replacement for the internal-link importance
+  proxy in the `structured-opportunity` ranking.
 - **Authenticated crawling** — forms- and cookie-based auth to reach gated areas.
 - **Resumable crawls** — checkpoint and continue large crawls.
 

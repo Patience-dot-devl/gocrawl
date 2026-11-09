@@ -208,7 +208,7 @@ Key crawl options:
 | Verbose | `--verbose` / `-v` | Log each fetch and rate-limit change to stderr |
 | Rendering | `--render` | `raw` (default) or `headless` (chromedp — JS rendering + Core Web Vitals) |
 | Scope | `--include` / `--exclude` | URL regex filters |
-| Robots | `--respect-robots` | Obey `robots.txt` while crawling |
+| Robots | `--respect-robots` | Obey `robots.txt` while crawling, including each host's `Crawl-delay` (capped at 60 s) |
 | Subdomains | `--subdomains` | Follow links to subdomains of the seed |
 | Output | `--out` / `--format` | File path and `json` / `csv` / `html` |
 | Site map | `--sitemap` | Write a `sitemap.xml`; the HTML report also has a Site map tab that draws the crawl as a visual node-link diagram with issues per page |

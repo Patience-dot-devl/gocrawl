@@ -213,6 +213,7 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 		IgnoreExternalTagging: cfg.Analyzers.IgnoreExternalTagging,
 		SitemapOptions: []sitemap.Option{
 			sitemap.WithURLs(sm.all.URLs, sm.all.Parsed, sm.all.InvalidDeclared, sm.all.TruncatedDeclared),
+			sitemap.WithUnreachable(sm.all.Unreachable),
 		},
 	})
 	analyzers, skipped := planAnalyzers(reg, cfg.Analyzers, cfg.Crawl.StripQuery)

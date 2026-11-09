@@ -1,18 +1,18 @@
 ---
 id: "2026-10-09-structured-opportunity-ranking-design"
 title: "Ranking structured-data opportunities"
-scope: "Proposal to rank missing-structured-data findings by fix, not by URL; approved, not yet built"
+scope: "Proposal to rank missing-structured-data findings by fix, not by URL; implemented"
 topic: "spec"
-status: "current"
+status: "archived"
 superseded_by: []
-updated: 2026-10-12
+updated: 2026-11-09
 depends_on: []
 sources: []
 ---
 # Ranking structured-data opportunities
 
 Date: 2026-10-09
-Status: approved, not yet implemented
+Status: implemented
 
 ## Problem
 
@@ -240,3 +240,14 @@ Plumbing:
   per type).
 - A homepage `Organization` / `WebSite` candidate check, which would then rank here for
   free.
+
+## Implementation notes
+
+Added 2026-11-09, when the design was built. The text above is kept as approved.
+
+- **`section` comes from the canonical URL path, not `Page.FinalURL`.** With the final URL, a
+  product reached at `/products/<h>` and at `/collections/<c>/products/<h>` (canonical
+  `/products/<h>`) would be counted in two groups, `/products/*` and `/collections/*`. That
+  contradicts "Which pages count", which makes it one page. Taking the section from the
+  canonical keeps each canonical page in exactly one group per type and gap. For a page with
+  no canonical the two are the same.
