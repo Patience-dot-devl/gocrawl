@@ -5,7 +5,7 @@ scope: "Every option, flag, env var, and default; config layering; analyzer sele
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-11-09
 depends_on: ["output.md", "web.md", "analyzers.md", "storage.md", "mcp.md"]
 sources: ["../internal/config/config.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../configs/example.yaml"]
 ---
@@ -56,7 +56,7 @@ default** (the value used when you set nothing).
 | `crawl.timeout` | — | duration | `15s` | Per-request timeout (e.g. `"10s"`, `"500ms"`). |
 | `crawl.max_duration` | `--max-duration` | duration | `0` (unlimited) | Budget for the crawl's active time (e.g. `"90m"`); time spent paused in the web UI doesn't count. On expiry the crawl stops early and still writes a report from whatever was fetched, flagged as **partial coverage** (see [Output](output.md#coverage)) — the same mechanism a Ctrl-C interruption uses. |
 | `crawl.max_body_bytes` | — | int | `5242880` (5 MiB) | Cap on a single response body. |
-| `crawl.respect_robots` | `--respect-robots` | bool | `true` | Obey `robots.txt` while crawling. |
+| `crawl.respect_robots` | `--respect-robots` | bool | `true` | Obey `robots.txt` while crawling: skip disallowed URLs and wait out each host's `Crawl-delay` (capped at 60 seconds, on top of `rate_per_second`). |
 | `crawl.allow_subdomains` | `--subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
 | `crawl.follow_external` | `--external` | bool | `false` | Crawl links that leave the seed host. |
 | `crawl.follow_nofollow` | — | bool | `false` | Follow links marked `rel="nofollow"`. |

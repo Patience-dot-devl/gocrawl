@@ -5,7 +5,7 @@ scope: "What each of the twenty-five analyzers checks (technical SEO + SEA + AI 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-11-09
 depends_on: ["output.md", "configuration.md", "architecture.md", "roadmap.md"]
 sources: ["../internal/runner/runner.go", "../internal/analyze/seo/seo.go", "../internal/analyze/httpx/httpx.go", "../internal/analyze/links/links.go", "../internal/analyze/robotscheck/robotscheck.go", "../internal/analyze/sitemap/sitemap.go", "../internal/analyze/structured/", "../internal/analyze/schemaorg/", "../internal/analyze/perf/perf.go", "../internal/analyze/images/images.go", "../internal/analyze/urls/urls.go", "../internal/analyze/security/", "../internal/analyze/pagination/pagination.go", "../internal/analyze/hreflang/hreflang.go", "../internal/analyze/amp/amp.go", "../internal/analyze/duplicates/duplicates.go", "../internal/analyze/content/content.go", "../internal/analyze/botwall/botwall.go", "../internal/analyze/wordpress/wordpress.go", "../internal/analyze/shopify/", "../internal/analyze/utm/utm.go", "../internal/analyze/tracking/tracking.go", "../internal/analyze/datalayer/datalayer.go", "../internal/analyze/landing/landing.go", "../internal/analyze/consent/", "../internal/analyze/aeo/aeo.go", "../internal/analyze/geo/geo.go"]
 ---
@@ -149,7 +149,8 @@ are no longer read.
 | --- | --- | --- | --- |
 | `sitemap-invalid` | warning | A fetched sitemap parsed as neither a `urlset` nor an index | — |
 | `sitemap-truncated` | warning | A declared sitemap exceeds `crawl.max_body_bytes` and was cut off before it could be parsed | — |
-| `sitemap-missing` | warning | No sitemap found at any candidate location | — |
+| `sitemap-unreachable` | warning | A sitemap candidate could not be fetched (network error, 5xx, or refused by robots.txt). A declared sitemap is always reported; a guessed `/sitemap.xml` or `/sitemap_index.xml` only when no sitemap parsed | `reason` |
+| `sitemap-missing` | warning | No sitemap found at any candidate location: every candidate answered (for example 404), none parsed, and none was unreachable | — |
 | `sitemap-coverage` | info | Cross-check of sitemap URLs vs. crawled pages | `sitemap_urls`, `crawled_pages`, `crawled_not_in_sitemap`, `in_sitemap_not_crawled` |
 
 The coverage `data` lets you spot pages that are crawlable but missing from the sitemap

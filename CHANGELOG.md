@@ -6,6 +6,14 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- With `respect_robots` on (the default), the crawl obeys each host's robots.txt `Crawl-delay`, capped at 60 seconds. Analyzer fetches through the governed fetcher (sitemap, `llms.txt`, the `--specialized` probes) obey it too.
+
+### Fixed
+
+- A sitemap candidate that cannot be fetched (network error, 5xx, or refused by robots.txt) is now reported as the new `sitemap-unreachable` warning instead of `sitemap-missing`, so a network blip no longer reports "no sitemap".
+
 ## [1.0.0-beta.1] - 2026-10-14
 
 ### Added
