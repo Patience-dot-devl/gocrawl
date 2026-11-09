@@ -1021,6 +1021,11 @@ var explanations = map[string]Explanation{
 		Impact: "Search engines must rely solely on link discovery, which can miss pages.",
 		Fix:    "Publish a sitemap.xml and reference it from robots.txt.",
 	},
+	"sitemap-unreachable": {
+		What:   "A sitemap candidate could not be fetched: a network error, a 5xx answer, or a fetch that robots.txt refused.",
+		Impact: "gocrawl can't tell whether a sitemap exists at that URL, so the coverage cross-check is skipped or incomplete. When this fires, sitemap-missing is held back, because a failed fetch is not proof that there is no sitemap.",
+		Fix:    "Check that the URL in the finding's URL field answers from the crawling machine, then re-crawl. If the server returned 5xx, look at the server logs; the reason is in the finding's data.",
+	},
 	"sitemap-truncated": {
 		What:   "A declared sitemap is larger than the crawler's fetch size limit, so it was cut off before it could be parsed.",
 		Impact: "The sitemap's URLs weren't read at all, so the coverage cross-check is incomplete or skipped — this is not the same as an invalid/malformed sitemap.",

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -21,6 +22,8 @@ import (
 type Analyzer struct {
 	fetcher crawler.Fetcher
 	pre     *prefetched
+	// preUnreachable belongs to pre (WithUnreachable); it is ignored without WithURLs.
+	preUnreachable []FetchFailure
 }
 
 // prefetched is a sitemap set discovered before the crawl (runner.Run's pre-pass).
@@ -28,6 +31,14 @@ type prefetched struct {
 	urls                               map[string]bool
 	parsed                             int
 	invalidDeclared, truncatedDeclared []string
+}
+
+// FetchFailure is a sitemap candidate the fetcher could not retrieve: a transport error, a
+// fetch the crawl's own rules refused (robots.txt), or a 5xx answer. Unlike a 404 it says
+// nothing about whether a sitemap exists at that URL.
+type FetchFailure struct {
+	URL    string
+	Reason string
 }
 
 // Option configures an Analyzer.
@@ -39,6 +50,12 @@ func WithURLs(urls map[string]bool, parsed int, invalidDeclared, truncatedDeclar
 	return func(a *Analyzer) {
 		a.pre = &prefetched{urls: urls, parsed: parsed, invalidDeclared: invalidDeclared, truncatedDeclared: truncatedDeclared}
 	}
+}
+
+// WithUnreachable hands the analyzer the candidates a pre-fetch could not retrieve
+// (Discovery.Unreachable). It only takes effect together with WithURLs.
+func WithUnreachable(failures []FetchFailure) Option {
+	return func(a *Analyzer) { a.preUnreachable = failures }
 }
 
 // New returns a sitemap analyzer that fetches sitemaps with the given fetcher.
@@ -87,11 +104,34 @@ type fetchResult struct {
 	urls                                        map[string]bool
 	parsed                                      int
 	invalidDeclared, truncatedDeclared, sources []string
+	// unreachable lists candidates that could not be fetched. A guessed path is kept only when
+	// nothing parsed: once a sitemap was found, a failed guess at another path is noise.
+	unreachable []FetchFailure
+}
+
+// fetchFailure reports why a fetch says nothing about whether a sitemap exists, or "" when
+// the response is a real answer (2xx, 3xx, 4xx).
+func fetchFailure(page *crawler.Page, err error) string {
+	switch {
+	case err != nil:
+		return err.Error()
+	case page == nil:
+		return "no response"
+	case page.StatusCode == 0:
+		if page.Err != "" {
+			return page.Err
+		}
+		return "no response"
+	case page.StatusCode >= 500:
+		return "HTTP " + strconv.Itoa(page.StatusCode)
+	}
+	return ""
 }
 
 func fetchAll(ctx context.Context, fetcher crawler.Fetcher, candidates map[string]bool) fetchResult {
 	r := fetchResult{urls: map[string]bool{}}
 	visited := map[string]bool{}
+	var failedGuesses []FetchFailure
 
 	var fetchOne func(smURL string, depth int, declared bool)
 	fetchOne = func(smURL string, depth int, declared bool) {
@@ -101,6 +141,15 @@ func fetchAll(ctx context.Context, fetcher crawler.Fetcher, candidates map[strin
 		visited[smURL] = true
 
 		page, ferr := fetcher.Fetch(ctx, smURL)
+		if reason := fetchFailure(page, ferr); reason != "" {
+			f := FetchFailure{URL: smURL, Reason: reason}
+			if declared {
+				r.unreachable = append(r.unreachable, f)
+			} else {
+				failedGuesses = append(failedGuesses, f)
+			}
+			return
+		}
 		if ferr != nil || page == nil || page.StatusCode != 200 || len(page.Body) == 0 {
 			return
 		}
@@ -156,6 +205,10 @@ func fetchAll(ctx context.Context, fetcher crawler.Fetcher, candidates map[strin
 	for c, declared := range candidates {
 		fetchOne(c, 0, declared)
 	}
+	if r.parsed == 0 {
+		r.unreachable = append(r.unreachable, failedGuesses...)
+	}
+	sort.Slice(r.unreachable, func(i, j int) bool { return r.unreachable[i].URL < r.unreachable[j].URL })
 	return r
 }
 
@@ -166,6 +219,10 @@ type Discovery struct {
 	InvalidDeclared, TruncatedDeclared []string
 	// Sources are the top-level candidates that parsed as an urlset or index, sorted.
 	Sources []string
+	// Unreachable are candidates that could not be fetched (transport error, robots.txt
+	// refusal, 5xx), sorted by URL. A guessed conventional path appears only when nothing
+	// parsed.
+	Unreachable []FetchFailure
 	// ViaRobots is true when at least one source was declared in robots.txt.
 	ViaRobots bool
 }
@@ -213,6 +270,7 @@ func DiscoverAll(ctx context.Context, fetcher crawler.Fetcher, seed string, robo
 		InvalidDeclared:   r.invalidDeclared,
 		TruncatedDeclared: r.truncatedDeclared,
 		Sources:           r.sources,
+		Unreachable:       r.unreachable,
 	}
 	for _, s := range d.Sources {
 		if candidates[s] {
@@ -250,12 +308,24 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 		sitemapURLs                        map[string]bool
 		parsed                             int
 		invalidDeclared, truncatedDeclared []string
+		unreachable                        []FetchFailure
 	)
 	if a.pre != nil {
 		sitemapURLs, parsed = a.pre.urls, a.pre.parsed
 		invalidDeclared, truncatedDeclared = a.pre.invalidDeclared, a.pre.truncatedDeclared
+		unreachable = a.preUnreachable
 	} else {
-		sitemapURLs, parsed, invalidDeclared, truncatedDeclared = Discover(ctx, a.fetcher, result.Seed, result.Robots)
+		d := DiscoverAll(ctx, a.fetcher, result.Seed, result.Robots)
+		sitemapURLs, parsed = d.URLs, d.Parsed
+		invalidDeclared, truncatedDeclared, unreachable = d.InvalidDeclared, d.TruncatedDeclared, d.Unreachable
+	}
+	for _, f := range unreachable {
+		issues = append(issues, analyze.Issue{
+			Analyzer: "sitemap", URL: f.URL, Severity: analyze.Warning,
+			Code:    "sitemap-unreachable",
+			Message: "Sitemap could not be fetched, so it is unknown whether a sitemap exists here",
+			Data:    map[string]any{"reason": f.Reason},
+		})
 	}
 	for _, u := range invalidDeclared {
 		issues = append(issues, analyze.Issue{
@@ -271,7 +341,9 @@ func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze
 	}
 
 	if parsed == 0 {
-		if len(truncatedDeclared) == 0 {
+		// A fetch failure is not evidence of absence: a network blip or a 5xx on every
+		// candidate must not read as "this site has no sitemap".
+		if len(truncatedDeclared) == 0 && len(unreachable) == 0 {
 			issues = append(issues, analyze.Issue{
 				Analyzer: "sitemap", URL: base, Severity: analyze.Warning,
 				Code: "sitemap-missing", Message: "No sitemap found at robots.txt or conventional locations",

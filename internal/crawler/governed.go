@@ -10,7 +10,7 @@ import (
 var ErrRobotsDisallowed = errors.New("disallowed by robots.txt")
 
 // Govern wraps inner so every fetch through it obeys the crawl's own politeness rules: it
-// waits on the engine's rate limiter, refuses URLs robots.txt disallows when RespectRobots is
+// waits on the engine's rate limiter and the host's robots.txt Crawl-delay, refuses URLs robots.txt disallows when RespectRobots is
 // set, and reports each response back to the adaptive limiter so a 429 seen here slows the
 // whole run. Analyzers that fetch extra resources after the crawl (sitemap.xml, llms.txt, the
 // --specialized WordPress and Shopify probes) are handed a governed fetcher by runner.Run;
@@ -37,6 +37,9 @@ func (g *governedFetcher) Fetch(ctx context.Context, rawURL string) (*Page, erro
 		if !g.engine.robots.allowed(ctx, u) {
 			return nil, ErrRobotsDisallowed
 		}
+	}
+	if err := g.engine.waitCrawlDelay(ctx, rawURL); err != nil {
+		return nil, err
 	}
 	if err := g.engine.limiter.Wait(ctx); err != nil {
 		return nil, err
