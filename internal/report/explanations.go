@@ -1068,6 +1068,11 @@ var explanations = map[string]Explanation{
 		Impact: "Incomplete markup is ineligible for the corresponding rich results.",
 		Fix:    "Add the required properties for the schema type, per the required tier documented for that type (per schema.org / Google's documentation).",
 	},
+	"structured-opportunity": {
+		What:   "A ranked group of pages that share one structured-data fix: pages in the same URL section that earn no rich result for a schema.org type, because the markup is absent (a candidate check fired) or ineligible (a required field is missing). The score is a priority order built from the rich-result type's weight, the number of pages, and the internal links pointing at them. It is not a traffic or click estimate. Internal links measure how the site treats a page, not how many people search for it.",
+		Impact: "Each group is one template edit that can turn on a rich result for every page behind it, so the top of the list is where one fix reaches the most prominent pages. The per-page findings stay in the report; this is a summary of them.",
+		Fix:    "Work from rank 1 down. Open the example pages first: they are the most-linked pages in the group. Add the missing block (gap absent) or the listed required fields (gap ineligible) to the template behind the section, then check the result with Google's Rich Results Test. If the markup is injected by JavaScript, crawl with --render headless to confirm the gap before you change the theme.",
+	},
 	"structured-missing-recommended": {
 		What:   "Structured data of this type omits fields Google recommends for its rich result, across the pages listed.",
 		Impact: "The page stays eligible for the rich result but renders a plainer one — no ratings, no author, no imagery — so it wins fewer clicks than a fully described competitor.",

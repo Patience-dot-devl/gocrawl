@@ -6,6 +6,13 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `structured` ranks missing structured data by fix: the new `structured-opportunity` finding
+  groups the pages that earn no rich result by URL section, schema.org type, and gap (no
+  markup, or markup missing a required field), scores each group from the type, page count,
+  and internal links, and names up to five example pages. The top 20 groups are reported.
+
 ### Changed
 
 - With `respect_robots` on (the default), the crawl obeys each host's robots.txt `Crawl-delay`, capped at 60 seconds. Analyzer fetches through the governed fetcher (sitemap, `llms.txt`, the `--specialized` probes) obey it too.

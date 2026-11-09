@@ -45,7 +45,9 @@ The current baseline. Everything here works today.
   schema.org graph parser (`schemaorg`), tiers fields by rich-result requirement
   (required / recommended / Google Merchant), rolls template-wide gaps up per site, and checks
   markup integrity (duplicate and conflicting types, dangling `@id`, URL/date/price formats,
-  price-vs-page agreement). The `shopify` analyzer classifies store URLs by template and
+  price-vs-page agreement). It also ranks the missing markup by fix
+  (`structured-opportunity`): pages grouped by URL section, type, and gap, scored by type
+  weight, page count, and internal links, with example pages. The `shopify` analyzer classifies store URLs by template and
   reports per-template schema gaps, theme/app schema conflicts, flattened variants, and
   Shopify crawl-hygiene issues.
 - **Headless rendering (chromedp)** — `--render headless` (or `render: headless` in YAML)
@@ -159,6 +161,8 @@ Broader capabilities beyond individual checks.
 - **API integrations** — Google Search Console (incl. URL Inspection), PageSpeed Insights /
   CrUX, and backlink data (Ahrefs/Majestic/Moz). Subsumes the earlier "export integrations"
   item.
+  Search Console impressions are the planned replacement for the internal-link importance
+  proxy in the `structured-opportunity` ranking.
 - **Authenticated crawling** — forms- and cookie-based auth to reach gated areas.
 - **Resumable crawls** — checkpoint and continue large crawls.
 

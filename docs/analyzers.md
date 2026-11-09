@@ -190,6 +190,7 @@ have.
 | `structured-product-candidate` | warning | page | Product/price microdata, or a price co-located with a cart/buy call-to-action (same `<form>`, or a bounded ancestor if none), for one or two such pairs, with no `Product`/`Offer` | `signal` |
 | `structured-article-candidate` | warning | page | A 150+ word `<article>` with an author or date signal, no article type | `words` |
 | `structured-video-candidate` | warning | page | A `<video>` or YouTube/Vimeo embed, no `VideoObject` | `src` |
+| `structured-opportunity` | info | **site** | Ranks the pages that earn no rich result by the fix they share: one issue per URL section, type, and gap (`absent` from a candidate check, `ineligible` from `structured-missing-required`), top 20 by score. See [Opportunity ranking](#opportunity-ranking) | `rank`, `score`, `type`, `gap`, `section`, `pages`, `inlinks`, `type_weight`, `missing` (ineligible only), `examples` |
 
 > **Field tiers.** Each recognized type carries a *required* set (absence blocks the rich
 > result), a *recommended* set (absence degrades it), and — for `Product` and `ProductGroup`
@@ -223,6 +224,39 @@ have.
 
 > The `*-candidate` checks are low-noise heuristics: they only fire on a fairly specific
 > on-page signal and never fire when a matching `@type` is already present anywhere on the page.
+
+### Opportunity ranking
+
+`structured-opportunity` answers "what do I fix first". It groups the product, article, video,
+and breadcrumb candidates and the `structured-missing-required` findings by the fix they
+share, and ranks the groups. The per-page findings stay unchanged; the ranking is a summary on
+top of them. It is on by default, pure, and adds no fetches.
+
+- **Group.** A group is a URL `section`, a schema.org `type`, and a `gap`. The section comes
+  from the page's canonical URL path: `/` for the homepage, `/*` for a single-segment path,
+  `/<first-segment>/*` otherwise. The canonical, not the crawled URL, decides the section, so
+  a product reached at `/products/<h>` and `/collections/<c>/products/<h>` is one page in
+  `/products/*`, not one page in each section. On a Shopify store the sections match the templates
+  (`/products/*`, `/blogs/*`, ...). The article candidate is recorded as `Article`. A
+  locale prefix such as `/fr/` makes its own section.
+- **Pages.** A page counts only if it is HTML with status 200 and has no `noindex` (meta
+  robots or `X-Robots-Tag`). Pages are counted once per canonical URL, and the inbound links
+  to every crawled URL with that canonical are added together.
+- **Score.** `importance(page) = 1 + log2(1 + inlinks)`, where `inlinks` is the
+  `link-inbound` count. `score = type_weight × Σ importance` over the group's pages, rounded
+  to one decimal. The type weights are an editorial judgement of how visible each rich result
+  is: `Product`/`ProductGroup` 10, `Recipe`/`Event` 8, `VideoObject` 7, the article types and
+  `LocalBusiness` 6, `BreadcrumbList`/`Organization` 4, `FAQPage`/`ItemList`/`Person` 2,
+  `WebSite` 1. Groups sort by score, then by section, type, and gap.
+- **Output.** The top 20 groups, at the site base URL. `examples` holds up to five canonical
+  URLs, most-linked first. `missing` (ineligible only) is the sorted union of the required
+  fields missing across the group. `instance` is `<section>|<type>|<gap>`, so a group keeps
+  its identity in `gocrawl compare` when its rank changes. A group that drops below rank 20
+  reads as resolved there.
+
+The score is a priority order, not a traffic estimate: a crawl sees how the site links a page,
+not how many people search for it. In raw mode, JSON-LD injected by JavaScript looks absent;
+crawl with `--render headless` to confirm.
 
 Source: [`internal/analyze/structured/`](../internal/analyze/structured/), reading pages
 through the shared [`internal/analyze/schemaorg`](../internal/analyze/schemaorg/) parser.
