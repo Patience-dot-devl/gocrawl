@@ -38,7 +38,7 @@ func (g *governedFetcher) Fetch(ctx context.Context, rawURL string) (*Page, erro
 			return nil, ErrRobotsDisallowed
 		}
 	}
-	if err := g.engine.waitCrawlDelay(ctx, rawURL); err != nil {
+	if _, err := g.engine.waitCrawlDelay(ctx, rawURL); err != nil {
 		return nil, err
 	}
 	if err := g.engine.limiter.Wait(ctx); err != nil {

@@ -2,7 +2,7 @@ package webserver
 
 import (
 	"encoding/json/jsontext"
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -69,7 +69,7 @@ func (s *Server) handleResumeCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req resumeRequest
-	if err := json.UnmarshalDecode(jsontext.NewDecoder(http.MaxBytesReader(w, r.Body, maxResumeBody)), &req); err != nil && !errors.Is(err, io.EOF) {
+	if err := decodeOptionalBody(http.MaxBytesReader(w, r.Body, maxResumeBody), &req); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
 			writeError(w, http.StatusRequestEntityTooLarge, fmt.Errorf("request body is larger than %d bytes", maxResumeBody))
@@ -119,4 +119,24 @@ func (s *Server) handleResumeCrawl(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// decodeOptionalBody decodes a request body that may be empty (resume takes an optional rate).
+// An empty body leaves v unchanged. A non-empty body gets the same strict rules as the other
+// handlers' jsonv2.UnmarshalRead, including no data after the JSON value.
+func decodeOptionalBody(r io.Reader, v any) error {
+	dec := jsontext.NewDecoder(r)
+	if err := jsonv2.UnmarshalDecode(dec, v); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil // empty body
+		}
+		return err
+	}
+	if _, err := dec.ReadToken(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("unexpected data after the JSON value")
+		}
+		return err
+	}
+	return nil
 }

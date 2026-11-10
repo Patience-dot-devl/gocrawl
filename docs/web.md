@@ -5,7 +5,7 @@ scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-09
+updated: 2026-11-10
 depends_on: ["mcp.md", "output.md", "redirect-check.md"]
 sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../Dockerfile", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go", "../internal/jsonopts"]
 ---
@@ -86,8 +86,8 @@ server (`npm run dev` in `web/`) on `:5173`, which proxies `/api/*` to the Go se
 `http://localhost:5173`. Ctrl-C stops both, and so does either process exiting. It runs
 `npm ci` the first time, when `web/node_modules` does not exist. To use another API port, set
 `DEV_ADDR` (`make dev DEV_ADDR=127.0.0.1:9090`); `make dev` passes it to the Vite proxy as
-`GOCRAWL_API`. Changes to Go code need a restart of `make dev`. The target needs `bash`, so on
-Windows run it from WSL or Git Bash, or start `gocrawl serve` and `npm run dev` in `web/` in two
+`GOCRAWL_API`. Changes to Go code need a restart of `make dev`. The target needs a POSIX shell (any `sh`,
+including macOS), so on Windows run it from WSL or Git Bash, or start `gocrawl serve` and `npm run dev` in `web/` in two
 terminals.
 
 ## Running in Docker

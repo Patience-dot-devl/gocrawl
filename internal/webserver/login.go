@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -536,7 +536,7 @@ func (s *Server) handleStartLogin(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		URL string `json:"url"`
 	}
-	if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, maxLoginBody), &in); err != nil {
+	if err := jsonv2.UnmarshalRead(http.MaxBytesReader(w, r.Body, maxLoginBody), &in); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("decoding request body: %w", err))
 		return
 	}

@@ -11,7 +11,8 @@ import (
 // goroutine-per-URL crawler's does). Pulling in FIFO order also gives the crawl a true
 // breadth-first traversal, which — unlike the previous approach of racing a fresh goroutine per
 // link against a semaphore — lets a worker wait out a host's robots.txt Crawl-delay
-// (Engine.waitCrawlDelay) without disturbing overall ordering.
+// (Engine.waitCrawlDelay) without disturbing overall ordering. While a worker waits on a host,
+// next skips that host's tasks (see busy), so the other workers keep crawling other hosts.
 //
 // Termination uses reference counting: pending counts tasks that are queued or being
 // processed by a worker. push and pushFront increment it; taskDone (called exactly once per task returned
@@ -26,6 +27,11 @@ type frontier struct {
 	// paused makes next hold back queued tasks (Engine.Pause). Cancellation and exhaustion
 	// still end next, so a paused crawl can be stopped and a crawl with nothing left ends.
 	paused bool
+	// busy, when set, reports a host that a worker is already waiting on (its robots.txt
+	// Crawl-delay; see hostPacer.busy). next skips that host's tasks and hands out the first
+	// task for another host instead, so one slow host cannot hold every worker while other
+	// hosts' tasks wait in the queue. It is called with mu held: frontier.mu → hostPacer.mu.
+	busy func(host string) bool
 }
 
 func newFrontier() *frontier {
@@ -65,13 +71,39 @@ func (f *frontier) next(ctx context.Context) (task, bool) {
 		if f.pending == 0 {
 			return task{}, false
 		}
-		if !f.paused && len(f.queue) > 0 {
-			t := f.queue[0]
-			f.queue = f.queue[1:]
-			return t, true
+		if !f.paused {
+			if i := f.firstReady(); i >= 0 {
+				t := f.queue[i]
+				if i == 0 {
+					f.queue = f.queue[1:]
+				} else {
+					f.queue = append(f.queue[:i], f.queue[i+1:]...)
+				}
+				return t, true
+			}
 		}
 		f.cond.Wait()
 	}
+}
+
+// firstReady returns the index of the first queued task whose host no worker is waiting on,
+// or -1 when there is none. Without a busy func, or when the head's host is free (always, on
+// a crawl with no Crawl-delay), it is the head: plain FIFO order. Must be called with mu held.
+func (f *frontier) firstReady() int {
+	for i, t := range f.queue {
+		if f.busy == nil || t.host == "" || !f.busy(t.host) {
+			return i
+		}
+	}
+	return -1
+}
+
+// wake makes every worker blocked in next look at the queue again, for example after a
+// host stops being busy.
+func (f *frontier) wake() {
+	f.mu.Lock()
+	f.cond.Broadcast()
+	f.mu.Unlock()
 }
 
 // setPaused holds back (true) or releases (false) queued tasks and wakes every waiter.

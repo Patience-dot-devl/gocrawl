@@ -2,7 +2,7 @@ package webserver
 
 import (
 	"context"
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -37,7 +37,7 @@ func (s *Server) handleSitemapPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req sitemapPreviewRequest
-	if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, 64<<10), &req); err != nil {
+	if err := jsonv2.UnmarshalRead(http.MaxBytesReader(w, r.Body, 64<<10), &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("decoding request body: %w", err))
 		return
 	}

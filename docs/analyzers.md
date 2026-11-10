@@ -5,7 +5,7 @@ scope: "What each of the twenty-five analyzers checks (technical SEO + SEA + AI 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-09
+updated: 2026-11-10
 depends_on: ["output.md", "configuration.md", "architecture.md", "roadmap.md"]
 sources: ["../internal/runner/runner.go", "../internal/analyze/seo/seo.go", "../internal/analyze/httpx/httpx.go", "../internal/analyze/links/links.go", "../internal/analyze/robotscheck/robotscheck.go", "../internal/analyze/sitemap/sitemap.go", "../internal/analyze/structured/", "../internal/analyze/schemaorg/", "../internal/analyze/perf/perf.go", "../internal/analyze/images/images.go", "../internal/analyze/urls/urls.go", "../internal/analyze/security/", "../internal/analyze/pagination/pagination.go", "../internal/analyze/hreflang/hreflang.go", "../internal/analyze/amp/amp.go", "../internal/analyze/duplicates/duplicates.go", "../internal/analyze/content/content.go", "../internal/analyze/botwall/botwall.go", "../internal/analyze/wordpress/wordpress.go", "../internal/analyze/shopify/", "../internal/analyze/utm/utm.go", "../internal/analyze/tracking/tracking.go", "../internal/analyze/datalayer/datalayer.go", "../internal/analyze/landing/landing.go", "../internal/analyze/consent/", "../internal/analyze/aeo/aeo.go", "../internal/analyze/geo/geo.go"]
 ---
@@ -241,7 +241,9 @@ top of them. It is on by default, pure, and adds no fetches.
   locale prefix such as `/fr/` makes its own section.
 - **Pages.** A page counts only if it is HTML with status 200 and has no `noindex` (meta
   robots or `X-Robots-Tag`). Pages are counted once per canonical URL, and the inbound links
-  to every crawled URL with that canonical are added together.
+  to every crawled URL with that canonical are added together. When the canonical page itself
+  was crawled, only its own gaps count: a duplicate URL that points at it (a variant without
+  the Product block, say) adds nothing the canonical page did not report.
 - **Score.** `importance(page) = 1 + log2(1 + inlinks)`, where `inlinks` is the
   `link-inbound` count. `score = type_weight × Σ importance` over the group's pages, rounded
   to one decimal. The type weights are an editorial judgement of how visible each rich result
