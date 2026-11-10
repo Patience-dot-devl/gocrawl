@@ -15,19 +15,6 @@ import (
 // once (see facetParam).
 var facetParams = []string{"sort_by", "filter.", "constraint", "pf_", "grid_list"}
 
-// indexable reports whether a page is open to indexing — no noindex in either the meta robots
-// tag or the X-Robots-Tag header.
-func indexable(p *crawler.Page) bool {
-	if strings.Contains(strings.ToLower(p.Header.Get("X-Robots-Tag")), "noindex") {
-		return false
-	}
-	if p.Doc == nil {
-		return true
-	}
-	robots, _ := p.Doc.Find(`meta[name="robots"]`).First().Attr("content")
-	return !strings.Contains(strings.ToLower(robots), "noindex")
-}
-
 // canonicalOf returns the page's declared canonical URL resolved against the page's own URL,
 // or "" when it has none. The "" matters to seoIssues, which treats a missing canonical
 // differently from a self-canonical one; resolution itself lives in analyze.DeclaredCanonical
@@ -45,7 +32,7 @@ func seoIssues(p *crawler.Page, tmpl Template) []analyze.Issue {
 	// unbounded set of URLs from whatever anyone links to. TemplatePolicy (refund, privacy,
 	// terms) is deliberately a separate template from TemplateUtility precisely so it is
 	// excluded here — those pages are meant to be indexed.
-	if tmpl == TemplateUtility && indexable(p) {
+	if tmpl == TemplateUtility && analyze.Indexable(p) {
 		issues = append(issues, analyze.Issue{
 			Analyzer: "shopify", URL: p.FinalURL, Severity: analyze.Warning,
 			Code:    "shopify-indexable-utility",

@@ -25,13 +25,15 @@ func (Analyzer) Description() string {
 
 func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
 	roll := newRollup()
+	opp := newOpportunities()
 	issues := analyze.EachPage(result, func(p *crawler.Page) []analyze.Issue {
-		return a.analyzePage(p, roll)
+		return a.analyzePage(p, roll, opp)
 	})
-	return append(issues, roll.issues(analyze.SiteBase(result))...)
+	issues = append(issues, roll.issues(analyze.SiteBase(result))...)
+	return append(issues, opp.issues(result)...)
 }
 
-func (a Analyzer) analyzePage(p *crawler.Page, roll *rollup) []analyze.Issue {
+func (a Analyzer) analyzePage(p *crawler.Page, roll *rollup, opp *opportunities) []analyze.Issue {
 	if !p.IsHTML() || p.StatusCode != 200 {
 		return nil
 	}
@@ -47,9 +49,9 @@ func (a Analyzer) analyzePage(p *crawler.Page, roll *rollup) []analyze.Issue {
 			Data: map[string]any{"error": e.Err},
 		})
 	}
-	issues = append(issues, requiredIssues(p, g, roll)...)
+	issues = append(issues, requiredIssues(p, g, roll, opp)...)
 	issues = append(issues, integrityIssues(p, g, roll)...)
-	issues = append(issues, candidateIssues(p, g, roll)...)
+	issues = append(issues, candidateIssues(p, g, roll, opp)...)
 
 	// A page with no parsed nodes and no failed blocks has no JSON-LD at all. Checking the
 	// node count rather than the script count means a page whose only block is empty or

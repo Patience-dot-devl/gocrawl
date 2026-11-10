@@ -5,7 +5,7 @@ scope: "Running gocrawl as an MCP server, registering it with clients, and the `
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-11-09
 depends_on: ["analyzers.md", "configuration.md", "output.md", "roadmap.md"]
 sources: ["../internal/mcpserver/server.go", "../cmd/gocrawl/mcp.go", "../internal/config/config.go"]
 ---
@@ -72,7 +72,7 @@ fields fall back to the built-in defaults:
 | `specialized` | bool | `false` | Enable the opt-in specialized checks: AEO answer-lead, GEO quotable-density, WordPress security probes, Shopify `/products.json` probe. |
 | `security_audit` | bool | `false` | Enable the opt-in [security audit](analyzers.md#security-audit-opt-in): TLS/certificate, cookie, and response-header checks. |
 | `ignore_external_tagging` | bool | `true` | Suppress the `utm` analyzer's tagging-quality warnings for links leaving the domain. |
-| `respect_robots` | bool | `true` | Obey `robots.txt`. |
+| `respect_robots` | bool | `true` | Obey `robots.txt`, including each host's `Crawl-delay` (capped at 60 seconds). |
 | `subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
 | `follow_external` | bool | `false` | Follow links that leave the seed host entirely. |
 | `include` | string[] | *(none)* | Only crawl URLs matching at least one regex. |

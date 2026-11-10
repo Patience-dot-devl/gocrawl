@@ -150,9 +150,9 @@ func exemptFromEligibility(path string) bool {
 }
 
 // requiredIssues checks every eligible node against its type's field tiers. Required gaps are
-// returned as per-page issues; recommended and merchant gaps go into the rollup, which the
-// caller renders once per crawl.
-func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.Issue {
+// returned as per-page issues and recorded as ineligible opportunities; recommended and
+// merchant gaps go into the rollup, which the caller renders once per crawl.
+func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup, opp *opportunities) []analyze.Issue {
 	var issues []analyze.Issue
 	canonical := analyze.CanonicalURL(p)
 	for _, n := range g.Nodes {
@@ -171,6 +171,7 @@ func requiredIssues(p *crawler.Page, g schemaorg.Graph, roll *rollup) []analyze.
 					Message: "Structured-data object is missing required schema.org fields",
 					Data:    map[string]any{"type": ty, "missing": missing, "path": n.Path},
 				})
+				opp.add(p, ty, gapIneligible, missing)
 			}
 			roll.add("structured-missing-recommended", ty, missingFields(g, n, spec.recommended, nil), p.FinalURL, canonical)
 			merchant := missingFields(g, n, spec.merchant, merchantFallback(ty, g, n))

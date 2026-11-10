@@ -1021,6 +1021,11 @@ var explanations = map[string]Explanation{
 		Impact: "Search engines must rely solely on link discovery, which can miss pages.",
 		Fix:    "Publish a sitemap.xml and reference it from robots.txt.",
 	},
+	"sitemap-unreachable": {
+		What:   "A sitemap candidate could not be fetched: a network error, a 5xx answer, or a fetch that robots.txt refused.",
+		Impact: "gocrawl can't tell whether a sitemap exists at that URL, so the coverage cross-check is skipped or incomplete. When this fires, sitemap-missing is held back, because a failed fetch is not proof that there is no sitemap.",
+		Fix:    "Check that the URL in the finding's URL field answers from the crawling machine, then re-crawl. If the server returned 5xx, look at the server logs; the reason is in the finding's data.",
+	},
 	"sitemap-truncated": {
 		What:   "A declared sitemap is larger than the crawler's fetch size limit, so it was cut off before it could be parsed.",
 		Impact: "The sitemap's URLs weren't read at all, so the coverage cross-check is incomplete or skipped — this is not the same as an invalid/malformed sitemap.",
@@ -1062,6 +1067,11 @@ var explanations = map[string]Explanation{
 		What:   "A structured-data object is missing required schema.org fields.",
 		Impact: "Incomplete markup is ineligible for the corresponding rich results.",
 		Fix:    "Add the required properties for the schema type, per the required tier documented for that type (per schema.org / Google's documentation).",
+	},
+	"structured-opportunity": {
+		What:   "A ranked group of pages that share one structured-data fix: pages in the same URL section that earn no rich result for a schema.org type, because the markup is absent (a candidate check fired) or ineligible (a required field is missing). The score is a priority order built from the rich-result type's weight, the number of pages, and the internal links pointing at them. It is not a traffic or click estimate. Internal links measure how the site treats a page, not how many people search for it.",
+		Impact: "Each group is one template edit that can turn on a rich result for every page behind it, so the top of the list is where one fix reaches the most prominent pages. The per-page findings stay in the report; this is a summary of them.",
+		Fix:    "Work from rank 1 down. Open the example pages first: they are the most-linked pages in the group. Add the missing block (gap absent) or the listed required fields (gap ineligible) to the template behind the section, then check the result with Google's Rich Results Test. If the markup is injected by JavaScript, crawl with --render headless to confirm the gap before you change the theme.",
 	},
 	"structured-missing-recommended": {
 		What:   "Structured data of this type omits fields Google recommends for its rich result, across the pages listed.",

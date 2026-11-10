@@ -5,7 +5,7 @@ scope: "How the engine, analyzer pipeline, and report builder fit together; the 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-11-09
 depends_on: ["web.md", "configuration.md", "roadmap.md"]
 sources: ["../internal/runner/runner.go", "../internal/runner/options.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/progress.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
 ---
@@ -84,6 +84,10 @@ breadth-first walk:
   `MaxDepth` bound the walk. `MaxDuration` bounds the
   crawl's active time: a timer that stops while the crawl is paused cancels the crawl when the
   budget is used up.
+- With `RespectRobots` on, a worker first waits out the host's robots.txt `Crawl-delay`
+  (`Engine.waitCrawlDelay`, capped at `crawler.MaxCrawlDelay`), then the global rate limiter.
+  The delay is per host: requests to one host from all workers together are spaced at least
+  the delay apart, and other hosts do not wait.
 - After fetching, links are extracted from the parsed document and pushed onto the frontier
   (skipping external links unless `FollowExternal`, and `nofollow` links unless
   `FollowNofollow`).
@@ -91,7 +95,7 @@ breadth-first walk:
   data even when `RespectRobots` is off.
 - Analyzers that fetch extra resources (`geo`'s `llms.txt`, the `--specialized` `wordpress` and
   `shopify` probes) get their fetcher from `Engine.Govern`,
-  which puts every request under the same rate limiter and `RespectRobots` policy as the
+  which puts every request under the same rate limiter, `Crawl-delay` and `RespectRobots` policy as the
   crawl. A robots-disallowed probe returns `crawler.ErrRobotsDisallowed` without touching the
   server, and a `429` seen by a probe backs off the shared adaptive limiter. The `sitemap`
   analyzer fetches nothing after the crawl: it works from the pre-pass set (see below).

@@ -197,3 +197,54 @@ func URLKey(raw string) string {
 	}
 	return strings.TrimRight(raw, "/")
 }
+
+// InboundLinks is the internal inbound link tally for one crawled page.
+type InboundLinks struct {
+	// Count is the number of internal links from other crawled pages that resolve to the page.
+	Count int
+	// Anchors is the set of distinct non-empty anchor texts those links carry.
+	Anchors map[string]bool
+}
+
+// Inbound tallies internal inbound links (and their anchor text) per crawled page by resolving
+// every page's outbound links against the crawl set. A page's links to itself are not counted.
+// Pages with no inbound links have no entry. The links analyzer reports this tally as
+// link-inbound; other analyzers use it as a measure of how prominently the site links a page.
+func Inbound(result *crawler.Result) map[*crawler.Page]*InboundLinks {
+	m := make(map[*crawler.Page]*InboundLinks)
+	for _, p := range result.Pages {
+		for _, link := range p.Links {
+			if link.External {
+				continue
+			}
+			target, ok := result.Page(link.URL)
+			if !ok || target == p {
+				continue
+			}
+			info := m[target]
+			if info == nil {
+				info = &InboundLinks{Anchors: make(map[string]bool)}
+				m[target] = info
+			}
+			info.Count++
+			if link.Anchor != "" {
+				info.Anchors[link.Anchor] = true
+			}
+		}
+	}
+	return m
+}
+
+// Indexable reports whether a page is open to indexing: no noindex in either the meta robots
+// tag or the X-Robots-Tag header. It does not look at the canonical; callers that also need to
+// exclude pages canonicalised elsewhere check that themselves.
+func Indexable(p *crawler.Page) bool {
+	if strings.Contains(strings.ToLower(p.Header.Get("X-Robots-Tag")), "noindex") {
+		return false
+	}
+	if p.Doc == nil {
+		return true
+	}
+	robots, _ := p.Doc.Find(`meta[name="robots"]`).First().Attr("content")
+	return !strings.Contains(strings.ToLower(robots), "noindex")
+}

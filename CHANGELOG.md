@@ -6,13 +6,25 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `structured` ranks missing structured data by fix: the new `structured-opportunity` finding
+  groups the pages that earn no rich result by URL section, schema.org type, and gap (no
+  markup, or markup missing a required field), scores each group from the type, page count,
+  and internal links, and names up to five example pages. The top 20 groups are reported.
+
 ### Changed
 
+- With `respect_robots` on (the default), the crawl obeys each host's robots.txt `Crawl-delay`, capped at 60 seconds. Analyzer fetches through the governed fetcher (sitemap, `llms.txt`, the `--specialized` probes) obey it too.
 - gocrawl now decodes JSON with `encoding/json/v2`. Web API request bodies are stricter: field
   names must match exactly (`url`, not `URL`), and a repeated key, invalid UTF-8, or data after
   the JSON value is refused with `400`. JSON taken from crawled pages (JSON-LD, dataLayer,
   Shopify and WordPress endpoints) is still read as leniently as before. Report output is
   unchanged, and a new golden test locks its bytes.
+
+### Fixed
+
+- A sitemap candidate that cannot be fetched (network error, 5xx, or refused by robots.txt) is now reported as the new `sitemap-unreachable` warning instead of `sitemap-missing`, so a network blip no longer reports "no sitemap".
 
 ## [1.0.0-beta.1] - 2026-10-14
 

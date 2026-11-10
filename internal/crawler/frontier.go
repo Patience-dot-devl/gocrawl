@@ -10,8 +10,8 @@ import (
 // flight is bounded by the worker count instead of growing with the frontier (as a
 // goroutine-per-URL crawler's does). Pulling in FIFO order also gives the crawl a true
 // breadth-first traversal, which — unlike the previous approach of racing a fresh goroutine per
-// link against a semaphore — is a natural place to add future per-host politeness (e.g. an
-// enforced Crawl-delay) without disturbing overall ordering.
+// link against a semaphore — lets a worker wait out a host's robots.txt Crawl-delay
+// (Engine.waitCrawlDelay) without disturbing overall ordering.
 //
 // Termination uses reference counting: pending counts tasks that are queued or being
 // processed by a worker. push and pushFront increment it; taskDone (called exactly once per task returned

@@ -48,7 +48,7 @@ not fetch, mutate shared state, or print. (Exception: a few analyzers like `site
 `wordpress`, and `shopify` are constructed with a `crawler.Fetcher` so they can pull a small
 number of extra resources such as `sitemap.xml`, `llms.txt`, or `/products.json` — these still
 emit Issues, never print. `runner.Run` hands them a fetcher wrapped by `Engine.Govern`, so those
-extra fetches obey the crawl's rate limiter and robots.txt policy.)
+extra fetches obey the crawl's rate limiter and robots.txt policy, `Crawl-delay` included.)
 
 ## Data flow
 
@@ -56,7 +56,7 @@ extra fetches obey the crawl's rate limiter and robots.txt policy.)
 seed URL + config
   └─► config.Config ──► crawler.Options          (internal/config)
         └─► crawler.Engine.Crawl()               (internal/crawler)
-              • concurrent fetch within scope, robots.txt + rate limiting,
+              • concurrent fetch within scope, robots.txt (+ per-host Crawl-delay) + rate limiting,
                 redirect capture, link extraction
               └─► crawler.Result (pages, redirects, robots, URL index)
                     └─► analyze.Run(analyzers, result)   (internal/analyze + .../<name>)

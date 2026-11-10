@@ -17,7 +17,7 @@ import (
 // Engine crawls a website concurrently within the configured scope.
 //
 // Lock order, outermost first: Crawl's result mutex → progMu → ps.mu → the leaf locks
-// (frontier.mu, activeClock.mu, and the AdaptiveLimiter's mutex and its rate.Limiter's).
+// (frontier.mu, activeClock.mu, hostPacer.mu, and the AdaptiveLimiter's mutex and its rate.Limiter's).
 // A lock may skip levels (the result mutex reads frontier.queued directly; progMu takes the
 // limiter's lock and ps.mu in turn, never together) but is never taken while a later one is
 // held. OnProgress runs with progMu held, plus the result mutex for page events; ps.mu and
@@ -31,6 +31,7 @@ type Engine struct {
 	fetcher  Fetcher
 	robots   *robotsManager
 	limiter  *AdaptiveLimiter
+	pacer    *hostPacer
 	seedHost string
 
 	// progMu serializes OnProgress calls and guards lastProgress, the snapshot that
@@ -61,6 +62,7 @@ func New(opts Options, fetcher Fetcher) *Engine {
 		// crawler never sends once a pool supersedes it.
 		robots:  newRobotsManager(robotsFetcher, NewUAPool(opts).Default()),
 		limiter: NewAdaptiveLimiter(opts.RatePerSecond, opts.AdaptiveDelay),
+		pacer:   newHostPacer(),
 	}
 	robotsFetcher.authHostAllowed = e.authHostAllowed
 	// Gate every redirect hop the raw fetcher follows against the same scope/exclude/robots
@@ -178,6 +180,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	process := func(t task) {
 		defer fr.taskDone()
 
+		if err := e.waitCrawlDelay(ctx, t.url); err != nil {
+			return
+		}
 		if err := e.limiter.Wait(ctx); err != nil {
 			return
 		}
@@ -348,6 +353,23 @@ func (e *Engine) crawlable(ctx context.Context, u *url.URL) bool {
 		return false
 	}
 	return true
+}
+
+// waitCrawlDelay blocks until a request to rawURL's host respects that host's robots.txt
+// Crawl-delay, when RespectRobots is set. The delay is per host and comes on top of the global
+// rate limit: a host that asks for 5 seconds gets at most one request every 5 seconds, from
+// all workers together, while other hosts are not slowed. It returns ctx's error if ctx ends
+// first. Redirect hops inside one fetch are not paced separately.
+func (e *Engine) waitCrawlDelay(ctx context.Context, rawURL string) error {
+	if !e.opts.RespectRobots {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	delay := e.robots.get(ctx, u).CrawlDelay(e.robots.userAgent)
+	return e.pacer.wait(ctx, u.Host, delay)
 }
 
 // authHostAllowed reports whether host may receive Basic Auth credentials. Unlike inScope,

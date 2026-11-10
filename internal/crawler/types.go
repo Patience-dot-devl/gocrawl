@@ -180,6 +180,19 @@ func (r *RobotsData) TestAgent(path, userAgent string) bool {
 	return true
 }
 
+// CrawlDelay returns the robots.txt Crawl-delay for the group that applies to userAgent, or 0
+// when robots.txt has none (or was not found or not parsed).
+func (r *RobotsData) CrawlDelay(userAgent string) time.Duration {
+	if r == nil || r.data == nil {
+		return 0
+	}
+	g := r.data.FindGroup(userAgent)
+	if g == nil {
+		return 0
+	}
+	return g.CrawlDelay
+}
+
 // Result is the complete output of a crawl, consumed by analyzers.
 type Result struct {
 	Seed      string                 `json:"seed"`

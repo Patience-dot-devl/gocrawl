@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -287,5 +288,92 @@ func TestWithURLsReportsPrefetchedProblems(t *testing.T) {
 	}
 	if _, ok := find(issues, "sitemap-missing"); !ok {
 		t.Error("expected sitemap-missing when nothing parsed")
+	}
+}
+
+// errFetcher fails every fetch with a transport error, the way a network blip does.
+type errFetcher struct{}
+
+func (errFetcher) Fetch(_ context.Context, rawURL string) (*crawler.Page, error) {
+	return &crawler.Page{RequestedURL: rawURL, Err: "dial tcp: connection refused"}, errors.New("dial tcp: connection refused")
+}
+
+// TestTransportErrorIsNotMissing is the roadmap regression: a transport error on every
+// candidate must surface as sitemap-unreachable, never as sitemap-missing.
+func TestTransportErrorIsNotMissing(t *testing.T) {
+	issues := sitemap.New(errFetcher{}).Analyze(context.Background(), &crawler.Result{Seed: "https://example.com/"})
+	if _, ok := find(issues, "sitemap-missing"); ok {
+		t.Error("sitemap-missing must not fire when every candidate failed to fetch")
+	}
+	var n int
+	for _, is := range issues {
+		if is.Code == "sitemap-unreachable" {
+			n++
+			if is.Data["reason"] != "dial tcp: connection refused" {
+				t.Errorf("reason = %v", is.Data["reason"])
+			}
+		}
+	}
+	if n != 2 {
+		t.Errorf("got %d sitemap-unreachable issues, want 2 (both guessed paths)", n)
+	}
+}
+
+func TestServerErrorIsUnreachable(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://example.com/sitemap.xml": {StatusCode: 503},
+	}}
+	issues := sitemap.New(ff).Analyze(context.Background(), &crawler.Result{Seed: "https://example.com/"})
+	is, ok := find(issues, "sitemap-unreachable")
+	if !ok || is.URL != "https://example.com/sitemap.xml" || is.Data["reason"] != "HTTP 503" {
+		t.Errorf("want sitemap-unreachable for the 503 /sitemap.xml, got %+v (ok=%v)", is, ok)
+	}
+	if _, ok := find(issues, "sitemap-missing"); ok {
+		t.Error("a 503 is not proof that no sitemap exists")
+	}
+}
+
+// TestAll404IsStillMissing keeps the old behaviour: when every candidate answers 404, the
+// site has no sitemap.
+func TestAll404IsStillMissing(t *testing.T) {
+	issues := sitemap.New(fakeFetcher{}).Analyze(context.Background(), &crawler.Result{Seed: "https://example.com/"})
+	if _, ok := find(issues, "sitemap-missing"); !ok {
+		t.Error("expected sitemap-missing when every candidate is a 404")
+	}
+	if _, ok := find(issues, "sitemap-unreachable"); ok {
+		t.Error("a 404 is an answer, not a fetch failure")
+	}
+}
+
+// TestFailedGuessIgnoredWhenSitemapFound: a guessed path that fails while another candidate
+// parses is noise, but a declared sitemap that fails is always reported.
+func TestFailedGuessIgnoredWhenSitemapFound(t *testing.T) {
+	ff := fakeFetcher{pages: map[string]*crawler.Page{
+		"https://example.com/sitemap.xml":       {StatusCode: 200, Body: []byte(validSitemap)},
+		"https://example.com/sitemap_index.xml": {StatusCode: 500},
+		"https://example.com/declared.xml":      {StatusCode: 502},
+	}}
+	robots := map[string]*crawler.RobotsData{"example.com": {Host: "example.com", Found: true, Sitemaps: []string{"https://example.com/declared.xml"}}}
+	d := sitemap.DiscoverAll(context.Background(), ff, "https://example.com/", robots)
+	if len(d.Unreachable) != 1 || d.Unreachable[0].URL != "https://example.com/declared.xml" {
+		t.Errorf("Unreachable = %+v, want only the declared sitemap", d.Unreachable)
+	}
+}
+
+func TestWithUnreachableReportsPrefetchedFailures(t *testing.T) {
+	cf := &countingFetcher{}
+	a := sitemap.New(cf,
+		sitemap.WithURLs(map[string]bool{}, 0, nil, nil),
+		sitemap.WithUnreachable([]sitemap.FetchFailure{{URL: "https://example.com/sitemap.xml", Reason: "timeout"}}),
+	)
+	issues := a.Analyze(context.Background(), &crawler.Result{Seed: "https://example.com/"})
+	if len(cf.calls) != 0 {
+		t.Fatalf("analyzer fetched %v despite a pre-fetched result", cf.calls)
+	}
+	if _, ok := find(issues, "sitemap-unreachable"); !ok {
+		t.Error("expected sitemap-unreachable from the pre-fetched failure")
+	}
+	if _, ok := find(issues, "sitemap-missing"); ok {
+		t.Error("sitemap-missing must not fire alongside a pre-fetched fetch failure")
 	}
 }

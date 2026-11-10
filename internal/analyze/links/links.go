@@ -25,7 +25,7 @@ func (Analyzer) Description() string {
 const maxAnchorSample = 10
 
 func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
-	inbound := buildInbound(result)
+	inbound := analyze.Inbound(result)
 	var issues []analyze.Issue
 	for _, p := range result.Pages {
 		if len(p.Links) == 0 {
@@ -90,8 +90,8 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		info := inbound[p]
 		count, anchors := 0, []string{}
 		if info != nil {
-			count = info.count
-			anchors = sampleAnchors(info.anchors)
+			count = info.Count
+			anchors = sampleAnchors(info.Anchors)
 		}
 		issues = append(issues, analyze.Issue{
 			Analyzer: "links", URL: p.FinalURL, Severity: analyze.Info,
@@ -100,39 +100,6 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 		})
 	}
 	return issues
-}
-
-// inboundInfo accumulates inbound internal links pointing at a single page.
-type inboundInfo struct {
-	count   int
-	anchors map[string]bool
-}
-
-// buildInbound tallies internal inbound links (and their anchor text) per crawled page by
-// resolving every page's outbound links against the crawl set.
-func buildInbound(result *crawler.Result) map[*crawler.Page]*inboundInfo {
-	m := make(map[*crawler.Page]*inboundInfo)
-	for _, p := range result.Pages {
-		for _, link := range p.Links {
-			if link.External {
-				continue
-			}
-			target, ok := result.Page(link.URL)
-			if !ok || target == p {
-				continue
-			}
-			info := m[target]
-			if info == nil {
-				info = &inboundInfo{anchors: make(map[string]bool)}
-				m[target] = info
-			}
-			info.count++
-			if link.Anchor != "" {
-				info.anchors[link.Anchor] = true
-			}
-		}
-	}
-	return m
 }
 
 // sampleAnchors returns up to maxAnchorSample distinct anchor texts in sorted order.
