@@ -243,3 +243,23 @@ func TestHasValueCountsNumericValuesThroughArrays(t *testing.T) {
 		t.Error("expected an identifier no offer carries to count as absent")
 	}
 }
+
+// Real-world JSON-LD often repeats a key or carries a lone surrogate escape. encoding/json
+// v1 accepted both, and the parser must keep doing so after the move to encoding/json/v2:
+// such a block is markup to audit, not a syntax error.
+func TestParseAcceptsDuplicateKeysAndLoneSurrogates(t *testing.T) {
+	g, errs := parse(t, `<html><head><script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"Product","name":"Old","name":"Tee \ud83d",
+		 "offers":{"@type":"Offer","price":"19.99"}}
+	</script></head><body></body></html>`)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected parse errors: %v", errs)
+	}
+	products := g.OfType("Product")
+	if len(products) != 1 {
+		t.Fatalf("expected 1 Product node, got %d", len(products))
+	}
+	if len(g.OfType("Offer")) != 1 {
+		t.Errorf("expected the Offer under the Product to survive")
+	}
+}

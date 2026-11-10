@@ -1,0 +1,156 @@
+{
+  "seed": "https://example.com",
+  "started_at": "2026-11-09T10:00:00Z",
+  "finished_at": "2026-11-09T10:00:12Z",
+  "pages_crawled": 4,
+  "summary": {
+    "by_severity": {
+      "error": 2,
+      "info": 1,
+      "warning": 1
+    },
+    "by_analyzer": {
+      "links": 1,
+      "redirects": 1,
+      "seo": 2
+    },
+    "pages_by_status": {
+      "200": 3,
+      "404": 1
+    }
+  },
+  "issues": [
+    {
+      "analyzer": "seo",
+      "url": "https://example.com/",
+      "severity": "error",
+      "code": "seo-missing-title",
+      "message": "Page has no \u003ctitle\u003e \u0026 no \u003ch1\u003e"
+    },
+    {
+      "analyzer": "seo",
+      "url": "https://example.com/blog/post",
+      "severity": "warning",
+      "code": "seo-long-title",
+      "message": "Title may be truncated",
+      "data": {
+        "length": 73,
+        "limit": 60,
+        "title": "Café crème"
+      }
+    },
+    {
+      "analyzer": "links",
+      "url": "https://example.com/",
+      "severity": "error",
+      "code": "links-broken",
+      "message": "Broken link",
+      "data": {
+        "anchor": "Read \u003cmore\u003e",
+        "nofollow": false,
+        "status": 404,
+        "target": "https://example.com/missing",
+        "zero": 0
+      }
+    },
+    {
+      "analyzer": "redirects",
+      "url": "https://example.com/old",
+      "severity": "info",
+      "code": "http-redirect",
+      "message": "Page redirects"
+    }
+  ],
+  "coverage": {
+    "complete": false,
+    "page_limit_reached": true,
+    "max_pages": 4,
+    "sitemap_total": 7,
+    "sitemap_fetched": 3
+  },
+  "site_map": {
+    "seed": "https://example.com",
+    "host": "example.com",
+    "generated": "2026-11-09T10:00:12Z",
+    "entries": [
+      {
+        "loc": "https://example.com/"
+      },
+      {
+        "loc": "https://example.com/blog/post"
+      }
+    ],
+    "root": {
+      "label": "/",
+      "url": "https://example.com/",
+      "title": "Home \u0026 \u003cWelcome\u003e",
+      "status": 200,
+      "issues": [
+        {
+          "severity": "error",
+          "code": "links-broken",
+          "analyzer": "links",
+          "message": "Broken link"
+        },
+        {
+          "severity": "error",
+          "code": "seo-missing-title",
+          "analyzer": "seo",
+          "message": "Page has no \u003ctitle\u003e \u0026 no \u003ch1\u003e"
+        }
+      ],
+      "counts": {
+        "error": 2
+      },
+      "subtotal": {
+        "error": 2,
+        "warning": 1
+      },
+      "children": [
+        {
+          "label": "blog",
+          "counts": {},
+          "subtotal": {
+            "warning": 1
+          },
+          "children": [
+            {
+              "label": "post",
+              "url": "https://example.com/blog/post",
+              "title": "Café crème",
+              "status": 200,
+              "depth": 1,
+              "issues": [
+                {
+                  "severity": "warning",
+                  "code": "seo-long-title",
+                  "analyzer": "seo",
+                  "message": "Title may be truncated"
+                }
+              ],
+              "counts": {
+                "warning": 1
+              },
+              "subtotal": {
+                "warning": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "site_wide": [
+      {
+        "severity": "info",
+        "code": "http-redirect",
+        "analyzer": "redirects",
+        "message": "Page redirects"
+      }
+    ],
+    "totals": {
+      "error": 2,
+      "warning": 1,
+      "info": 1
+    }
+  }
+}

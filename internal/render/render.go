@@ -12,6 +12,7 @@ package render
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/jsonopts"
 )
 
 // HeadlessFetcher renders pages with chromedp and reports real Core Web Vitals.
@@ -501,7 +503,7 @@ func parseDataLayer(s string) (bool, []json.RawMessage) {
 		Present bool              `json:"present"`
 		Entries []json.RawMessage `json:"entries"`
 	}
-	if err := json.Unmarshal([]byte(s), &snap); err != nil {
+	if err := jsonv2.Unmarshal([]byte(s), &snap, jsonopts.Crawled); err != nil {
 		return false, nil
 	}
 	return snap.Present, snap.Entries

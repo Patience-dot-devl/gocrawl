@@ -1,7 +1,8 @@
 package webserver
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -68,7 +69,7 @@ func (s *Server) handleResumeCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req resumeRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxResumeBody)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+	if err := json.UnmarshalDecode(jsontext.NewDecoder(http.MaxBytesReader(w, r.Body, maxResumeBody)), &req); err != nil && !errors.Is(err, io.EOF) {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
 			writeError(w, http.StatusRequestEntityTooLarge, fmt.Errorf("request body is larger than %d bytes", maxResumeBody))

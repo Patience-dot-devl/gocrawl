@@ -9,11 +9,12 @@ package aeo
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/jsonopts"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -166,7 +167,7 @@ func jsonldAnswerTypes(doc *goquery.Document) []string {
 			return
 		}
 		var v any
-		if json.Unmarshal([]byte(raw), &v) != nil {
+		if json.Unmarshal([]byte(raw), &v, jsonopts.Crawled) != nil {
 			return
 		}
 		for _, t := range collectTypes(v) {

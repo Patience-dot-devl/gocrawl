@@ -11,6 +11,7 @@ package datalayer
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"regexp"
 	"sort"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
+	"github.com/Patience-dot-devl/gocrawl/internal/jsonopts"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -309,7 +311,7 @@ func normalizeEntries(raw []json.RawMessage) []dlEntry {
 	var out []dlEntry
 	for _, r := range raw {
 		var m map[string]any
-		if err := json.Unmarshal(r, &m); err != nil {
+		if err := jsonv2.Unmarshal(r, &m, jsonopts.Crawled); err != nil {
 			continue // arrays/scalars: not a shape we audit
 		}
 		e := dlEntry{params: m}

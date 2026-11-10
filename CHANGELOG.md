@@ -18,6 +18,11 @@ All notable changes to `gocrawl` are documented here. The format is based on
 ### Changed
 
 - With `respect_robots` on (the default), the crawl obeys each host's robots.txt `Crawl-delay`, capped at 60 seconds. Analyzer fetches through the governed fetcher (sitemap, `llms.txt`, the `--specialized` probes) obey it too.
+- gocrawl now decodes JSON with `encoding/json/v2`. Web API request bodies are stricter: field
+  names must match exactly (`url`, not `URL`), and a repeated key, invalid UTF-8, or data after
+  the JSON value is refused with `400`. JSON taken from crawled pages (JSON-LD, dataLayer,
+  Shopify and WordPress endpoints) is still read as leniently as before. Report output is
+  unchanged, and a new golden test locks its bytes.
 
 ### Fixed
 

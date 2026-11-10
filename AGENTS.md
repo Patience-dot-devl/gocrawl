@@ -88,6 +88,7 @@ analyzers, and hands everything to the report builder.
 | `internal/diff` | Compares two reports: new, resolved, and persisting issues plus summary and page-set deltas. Pure transform behind `compare`. |
 | `internal/redirectcheck` | Verifies a redirect-rule CSV export against a live site and its `sitemap.xml`; backs `check-redirects` (see `docs/redirect-check.md`). |
 | `internal/repocheck` | Test-only package: checks that docs, `AGENTS.md`, and the code agree (analyzer sections, package map, CLI commands, relative links, docs frontmatter and index). |
+| `internal/jsonopts` | The `encoding/json/v2` decode options: strict v2 defaults for gocrawl's own data, and `Crawled` (v1-style leniency) for JSON taken from crawled pages. |
 | `internal/atomicfile` | Atomic file writes (temp file + rename) so a failed overwrite never corrupts a previous artifact. |
 | `internal/report` | Builds the `Report` and serializes it (JSON, CSV, HTML); issue explanations live here. |
 | `internal/mcpserver` | Exposes `crawl` and `list_analyzers` over MCP. |
