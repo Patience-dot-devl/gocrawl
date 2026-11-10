@@ -1,0 +1,19 @@
+# Keep the Docker build context small and reproducible: the image builds the web UI and the
+# binary from source, so local build output and dependencies stay out.
+.git
+/gocrawl
+/bin/
+/dist/
+/web/node_modules/
+/web/dist/
+/internal/webserver/webui/dist/*
+!/internal/webserver/webui/dist/index.html
+*.out
+coverage.*
+report.json
+report.csv
+*.report.json
+*.report.csv
+.DS_Store
+.idea/
+.vscode/

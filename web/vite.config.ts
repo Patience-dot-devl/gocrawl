@@ -11,10 +11,11 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    // Lets `npm run dev` (served from :5173) hit the Go API without CORS wrangling; run
-    // `gocrawl serve` on :8080 alongside it during frontend development.
+    // Lets `npm run dev` (served from :5173) hit the Go API without CORS wrangling. `make dev`
+    // starts `gocrawl serve` alongside it and sets GOCRAWL_API to match its --addr; on its
+    // own, run `gocrawl serve` on :8080.
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': process.env.GOCRAWL_API ?? 'http://localhost:8080',
     },
   },
 })

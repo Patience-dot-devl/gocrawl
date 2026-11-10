@@ -12,6 +12,8 @@ All notable changes to `gocrawl` are documented here. The format is based on
   groups the pages that earn no rich result by URL section, schema.org type, and gap (no
   markup, or markup missing a required field), scores each group from the type, page count,
   and internal links, and names up to five example pages. The top 20 groups are reported.
+- A container image: the new `Dockerfile` builds the web UI and a static binary on a distroless base, and each release publishes it for linux/amd64 and linux/arm64 to `ghcr.io/patience-dot-devl/gocrawl` (`make docker` builds it locally). It runs `gocrawl serve` on port 8080; see the Web UI guide for the volume and for publishing the port on loopback.
+- `make dev` runs `gocrawl serve` and the Vite dev server together for frontend work with hot reload, and `make build` now warns when it embeds only the placeholder web UI.
 
 ### Changed
 

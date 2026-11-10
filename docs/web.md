@@ -7,7 +7,7 @@ status: "current"
 superseded_by: []
 updated: 2026-11-09
 depends_on: ["mcp.md", "output.md", "redirect-check.md"]
-sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go", "../internal/jsonopts"]
+sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../Dockerfile", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go", "../internal/jsonopts"]
 ---
 # Web UI guide
 
@@ -71,8 +71,53 @@ make web-build   # npm ci && npm run build in web/, output lands in
 make build       # embeds it via internal/webserver/assets.go
 ```
 
-`web/` is a standard Vite + React + TypeScript app; `npm run dev` in `web/` proxies `/api/*`
-to `gocrawl serve` running on `:8080` for frontend development with hot reload.
+`make build` prints a warning when it embeds only the placeholder.
+
+## Frontend development
+
+`web/` is a standard Vite + React + TypeScript app. For work on it with hot reload, run:
+
+```sh
+make dev
+```
+
+It builds the binary, starts `gocrawl serve` on `127.0.0.1:8080`, and starts the Vite dev
+server (`npm run dev` in `web/`) on `:5173`, which proxies `/api/*` to the Go server. Open
+`http://localhost:5173`. Ctrl-C stops both, and so does either process exiting. It runs
+`npm ci` the first time, when `web/node_modules` does not exist. To use another API port, set
+`DEV_ADDR` (`make dev DEV_ADDR=127.0.0.1:9090`); `make dev` passes it to the Vite proxy as
+`GOCRAWL_API`. Changes to Go code need a restart of `make dev`. The target needs `bash`, so on
+Windows run it from WSL or Git Bash, or start `gocrawl serve` and `npm run dev` in `web/` in two
+terminals.
+
+## Running in Docker
+
+The [`Dockerfile`](../Dockerfile) builds the web UI and a static binary that embeds it, on a
+distroless base. Each release publishes it for `linux/amd64` and `linux/arm64` as
+`ghcr.io/patience-dot-devl/gocrawl:<version>` (stable releases also move `latest` and
+`<major>.<minor>`; a pre-release gets only its version tag, so until the first stable
+release, use the version tag in place of `latest`).
+
+```sh
+docker run --rm -p 127.0.0.1:8080:8080 -v gocrawl:/home/nonroot/.gocrawl \
+  ghcr.io/patience-dot-devl/gocrawl:latest
+```
+
+- The container runs `gocrawl serve --addr 0.0.0.0:8080`, because a published port cannot
+  reach a loopback-only listener. That is a non-loopback bind, so the `Host` check is off and
+  the server prints the warning described in [Exposure](#exposure). Publish the port on
+  loopback (`-p 127.0.0.1:8080:8080`, as above), or put something that authenticates in front
+  of it.
+- `/home/nonroot/.gocrawl` holds the crawl store, `gui.json` and header profiles. Mount a
+  volume there to keep them.
+- Any other subcommand works too. The report goes to stdout, so redirect it to a file on the
+  host: `docker run --rm ghcr.io/patience-dot-devl/gocrawl crawl https://example.com -f json >
+  report.json`.
+- The image has no browser, so `--render headless` and **Log in with browser…** do not work in
+  it.
+
+To build the image locally, run `make docker` (tag `gocrawl:dev`, override with
+`DOCKER_IMAGE=…`).
 
 ## What the UI does
 
