@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
+
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
@@ -236,8 +238,9 @@ func Inbound(result *crawler.Result) map[*crawler.Page]*InboundLinks {
 }
 
 // Indexable reports whether a page is open to indexing: no noindex in either the meta robots
-// tag or the X-Robots-Tag header. It does not look at the canonical; callers that also need to
-// exclude pages canonicalised elsewhere check that themselves.
+// tag or the X-Robots-Tag header. The meta name matches in any case (`<meta name="Robots">`),
+// as HTML attribute values in the wild vary. It does not look at the canonical; callers that
+// also need to exclude pages canonicalised elsewhere check that themselves.
 func Indexable(p *crawler.Page) bool {
 	if strings.Contains(strings.ToLower(p.Header.Get("X-Robots-Tag")), "noindex") {
 		return false
@@ -245,6 +248,13 @@ func Indexable(p *crawler.Page) bool {
 	if p.Doc == nil {
 		return true
 	}
-	robots, _ := p.Doc.Find(`meta[name="robots"]`).First().Attr("content")
+	var robots string
+	p.Doc.Find("meta[name]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		if n, _ := s.Attr("name"); strings.EqualFold(strings.TrimSpace(n), "robots") {
+			robots, _ = s.Attr("content")
+			return false
+		}
+		return true
+	})
 	return !strings.Contains(strings.ToLower(robots), "noindex")
 }

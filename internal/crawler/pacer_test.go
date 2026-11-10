@@ -51,8 +51,34 @@ func TestHostPacerWaitStopsOnCancel(t *testing.T) {
 	p.reserve("a.example", MaxCrawlDelay)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := p.wait(ctx, "a.example", MaxCrawlDelay); err == nil {
+	if _, err := p.wait(ctx, "a.example", MaxCrawlDelay); err == nil {
 		t.Error("wait on a canceled context returned nil")
+	}
+}
+
+func TestHostPacerBusyWhileWaiting(t *testing.T) {
+	p := newHostPacer()
+	p.reserve("a.example", 50*time.Millisecond) // the next caller must wait ~50ms
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if slept, err := p.wait(context.Background(), "a.example", 50*time.Millisecond); err != nil || !slept {
+			t.Errorf("wait = %v, %v; want slept, nil", slept, err)
+		}
+	}()
+	deadline := time.Now().Add(time.Second)
+	for !p.busy("a.example") {
+		if time.Now().After(deadline) {
+			t.Fatal("host never reported busy while a caller waited")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if p.busy("b.example") {
+		t.Error("an idle host reported busy")
+	}
+	<-done
+	if p.busy("a.example") {
+		t.Error("host still busy after the wait ended")
 	}
 }
 
@@ -174,5 +200,68 @@ func TestRobotsDataCrawlDelay(t *testing.T) {
 	}
 	if d := r.CrawlDelay("otherbot"); d != 9*time.Second {
 		t.Errorf("wildcard group: %v, want 9s", d)
+	}
+}
+
+// TestEngineSlowHostDoesNotBlockOthers is the head-of-line regression: a host with a long
+// Crawl-delay must not hold every worker while another host's pages wait in the queue.
+func TestEngineSlowHostDoesNotBlockOthers(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		fastDone time.Time
+		fastSeen int
+	)
+	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		fastSeen++
+		fastDone = time.Now()
+		mu.Unlock()
+		fmt.Fprint(w, `<html><body>fast</body></html>`)
+	}))
+	t.Cleanup(fast.Close)
+
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			fmt.Fprint(w, "User-agent: *\nCrawl-delay: 0.2\n")
+			return
+		}
+		if r.URL.Path != "/" {
+			fmt.Fprint(w, `<html><body>leaf</body></html>`)
+			return
+		}
+		fmt.Fprint(w, `<html><body>`)
+		for i := range 8 {
+			fmt.Fprintf(w, `<a href="/s%d">s</a>`, i)
+		}
+		for i := range 4 {
+			fmt.Fprintf(w, `<a href="%s/f%d">f</a>`, fast.URL, i)
+		}
+		fmt.Fprint(w, `</body></html>`)
+	}))
+	t.Cleanup(slow.Close)
+
+	opts := DefaultOptions()
+	opts.Concurrency = 4
+	opts.FollowExternal = true
+	opts.UserAgent = "gocrawl-test"
+	start := time.Now()
+	if _, err := New(opts, NewHTTPFetcher(opts)).Crawl(context.Background(), slow.URL); err != nil {
+		t.Fatal(err)
+	}
+	total := time.Since(start)
+	mu.Lock()
+	defer mu.Unlock()
+	if fastSeen != 4 {
+		t.Fatalf("fast host served %d pages, want 4", fastSeen)
+	}
+	// The slow host needs about 8 x 0.2s after the seed. Its links come first in the queue,
+	// but the fast host's pages must not wait behind them: before the fix, every worker sat on
+	// a slow-host slot and the fast pages started only after about 1s.
+	if el := fastDone.Sub(start); el > 400*time.Millisecond {
+		t.Errorf("fast host finished %v after start (crawl took %v); it waited on the slow host", el, total)
 	}
 }

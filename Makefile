@@ -9,11 +9,14 @@ GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v
 # Plain `go build` embeds the committed placeholder UI (see internal/webserver/assets.go) and
 # needs no Node. Run `make web-build` first to embed the real web UI in the binary.
 # `vite build` always writes an assets/ folder next to index.html; the committed placeholder
-# has none, so its absence means this build embeds the placeholder, not the real UI.
+# has none, so its absence means this build embeds the placeholder, not the real UI. When the
+# real UI is there but web/ changed after it was built, the binary embeds a stale UI.
 build:
 	go build -o $(BINARY) ./cmd/gocrawl
 	@if [ ! -d internal/webserver/webui/dist/assets ]; then \
 		echo "warning: $(BINARY) embeds the placeholder web UI; run 'make web-build' first to embed the real one (or 'make dev' for frontend work)" >&2; \
+	elif [ -n "$$(find web/src web/index.html -newer internal/webserver/webui/dist/index.html 2>/dev/null | head -n 1)" ]; then \
+		echo "warning: $(BINARY) embeds a web UI that is older than web/; run 'make web-build' and rebuild to embed the current one" >&2; \
 	fi
 
 # Builds the web/ frontend straight into internal/webserver/webui/dist/ (see web/vite.config.ts),
@@ -26,14 +29,16 @@ web-build:
 # http://localhost:5173. Ctrl-C, or either process exiting, stops both. Installs
 # web/node_modules on first use.
 DEV_ADDR ?= 127.0.0.1:8080
-dev: SHELL := /bin/bash
+# Plain POSIX sh with no `wait -n`, so it also runs on macOS, whose /bin/bash is 3.2: poll both
+# PIDs and stop the other process when one exits. `exec` makes $$ui the npm process itself, not
+# a subshell, so the kill reaches it.
 dev:
 	@[ -d web/node_modules ] || (cd web && npm ci)
 	go build -o $(BINARY) ./cmd/gocrawl
-	@trap 'kill $$(jobs -p) 2>/dev/null' INT TERM EXIT; \
-	./$(BINARY) serve --addr $(DEV_ADDR) & \
-	(cd web && GOCRAWL_API=http://$(DEV_ADDR) npm run dev) & \
-	wait -n
+	@./$(BINARY) serve --addr $(DEV_ADDR) & api=$$!; \
+	(cd web && GOCRAWL_API=http://$(DEV_ADDR) exec npm run dev) & ui=$$!; \
+	trap 'kill $$api $$ui 2>/dev/null' INT TERM EXIT; \
+	while kill -0 $$api 2>/dev/null && kill -0 $$ui 2>/dev/null; do sleep 1; done
 
 # Builds the container image from the multi-stage Dockerfile (web UI, then a static binary).
 DOCKER_IMAGE ?= gocrawl:dev

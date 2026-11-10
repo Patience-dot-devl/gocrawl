@@ -18,6 +18,7 @@ import (
 //
 // Lock order, outermost first: Crawl's result mutex → progMu → ps.mu → the leaf locks
 // (frontier.mu, activeClock.mu, hostPacer.mu, and the AdaptiveLimiter's mutex and its rate.Limiter's).
+// One leaf edge: frontier.next calls hostPacer.busy, so frontier.mu → hostPacer.mu.
 // A lock may skip levels (the result mutex reads frontier.queued directly; progMu takes the
 // limiter's lock and ps.mu in turn, never together) but is never taken while a later one is
 // held. OnProgress runs with progMu held, plus the result mutex for page events; ps.mu and
@@ -88,6 +89,13 @@ type task struct {
 	url      string
 	depth    int
 	referrer string
+	// host is url's host, set by enqueue, so the frontier can skip a host a worker is waiting
+	// on without parsing the URL again.
+	host string
+	// paced is set when the task already waited out its host's Crawl-delay slot but was handed
+	// back unfetched (a pause). That slot was its own and no request used it, so the task does
+	// not book another one.
+	paced bool
 }
 
 // Crawl walks the site starting at seed and returns the collected Result.
@@ -139,6 +147,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	)
 
 	fr := newFrontier()
+	fr.busy = e.pacer.busy
 	stopWatching := fr.watchCancellation(ctx)
 	defer stopWatching()
 	e.beginRun(fr, clock)
@@ -170,6 +179,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			return
 		}
 		t.url = norm
+		t.host = u.Host
 		fr.push(t)
 	}
 
@@ -180,8 +190,16 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	process := func(t task) {
 		defer fr.taskDone()
 
-		if err := e.waitCrawlDelay(ctx, t.url); err != nil {
-			return
+		if !t.paced {
+			slept, err := e.waitCrawlDelay(ctx, t.url)
+			if slept {
+				// The host is free again: wake the workers that next held back from it.
+				fr.wake()
+			}
+			if err != nil {
+				return
+			}
+			t.paced = true
 		}
 		if err := e.limiter.Wait(ctx); err != nil {
 			return
@@ -358,15 +376,16 @@ func (e *Engine) crawlable(ctx context.Context, u *url.URL) bool {
 // waitCrawlDelay blocks until a request to rawURL's host respects that host's robots.txt
 // Crawl-delay, when RespectRobots is set. The delay is per host and comes on top of the global
 // rate limit: a host that asks for 5 seconds gets at most one request every 5 seconds, from
-// all workers together, while other hosts are not slowed. It returns ctx's error if ctx ends
-// first. Redirect hops inside one fetch are not paced separately.
-func (e *Engine) waitCrawlDelay(ctx context.Context, rawURL string) error {
+// all workers together, while other hosts are not slowed (the frontier skips a host that a
+// worker is waiting on). slept reports whether it had to wait. It returns ctx's error if ctx
+// ends first. Redirect hops inside one fetch are not paced separately.
+func (e *Engine) waitCrawlDelay(ctx context.Context, rawURL string) (slept bool, err error) {
 	if !e.opts.RespectRobots {
-		return nil
+		return false, nil
 	}
-	u, err := url.Parse(rawURL)
-	if err != nil || u.Host == "" {
-		return nil
+	u, perr := url.Parse(rawURL)
+	if perr != nil || u.Host == "" {
+		return false, nil
 	}
 	delay := e.robots.get(ctx, u).CrawlDelay(e.robots.userAgent)
 	return e.pacer.wait(ctx, u.Host, delay)

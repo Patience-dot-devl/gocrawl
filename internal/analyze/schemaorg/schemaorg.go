@@ -6,7 +6,7 @@
 package schemaorg
 
 import (
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"sort"
 	"strings"
 
@@ -79,7 +79,7 @@ func Parse(doc *goquery.Document) (Graph, []ParseError) {
 			return
 		}
 		var v any
-		if err := json.Unmarshal([]byte(raw), &v, jsonopts.Crawled); err != nil {
+		if err := jsonv2.Unmarshal([]byte(raw), &v, jsonopts.Crawled); err != nil {
 			errs = append(errs, ParseError{Block: block, Err: err.Error()})
 			return
 		}

@@ -56,6 +56,9 @@ jobs:
   # ghcr.io/<owner>/gocrawl:<version>. `latest` and `<major>.<minor>` move only on stable tags;
   # a pre-release such as v1.0.0-beta.2 gets just its own version tag.
   image:
+    # Only after the GitHub release succeeded, so a failed release never leaves a published
+    # image behind.
+    needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read

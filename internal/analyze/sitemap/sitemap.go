@@ -150,7 +150,8 @@ func fetchAll(ctx context.Context, fetcher crawler.Fetcher, candidates map[strin
 			}
 			return
 		}
-		if ferr != nil || page == nil || page.StatusCode != 200 || len(page.Body) == 0 {
+		// fetchFailure has already returned for a nil page or a fetch error.
+		if page.StatusCode != 200 || len(page.Body) == 0 {
 			return
 		}
 		if page.Truncated {

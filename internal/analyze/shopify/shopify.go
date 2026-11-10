@@ -9,7 +9,7 @@ package shopify
 
 import (
 	"context"
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"regexp"
 	"sort"
 	"strconv"
@@ -93,7 +93,7 @@ func (a Analyzer) productsJSONProbe(ctx context.Context, base string) []analyze.
 			Handle string `json:"handle"`
 		} `json:"products"`
 	}
-	if err := json.Unmarshal(page.Body, &payload, jsonopts.Crawled); err != nil {
+	if err := jsonv2.Unmarshal(page.Body, &payload, jsonopts.Crawled); err != nil {
 		return nil
 	}
 	if len(payload.Products) == 0 {
@@ -204,7 +204,7 @@ func parseTheme(html string) (name, id string) {
 		return "", ""
 	}
 	var obj map[string]any
-	if err := json.Unmarshal([]byte(m[1]), &obj, jsonopts.Crawled); err != nil {
+	if err := jsonv2.Unmarshal([]byte(m[1]), &obj, jsonopts.Crawled); err != nil {
 		return "", ""
 	}
 	name, _ = obj["name"].(string)
