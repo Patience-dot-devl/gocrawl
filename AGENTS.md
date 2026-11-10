@@ -170,12 +170,15 @@ make vet      # go vet ./...
 make lint     # golangci-lint run (pinned to CI's version)
 make check    # everything CI runs on Go code, in one command; run before finishing
 make docs     # regenerate docs frontmatter links and the docs/README.md index
+make dev      # gocrawl serve + Vite dev server with hot reload (frontend work, needs npm)
+make docker   # build the container image from the Dockerfile
 make run      # build + crawl https://example.com --depth 1
 ```
 
 CI (`.github/workflows/ci.yml`) runs `go mod verify`, `go vet`, `go build`,
 `go test -race`, and golangci-lint on every push/PR to `main`; `make check` runs the same
-steps locally, plus a `gofmt` check. golangci-lint enables `errcheck`, `govet`,
+steps locally, plus a `gofmt` check. CI also lints and builds `web/` and builds the Docker
+image, which `make check` does not. golangci-lint enables `errcheck`, `govet`,
 `ineffassign`, `staticcheck`, `unused`, `misspell` (errcheck is relaxed in `_test.go` files).
 
 ## Conventions
