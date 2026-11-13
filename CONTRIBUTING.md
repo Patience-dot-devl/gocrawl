@@ -53,7 +53,9 @@ new package private, so after the first image push, set the package's visibility
 its GitHub package settings, or `docker pull` needs a login. GitHub cannot make a public
 package private again. The release body is pulled straight from the tagged
 version's `## [x.y.z]` section in [`CHANGELOG.md`](CHANGELOG.md) — update the changelog before
-tagging, not after. To cut a release:
+tagging, not after. There is no version string to bump in the code: GoReleaser and the
+Docker build stamp the tag into `main.version` with `-ldflags`, and a `go install ...@vX.Y.Z`
+binary reads the version from the module's build info. To cut a release:
 
 ```sh
 git tag vX.Y.Z
