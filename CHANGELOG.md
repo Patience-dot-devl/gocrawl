@@ -26,6 +26,7 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Fixed
 
+- `gocrawl --version` now reports the version you installed. A binary from `go install ...@<version>` printed a hard-coded `0.8.0` for every release since v0.8.0; it now reads the module version Go embeds in the binary. Release archives and the container image are unchanged (they already set the version at build time), and a local build without one reports its Git pseudo-version or `dev`.
 - A sitemap candidate that cannot be fetched (network error, 5xx, or refused by robots.txt) is now reported as the new `sitemap-unreachable` warning instead of `sitemap-missing`, so a network blip no longer reports "no sitemap".
 
 ## [1.0.0-beta.1] - 2026-10-14
