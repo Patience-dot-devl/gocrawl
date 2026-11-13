@@ -6,13 +6,31 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
-// version is overridable at build time via -ldflags "-X main.version=...".
-var version = "0.8.0"
+// version is set at build time via -ldflags "-X main.version=..." (GoReleaser, the Dockerfile).
+// Left empty, resolveVersion falls back to the module version Go records in the binary, so
+// `go install ...@v1.2.3` reports 1.2.3 instead of a hand-maintained string going stale.
+var version = ""
+
+// resolveVersion returns the version to report: the ldflags value if set, else the module
+// version from the build info (without its leading "v"), else "dev" for a local build.
+func resolveVersion() string {
+	if version != "" {
+		return version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if v := bi.Main.Version; v != "" && v != "(devel)" {
+			return strings.TrimPrefix(v, "v")
+		}
+	}
+	return "dev"
+}
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -21,7 +39,7 @@ func newRootCmd() *cobra.Command {
 		Long:          "gocrawl crawls a website concurrently and runs a pipeline of pluggable analyzers\n(technical SEO, redirects, broken links, robots.txt, sitemap, structured data, …),\nthen writes a JSON or CSV report. It can also run as an MCP server.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Version:       version,
+		Version:       resolveVersion(),
 		// A bare `gocrawl` invocation on an interactive terminal launches the option menu;
 		// otherwise (piped/CI) it falls back to printing help.
 		RunE: func(cmd *cobra.Command, _ []string) error {
