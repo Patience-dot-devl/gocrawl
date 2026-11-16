@@ -1,7 +1,7 @@
 package shopify
 
 import (
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"net/url"
 	"sort"
 	"strconv"
@@ -311,7 +311,7 @@ func variantPrices(doc *goquery.Document) []float64 {
 			Price any `json:"price"`
 		} `json:"variants"`
 	}
-	if err := json.Unmarshal([]byte(raw), &payload, jsonopts.Crawled); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &payload, jsonopts.Crawled); err != nil {
 		return nil
 	}
 	seen := make(map[float64]bool)

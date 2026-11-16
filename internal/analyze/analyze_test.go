@@ -161,3 +161,23 @@ func TestURLKey(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexableMatchesMetaNameInAnyCase(t *testing.T) {
+	for _, tc := range []struct {
+		html string
+		want bool
+	}{
+		{`<meta name="robots" content="noindex">`, false},
+		{`<meta name="Robots" content="NOINDEX, follow">`, false},
+		{`<meta name="description" content="noindex"><meta name="robots" content="index">`, true},
+		{``, true},
+	} {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader("<html><head>" + tc.html + "</head></html>"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := Indexable(&crawler.Page{Doc: doc}); got != tc.want {
+			t.Errorf("Indexable(%q) = %v, want %v", tc.html, got, tc.want)
+		}
+	}
+}

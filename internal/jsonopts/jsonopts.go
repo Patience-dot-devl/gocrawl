@@ -10,7 +10,7 @@ package jsonopts
 
 import (
 	"encoding/json/jsontext"
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 )
 
 // Crawled decodes JSON from crawled pages the way encoding/json v1 did:
@@ -18,8 +18,8 @@ import (
 //   - invalid UTF-8 and lone surrogate escapes become U+FFFD instead of an error;
 //   - a repeated object key is accepted, and the last value wins;
 //   - struct field names match case-insensitively.
-var Crawled = json.JoinOptions(
+var Crawled = jsonv2.JoinOptions(
 	jsontext.AllowInvalidUTF8(true),
 	jsontext.AllowDuplicateNames(true),
-	json.MatchCaseInsensitiveNames(true),
+	jsonv2.MatchCaseInsensitiveNames(true),
 )

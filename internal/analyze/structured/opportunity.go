@@ -53,12 +53,15 @@ type opportunityKey struct {
 type opportunityPage struct {
 	canonical string
 	key       string // analyze.URLKey(canonical)
+	// self is true when the canonical page itself reported the gap, not only a duplicate
+	// that points at it.
+	self    bool
+	missing map[string]bool // ineligible only: union of missing required fields
 }
 
 // opportunityGroup accumulates the counted pages of one opportunity.
 type opportunityGroup struct {
-	pages   map[string]opportunityPage // canonical key -> page
-	missing map[string]bool            // ineligible only: union of missing required fields
+	pages map[string]*opportunityPage // canonical key -> page
 }
 
 // opportunities groups the pages that miss structured data by the fix they share, so the
@@ -78,7 +81,8 @@ func newOpportunities() *opportunities {
 // open to noindex adds nothing, since schema on it can earn nothing. Pages are counted once per
 // canonical URL, and the section comes from the canonical too, so a product reached at
 // /products/<h> and /collections/<c>/products/<h> is one page in one group. Membership is a
-// set, so the result does not depend on the order pages arrive in.
+// set, so the result does not depend on the order pages arrive in. When the canonical page was
+// crawled too, issues keeps only the gaps it reported itself (see crawledCanonicals).
 func (o *opportunities) add(p *crawler.Page, typ, gap string, missing []string) {
 	if !analyze.Indexable(p) {
 		return
@@ -87,16 +91,39 @@ func (o *opportunities) add(p *crawler.Page, typ, gap string, missing []string) 
 	key := opportunityKey{section: section(canonical), typ: typ, gap: gap}
 	g, ok := o.groups[key]
 	if !ok {
-		g = &opportunityGroup{pages: make(map[string]opportunityPage), missing: make(map[string]bool)}
+		g = &opportunityGroup{pages: make(map[string]*opportunityPage)}
 		o.groups[key] = g
 	}
 	ck := analyze.URLKey(canonical)
-	if _, seen := g.pages[ck]; !seen {
-		g.pages[ck] = opportunityPage{canonical: canonical, key: ck}
+	pg, seen := g.pages[ck]
+	if !seen {
+		pg = &opportunityPage{canonical: canonical, key: ck, missing: make(map[string]bool)}
+		g.pages[ck] = pg
+	}
+	if analyze.URLKey(p.FinalURL) == ck {
+		pg.self = true
 	}
 	for _, f := range missing {
-		g.missing[f] = true
+		pg.missing[f] = true
 	}
+}
+
+// crawledCanonicals returns the URL keys of the crawled pages that the structured analyzer
+// checked (HTML, 200) and that are their own canonical. Such a page speaks for its URL: a
+// duplicate that points at it may lack markup the canonical page has (a variant URL without
+// the Product block, say), so a gap reported only by duplicates is dropped when the canonical
+// page was checked and did not report it.
+func crawledCanonicals(result *crawler.Result) map[string]bool {
+	out := make(map[string]bool)
+	for _, p := range result.Pages {
+		if !p.IsHTML() || p.StatusCode != 200 {
+			continue
+		}
+		if k := analyze.URLKey(p.FinalURL); analyze.URLKey(analyze.CanonicalURL(p)) == k {
+			out[k] = true
+		}
+	}
+	return out
 }
 
 // section returns the URL section that stands in for a page's template: "/" for the homepage,
@@ -148,12 +175,23 @@ func (o *opportunities) issues(result *crawler.Result) []analyze.Issue {
 	for p, in := range analyze.Inbound(result) {
 		pooled[analyze.URLKey(analyze.CanonicalURL(p))] += in.Count
 	}
+	checked := crawledCanonicals(result)
 
 	ranked := make([]rankedOpportunity, 0, len(o.groups))
 	for key, g := range o.groups {
 		r := rankedOpportunity{key: key, weight: typeWeights[key.typ]}
+		missing := make(map[string]bool)
 		for _, pg := range g.pages {
-			r.pages = append(r.pages, pg)
+			if !pg.self && checked[pg.key] {
+				continue // the canonical page was checked and has no such gap
+			}
+			r.pages = append(r.pages, *pg)
+			for f := range pg.missing {
+				missing[f] = true
+			}
+		}
+		if len(r.pages) == 0 {
+			continue
 		}
 		// Sort before summing so the floating-point total is identical whatever the map order.
 		sort.Slice(r.pages, func(i, j int) bool {
@@ -170,8 +208,8 @@ func (o *opportunities) issues(result *crawler.Result) []analyze.Issue {
 		}
 		r.score = math.Round(r.weight*sum*10) / 10
 		if key.gap == gapIneligible {
-			r.missing = make([]string, 0, len(g.missing))
-			for f := range g.missing {
+			r.missing = make([]string, 0, len(missing))
+			for f := range missing {
 				r.missing = append(r.missing, f)
 			}
 			sort.Strings(r.missing)

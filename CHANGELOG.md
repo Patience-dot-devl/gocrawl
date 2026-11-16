@@ -27,6 +27,20 @@ All notable changes to `gocrawl` are documented here. The format is based on
 ### Fixed
 
 - A sitemap candidate that cannot be fetched (network error, 5xx, or refused by robots.txt) is now reported as the new `sitemap-unreachable` warning instead of `sitemap-missing`, so a network blip no longer reports "no sitemap".
+- A host with a long robots.txt `Crawl-delay` no longer holds every crawl worker: while one
+  worker waits on that host, the others crawl other hosts' pages first. A page handed back by a
+  pause after its wait no longer waits a second time.
+- `structured-opportunity` no longer lists a canonical page as missing markup that it has: when
+  the canonical page was crawled, a duplicate URL that points at it (a variant without the
+  Product block, say) adds nothing to the ranking.
+- The noindex check shared by `structured`, `shopify` and now `wordpress` matches the meta name
+  in any case, so `<meta name="Robots" content="noindex">` counts.
+- `POST /api/crawls/{id}/resume` refuses data after the JSON value with `400`, as the other
+  web API endpoints and the docs already said.
+- `make dev` runs in a POSIX shell, so it works with macOS's bash 3.2, which has no `wait -n`.
+  `make build` also warns when the embedded web UI is older than `web/`.
+- The release workflow publishes the container image only after the GitHub release succeeds,
+  and CI builds the image for linux/arm64 as well as linux/amd64.
 
 ## [1.0.0-beta.1] - 2026-10-14
 
