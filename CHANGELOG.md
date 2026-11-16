@@ -42,6 +42,11 @@ All notable changes to `gocrawl` are documented here. The format is based on
 - The release workflow publishes the container image only after the GitHub release succeeds,
   and CI builds the image for linux/arm64 as well as linux/amd64.
 
+### Security
+
+- Upgraded the Go toolchain (1.27.3 → 1.27.4) to clear a `govulncheck` finding in the
+  standard library's `net/http`.
+
 ## [1.0.0-beta.1] - 2026-10-14
 
 ### Added
