@@ -5,7 +5,7 @@ scope: "Per-platform install on Windows, macOS, and Linux — `go install`, buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-13
+updated: 2026-11-16
 depends_on: ["web.md", "configuration.md", "mcp.md"]
 sources: ["../.goreleaser.yaml", "../Makefile"]
 ---
@@ -46,12 +46,12 @@ The binary lands in `$(go env GOBIN)`, or `$(go env GOPATH)/bin` if `GOBIN` is u
 For the `gocrawl` command to work from anywhere, that directory must be on your `PATH`.
 
 `@latest` resolves to the newest **stable** release and skips pre-releases such as
-`v1.0.0-beta.1`, so it can be older than the newest release on the
+`v1.0.0-beta.2`, so it can be older than the newest release on the
 [Releases page](https://github.com/Patience-dot-devl/gocrawl/releases). To install a
 pre-release, or any other specific release, name its tag:
 
 ```sh
-go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@v1.0.0-beta.1
+go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@v1.0.0-beta.2
 ```
 
 `go install` compiles straight from source, which does **not** build the web frontend —
@@ -170,7 +170,7 @@ gocrawl analyzers list
 
 | Installed with | `--version` shows |
 | --- | --- |
-| Prebuilt binary or container image | The release version, for example `1.0.0-beta.1` |
+| Prebuilt binary or container image | The release version, for example `1.0.0-beta.2` |
 | `go install ...@<version>` | The module version Go resolved, for example `0.10.0` |
 | `make build` / `go build` in a Git checkout | A Git-based pseudo-version, for example `1.0.0-beta.1.0.20261110070509-5475e6b0fd16+dirty` (`+dirty` means uncommitted changes) |
 | A build with no version information | `dev` |
