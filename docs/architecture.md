@@ -5,7 +5,7 @@ scope: "How the engine, analyzer pipeline, and report builder fit together; the 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-09
+updated: 2026-11-10
 depends_on: ["web.md", "configuration.md", "roadmap.md"]
 sources: ["../internal/runner/runner.go", "../internal/runner/options.go", "../cmd/gocrawl", "../internal/config", "../internal/crawler", "../internal/render", "../internal/analyze", "../internal/runner", "../internal/report", "../internal/mcpserver", "../internal/crawlrequest", "../internal/webserver", "../internal/crawler/engine.go", "../internal/crawler/frontier.go", "../internal/crawler/progress.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../.github/workflows/ci.yml"]
 ---
@@ -87,7 +87,9 @@ breadth-first walk:
 - With `RespectRobots` on, a worker first waits out the host's robots.txt `Crawl-delay`
   (`Engine.waitCrawlDelay`, capped at `crawler.MaxCrawlDelay`), then the global rate limiter.
   The delay is per host: requests to one host from all workers together are spaced at least
-  the delay apart, and other hosts do not wait.
+  the delay apart, and other hosts do not wait: while one worker waits on a host, the frontier
+  hands the other workers tasks for other hosts first. A task that a pause hands back after its
+  wait keeps its slot and does not wait again.
 - After fetching, links are extracted from the parsed document and pushed onto the frontier
   (skipping external links unless `FollowExternal`, and `nofollow` links unless
   `FollowNofollow`).

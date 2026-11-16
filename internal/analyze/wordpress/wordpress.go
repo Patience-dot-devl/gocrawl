@@ -22,7 +22,7 @@ package wordpress
 
 import (
 	"context"
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"net/url"
 	"regexp"
 	"sort"
@@ -318,13 +318,7 @@ func perPage(p *crawler.Page) []analyze.Issue {
 // indexable reports whether a 200 HTML page is open to indexing: no noindex directive (meta or
 // header) and no canonical pointing to a different URL.
 func indexable(p *crawler.Page) bool {
-	if strings.Contains(strings.ToLower(metaNamed(p.Doc, "robots")), "noindex") {
-		return false
-	}
-	if p.Header != nil && strings.Contains(strings.ToLower(p.Header.Get("X-Robots-Tag")), "noindex") {
-		return false
-	}
-	return !canonicalElsewhere(p)
+	return analyze.Indexable(p) && !canonicalElsewhere(p)
 }
 
 // canonicalElsewhere reports whether the page's <link rel="canonical"> resolves to a URL other
@@ -416,7 +410,7 @@ func (a Analyzer) securityProbes(ctx context.Context, base string) []analyze.Iss
 // restUserSlugs parses a /wp-json/wp/v2/users response and returns the slugs (login names).
 func restUserSlugs(body []byte) []string {
 	var users []map[string]any
-	if json.Unmarshal(body, &users, jsonopts.Crawled) != nil {
+	if jsonv2.Unmarshal(body, &users, jsonopts.Crawled) != nil {
 		return nil
 	}
 	var out []string
