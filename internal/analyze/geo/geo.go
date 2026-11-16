@@ -12,7 +12,7 @@ package geo
 import (
 	"bytes"
 	"context"
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"net/url"
 	"regexp"
 	"sort"
@@ -308,7 +308,7 @@ func jsonldObjects(doc *goquery.Document) []map[string]any {
 			return
 		}
 		var v any
-		if json.Unmarshal([]byte(raw), &v, jsonopts.Crawled) != nil {
+		if jsonv2.Unmarshal([]byte(raw), &v, jsonopts.Crawled) != nil {
 			return
 		}
 		out = append(out, flattenObjects(v)...)

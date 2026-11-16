@@ -206,3 +206,44 @@ func TestFrontierPushFrontRequeuesAtHead(t *testing.T) {
 		t.Fatal("expected exhaustion after both tasks")
 	}
 }
+
+// TestFrontierSkipsBusyHost: while a worker waits on a host's Crawl-delay, next hands out the
+// first task for another host, keeps the busy host's tasks in order, and gives them out again
+// once the host is free.
+func TestFrontierSkipsBusyHost(t *testing.T) {
+	busy := map[string]bool{"slow.example": true}
+	f := newFrontier()
+	f.busy = func(h string) bool { return busy[h] }
+	f.push(task{url: "s1", host: "slow.example"})
+	f.push(task{url: "s2", host: "slow.example"})
+	f.push(task{url: "f1", host: "fast.example"})
+
+	got, ok := f.next(context.Background())
+	if !ok || got.url != "f1" {
+		t.Fatalf("next() = %+v, ok=%v; want f1 (the slow host is busy)", got, ok)
+	}
+	f.taskDone()
+
+	result := make(chan string, 1)
+	go func() {
+		got, _ := f.next(context.Background())
+		result <- got.url
+	}()
+	select {
+	case u := <-result:
+		t.Fatalf("next() returned %q while only the busy host had tasks", u)
+	case <-time.After(50 * time.Millisecond):
+	}
+	f.mu.Lock()
+	busy["slow.example"] = false
+	f.mu.Unlock()
+	f.wake()
+	select {
+	case u := <-result:
+		if u != "s1" {
+			t.Errorf("after the host freed up, next() = %q, want s1", u)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("next() stayed blocked after wake")
+	}
+}

@@ -315,3 +315,31 @@ func TestOpportunityFixtures(t *testing.T) {
 		t.Errorf("ranking:\n got %+v\nwant %+v", got, want)
 	}
 }
+
+// TestOpportunityIgnoresDuplicateWhenCanonicalHasMarkup: a variant URL without the Product
+// block that points its canonical at a crawled page with Product markup is not an opportunity
+// for that canonical page. When the canonical page was not crawled, the duplicate still counts.
+func TestOpportunityIgnoresDuplicateWhenCanonicalHasMarkup(t *testing.T) {
+	canon := `<link rel="canonical" href="https://shop.test/products/tee">`
+	withProduct := `<html><head>` + canon + `<script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"Product","name":"Tee","image":"https://shop.test/tee.jpg",
+		 "offers":{"@type":"Offer","price":"19.99","priceCurrency":"EUR"}}</script></head>
+		<body><form><span>$19.99</span><button>Add to cart</button></form></body></html>`
+	variant := `<html><head>` + canon + `</head><body><form><span>$19.99</span><button>Add to cart</button></form></body></html>`
+
+	s := newSite(t)
+	s.add("https://shop.test/products/tee", withProduct)
+	s.add("https://shop.test/products/tee-red", variant)
+	for _, o := range opportunitiesOf(s.result(nil)) {
+		if o.Data["type"] == "Product" && o.Data["gap"] == "absent" {
+			t.Errorf("canonical page has Product markup, but got opportunity %v", o.Data)
+		}
+	}
+
+	s = newSite(t)
+	s.add("https://shop.test/products/tee-red", variant)
+	got := opportunitiesOf(s.result(nil))
+	if len(got) != 1 || got[0].Data["type"] != "Product" || got[0].Data["pages"] != 1 {
+		t.Errorf("canonical not crawled: want the duplicate's Product opportunity, got %+v", got)
+	}
+}

@@ -1,7 +1,7 @@
 package webserver
 
 import (
-	json "encoding/json/v2"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -44,7 +44,7 @@ func (s *Server) handleImportReport(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = file.Close() }()
 
 	var rep report.Report
-	if err := json.UnmarshalRead(file, &rep); err != nil {
+	if err := jsonv2.UnmarshalRead(file, &rep); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("not a gocrawl JSON report: %w", err))
 		return
 	}
