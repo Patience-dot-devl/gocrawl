@@ -6,6 +6,8 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0-beta.2] - 2026-11-16
+
 ### Added
 
 - `structured` ranks missing structured data by fix: the new `structured-opportunity` finding
@@ -474,7 +476,8 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.1...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.2...HEAD
+[1.0.0-beta.2]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.10.0...v1.0.0-beta.1
 [0.10.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.8.0...v0.9.0
