@@ -5,7 +5,7 @@ scope: "Per-platform install on Windows, macOS, and Linux — `go install`, buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-09
+updated: 2026-11-13
 depends_on: ["web.md", "configuration.md", "mcp.md"]
 sources: ["../.goreleaser.yaml", "../Makefile"]
 ---
@@ -44,6 +44,15 @@ go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@latest
 
 The binary lands in `$(go env GOBIN)`, or `$(go env GOPATH)/bin` if `GOBIN` is unset.
 For the `gocrawl` command to work from anywhere, that directory must be on your `PATH`.
+
+`@latest` resolves to the newest **stable** release and skips pre-releases such as
+`v1.0.0-beta.1`, so it can be older than the newest release on the
+[Releases page](https://github.com/Patience-dot-devl/gocrawl/releases). To install a
+pre-release, or any other specific release, name its tag:
+
+```sh
+go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@v1.0.0-beta.1
+```
 
 `go install` compiles straight from source, which does **not** build the web frontend —
 `gocrawl serve` will work, but `/` serves a placeholder page instead of the real UI. Either
@@ -152,9 +161,28 @@ rendering). `make docker` builds the same image from a checkout.
 ## Verify the install
 
 ```sh
+gocrawl --version
 gocrawl --help
 gocrawl analyzers list
 ```
+
+`gocrawl --version` prints the release you installed, without the leading `v`:
+
+| Installed with | `--version` shows |
+| --- | --- |
+| Prebuilt binary or container image | The release version, for example `1.0.0-beta.1` |
+| `go install ...@<version>` | The module version Go resolved, for example `0.10.0` |
+| `make build` / `go build` in a Git checkout | A Git-based pseudo-version, for example `1.0.0-beta.1.0.20261110070509-5475e6b0fd16+dirty` (`+dirty` means uncommitted changes) |
+| A build with no version information | `dev` |
+
+Releases v0.8.0 through v1.0.0-beta.1 installed with `go install` print `0.8.0` whatever their
+real version. To see which version a binary really holds, ask Go:
+
+```sh
+go version -m "$(which gocrawl)"
+```
+
+The `mod` line names the module version.
 
 On Windows, if `gocrawl` isn't found but you built locally, run it as `.\gocrawl.exe` from
 the build directory, or finish the [PATH setup](#putting-the-go-bin-directory-on-your-path).
@@ -234,4 +262,5 @@ crawls. The `gocrawl` command must be on the client's `PATH` (or referenced by a
 | `command not found: gocrawl` / `'gocrawl' is not recognized` | The Go bin dir isn't on your `PATH`. Run `gocrawl path` (by full path — see [PATH setup](#putting-the-go-bin-directory-on-your-path)) to add it, then restart your terminal. |
 | `go: command not found` | Install [Go 1.27+](https://go.dev/dl/) and reopen your terminal. |
 | `launching headless browser: ...` | No Chrome/Chromium/Edge on `PATH` — install one (see [Headless rendering](#headless-rendering-optional)) or drop `--render headless`. |
+| `gocrawl --version` shows an older version than you just installed | An older `gocrawl` comes first on your `PATH`. `which -a gocrawl` (macOS / Linux) or `where.exe gocrawl` (Windows) lists every copy; delete the stale one or reorder your `PATH`. If the version is still too old, `@latest` may have skipped a pre-release: see [Install with `go install`](#install-with-go-install-all-platforms). |
 | `make: command not found` (Windows) | Use the `go build` / `go install` commands directly — see [Build from source](#build-from-source). |

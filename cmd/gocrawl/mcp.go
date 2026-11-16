@@ -16,7 +16,7 @@ func newMCPCmd() *cobra.Command {
 		Long:  "Starts a Model Context Protocol server on stdin/stdout exposing 'crawl' and\n'list_analyzers' tools, so agentic tools like Conductor or Claude Code can drive\ngocrawl directly.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			server := mcpserver.New(version)
+			server := mcpserver.New(resolveVersion())
 			return server.Run(context.Background(), &mcp.StdioTransport{})
 		},
 	}

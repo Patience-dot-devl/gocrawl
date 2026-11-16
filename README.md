@@ -35,6 +35,9 @@ Works on **Windows, macOS, and Linux**. With [Go 1.27+](https://go.dev/dl/):
 go install github.com/Patience-dot-devl/gocrawl/cmd/gocrawl@latest
 ```
 
+`@latest` installs the newest stable release and skips pre-releases; to get one, name its tag
+(for example `@v1.0.0-beta.1`). Run `gocrawl --version` to see which version you have.
+
 Or build from source:
 
 ```sh
