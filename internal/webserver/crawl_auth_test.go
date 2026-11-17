@@ -12,7 +12,9 @@ import (
 )
 
 func TestStartCrawlRejectsBearerTokenConflicts(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	if err := config.SaveHeaderProfile("auth", "Authorization: Basic eDp5\n"); err != nil {
 		t.Fatal(err)
 	}

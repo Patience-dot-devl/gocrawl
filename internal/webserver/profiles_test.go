@@ -10,7 +10,9 @@ import (
 )
 
 func TestHeaderProfileRoutes(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	srv := newTestServer(t)
 
 	rec, out := doJSON(t, srv, http.MethodGet, "/api/header-profiles", nil)
@@ -56,7 +58,9 @@ func TestHeaderProfileRoutes(t *testing.T) {
 }
 
 func TestHeaderProfileRoutesRejectBadNames(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	srv := newTestServer(t)
 	for _, name := range []string{".hidden", "bad%20name"} {
 		if rec, _ := doJSON(t, srv, http.MethodPut, "/api/header-profiles/"+name, map[string]string{"body": "X-A: 1"}); rec.Code != http.StatusBadRequest {
@@ -77,7 +81,9 @@ func TestHeaderProfileRoutesRejectBadNames(t *testing.T) {
 }
 
 func TestHeaderProfileRoutesGuards(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	if err := config.SaveHeaderProfile("uk", "X-A: 1\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +100,9 @@ func TestHeaderProfileRoutesGuards(t *testing.T) {
 }
 
 func TestHeaderProfileRoutesRejectOversizedBody(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	srv := newTestServer(t)
 	big := `{"body":"X-A: ` + strings.Repeat("a", maxProfileBody) + `"}`
 	rec := settingsRaw(t, srv, http.MethodPut, "/api/header-profiles/uk", "application/json", "", big)

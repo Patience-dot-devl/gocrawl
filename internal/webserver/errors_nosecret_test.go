@@ -31,6 +31,7 @@ func TestStartCrawlUnparsableSeedDoesNotEchoPassword(t *testing.T) {
 func TestStartCrawlMissingHeaderProfileHasNoPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	srv := newTestServer(t)
 	rec, out := doJSON(t, srv, http.MethodPost, "/api/crawls", map[string]any{"url": "http://127.0.0.1:1/", "header_profile": "gone"})
 	if rec.Code != http.StatusBadRequest {
@@ -50,6 +51,7 @@ func TestStartCrawlMissingHeaderProfileHasNoPath(t *testing.T) {
 func TestStartCrawlUnreadableHeaderProfileHasNoPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	path, err := config.HeaderProfilePath("broken")
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +105,7 @@ func TestSettingsSaveErrorDoesNotEchoPath(t *testing.T) {
 func TestProfileIOErrorDoesNotEchoPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	// A file where the profiles folder should be makes listing and saving fail with OS errors.
 	if err := os.MkdirAll(filepath.Join(home, ".gocrawl"), 0o700); err != nil {
 		t.Fatal(err)
