@@ -26,6 +26,9 @@ All notable changes to `gocrawl` are documented here. The format is based on
   gets an unstable index key, which could fetch and report the same page more than once; the
   space is sent as `%20`, as browsers do. A link with a malformed authority such as `//:0:` is
   ignored instead of queued for a fetch that could only fail.
+- On Windows, a broken header-profiles folder (a file where the folder should be) made the web
+  API answer `404` with the OS error, which quoted the folder's full path, and list no
+  profiles. It now answers with the same fixed `500` message as on Linux and macOS.
 - `make lint` and `make check` build golangci-lint with this repo's Go toolchain, so they no
   longer fail with "the Go language version used to build golangci-lint is lower than the
   targeted Go version" when the local Go is older.

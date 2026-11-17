@@ -4,7 +4,6 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/config"
@@ -85,13 +84,15 @@ var (
 
 // writeProfileError answers a config header-profile error. Invalid-name and not-found errors
 // carry only the profile name, so they pass through; anything else is an OS error that quotes
-// the profile's path, so it becomes a fixed 500 message.
+// the profile's path, so it becomes a fixed 500 message. Not-found is matched by type, not by
+// fs.ErrNotExist, which on Windows also covers OS errors that quote the path.
 func writeProfileError(w http.ResponseWriter, err error) {
+	var notFound *config.HeaderProfileNotFoundError
 	switch {
 	case errors.Is(err, config.ErrInvalidHeaderProfile):
 		writeError(w, http.StatusBadRequest, err)
-	case errors.Is(err, fs.ErrNotExist):
-		writeError(w, http.StatusNotFound, err)
+	case errors.As(err, &notFound):
+		writeError(w, http.StatusNotFound, notFound)
 	default:
 		writeError(w, http.StatusInternalServerError, errProfileIO)
 	}

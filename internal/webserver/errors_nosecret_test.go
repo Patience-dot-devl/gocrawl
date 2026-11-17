@@ -1,7 +1,9 @@
 package webserver
 
 import (
+	"io/fs"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,5 +123,25 @@ func TestProfileIOErrorDoesNotEchoPath(t *testing.T) {
 	rec, _ = doJSON(t, srv, http.MethodPut, "/api/header-profiles/x", map[string]any{"body": "X-Test: 1"})
 	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), home) {
 		t.Errorf("put: status %d, body %s; want a 500 without a path", rec.Code, rec.Body)
+	}
+}
+
+// TestProfileErrorHidesRawNotExist covers the error Windows produced in CI: creating the
+// profiles folder through a file fails with ERROR_PATH_NOT_FOUND, which Go reports as
+// fs.ErrNotExist but which quotes the full path. Only a profile that is genuinely missing may
+// pass through as 404; a raw OS error must become the fixed 500.
+func TestProfileErrorHidesRawNotExist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret-dir", ".gocrawl", "headers")
+	raw := &fs.PathError{Op: "mkdir", Path: path, Err: fs.ErrNotExist}
+	rec := httptest.NewRecorder()
+	writeProfileError(rec, raw)
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret-dir") {
+		t.Errorf("raw not-exist: status %d, body %s; want a 500 without a path", rec.Code, rec.Body)
+	}
+
+	rec = httptest.NewRecorder()
+	writeProfileError(rec, &config.HeaderProfileNotFoundError{Name: "uk"})
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `\"uk\"`) {
+		t.Errorf("missing profile: status %d, body %s; want a 404 naming the profile", rec.Code, rec.Body)
 	}
 }

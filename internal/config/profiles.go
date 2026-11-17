@@ -15,8 +15,21 @@ import (
 )
 
 // ErrInvalidHeaderProfile marks a header profile name or body that can't be used. The web
-// API maps it to 400; a profile that doesn't exist wraps fs.ErrNotExist instead.
+// API maps it to 400; a profile that doesn't exist is a *HeaderProfileNotFoundError instead.
 var ErrInvalidHeaderProfile = errors.New("invalid header profile")
+
+// HeaderProfileNotFoundError reports that a named profile has no file. Its message carries
+// only the name, so the web API can show it, unlike a raw OS error, which quotes the path.
+// It matches fs.ErrNotExist under errors.Is. Callers that answer a client must check for this
+// type, not for fs.ErrNotExist: on Windows an OS error for a broken profiles folder (a file
+// where a folder should be) is also fs.ErrNotExist, and it carries the full path.
+type HeaderProfileNotFoundError struct{ Name string }
+
+func (e *HeaderProfileNotFoundError) Error() string {
+	return fmt.Sprintf("header profile %q: %v", e.Name, fs.ErrNotExist)
+}
+
+func (e *HeaderProfileNotFoundError) Unwrap() error { return fs.ErrNotExist }
 
 const headerProfileExt = ".headers"
 
@@ -24,9 +37,14 @@ const headerProfileExt = ".headers"
 // directory is not an error: no profile has been saved yet.
 func ListHeaderProfiles() ([]string, error) {
 	names := []string{}
-	entries, err := os.ReadDir(HeaderProfileDir())
+	dir := HeaderProfileDir()
+	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
-		return names, nil
+		// Windows also reports reading a file as a folder as not-exist; only a path that is
+		// truly absent means "nothing saved yet".
+		if _, statErr := os.Stat(dir); errors.Is(statErr, fs.ErrNotExist) {
+			return names, nil
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -53,7 +71,7 @@ func ReadHeaderProfile(name string) (string, error) {
 	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("header profile %q: %w", name, fs.ErrNotExist)
+		return "", &HeaderProfileNotFoundError{Name: name}
 	}
 	if err != nil {
 		return "", err
@@ -98,7 +116,7 @@ func DeleteHeaderProfile(name string) error {
 	}
 	if err := os.Remove(path); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("header profile %q: %w", name, fs.ErrNotExist)
+			return &HeaderProfileNotFoundError{Name: name}
 		}
 		return err
 	}
