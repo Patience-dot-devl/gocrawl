@@ -1,8 +1,13 @@
 BINARY := gocrawl
 PKG := ./...
 # Same golangci-lint version as .github/workflows/ci.yml; bump both together. `go run` builds it
-# with this repo's Go toolchain, so a stale brew-installed binary can't break `make lint`.
-GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+# from source, so a stale brew-installed binary can't break `make lint`. GOTOOLCHAIN pins that
+# build to at least this repo's toolchain (go.mod): `go run pkg@version` otherwise picks the
+# toolchain from golangci-lint's own go.mod, and a linter built with an older Go refuses to load
+# this module ("the Go language version used to build golangci-lint is lower than the targeted
+# Go version"). `+auto` still lets a newer toolchain win.
+GO_TOOLCHAIN := $(shell awk '/^toolchain /{print $$2}' go.mod)
+GOLANGCI_LINT ?= GOTOOLCHAIN=$(GO_TOOLCHAIN)+auto go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 .PHONY: build test vet lint check docs run tidy clean install web-build dev docker
 

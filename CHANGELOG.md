@@ -6,6 +6,33 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `gocrawl serve` requires an auth token when it listens on a non-loopback address, which
+  includes the container image. Pass one with `--auth-token` or `GOCRAWL_AUTH_TOKEN`, or the
+  server generates one and prints a link carrying it. Browsers open that link once and get an
+  `HttpOnly` session cookie; API clients send `Authorization: Bearer <token>`. `--no-auth` keeps
+  the old open behaviour for servers behind an authenticating proxy. **Breaking for
+  non-loopback API clients and container users:** requests without the token now get `401`.
+- A crashing analyzer no longer loses the crawl: gocrawl keeps every other analyzer's findings
+  and reports the crash as the new `analyzer-panic` error.
+- Fuzz tests for link resolution, robots.txt handling, the JSON-LD parser and the redirect-rule
+  CSV parser.
+- CI runs the Go tests on Windows and macOS as well as Linux.
+
+### Fixed
+
+- A link ending in several slashes (`/a//`) or carrying a space in its query string no longer
+  gets an unstable index key, which could fetch and report the same page more than once; the
+  space is sent as `%20`, as browsers do. A link with a malformed authority such as `//:0:` is
+  ignored instead of queued for a fetch that could only fail.
+- `make lint` and `make check` build golangci-lint with this repo's Go toolchain, so they no
+  longer fail with "the Go language version used to build golangci-lint is lower than the
+  targeted Go version" when the local Go is older.
+- The roadmap lists what has shipped since it was last updated (web UI, container image,
+  authenticated crawling, sitemap generation, redirect checks) and the plans from the November
+  2026 review.
+
 ## [1.0.0-beta.2] - 2026-11-16
 
 ### Added

@@ -23,6 +23,7 @@ type Server struct {
 	guiSettingsPath string
 	mux             *http.ServeMux
 	allowAnyHost    bool
+	authToken       string
 	maxRunning      int
 }
 

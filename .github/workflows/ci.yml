@@ -33,6 +33,24 @@ jobs:
       - name: Test
         run: go test -race ./...
 
+  # The release ships Windows and macOS binaries, and cmd/gocrawl has OS-specific code (PATH
+  # setup, caffeinate), so the tests run there too. -race stays on the Linux job above; here
+  # the point is OS behaviour (paths, permissions, line endings), not data races.
+  test-os:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test
+        run: go test ./...
+
   lint:
     runs-on: ubuntu-latest
     steps:

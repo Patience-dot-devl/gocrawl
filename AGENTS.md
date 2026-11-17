@@ -179,7 +179,7 @@ make run      # build + crawl https://example.com --depth 1
 CI (`.github/workflows/ci.yml`) runs `go mod verify`, `go vet`, `go build`,
 `go test -race`, and golangci-lint on every push/PR to `main`; `make check` runs the same
 steps locally, plus a `gofmt` check. CI also lints and builds `web/` and builds the Docker
-image, which `make check` does not. golangci-lint enables `errcheck`, `govet`,
+image, and runs the Go tests on Windows and macOS, which `make check` does not. golangci-lint enables `errcheck`, `govet`,
 `ineffassign`, `staticcheck`, `unused`, `misspell` (errcheck is relaxed in `_test.go` files).
 
 ## Conventions

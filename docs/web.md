@@ -5,7 +5,7 @@ scope: "Running `gocrawl serve`, the embedded browser UI, the REST API it's buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-10
+updated: 2026-11-17
 depends_on: ["mcp.md", "output.md", "redirect-check.md"]
 sources: ["../internal/runner/runner.go", "../internal/webserver", "../cmd/gocrawl/serve.go", "../web", "../Dockerfile", "../web/src/fonts/OFL.txt", "../web/src/styles/tokens.css", "../web/src/theme.ts", "../web/scripts/contrast.mjs", "../web/src/styles/base.css", "../web/src", "../web/src/routes.ts", "../web/src/api/client.ts", "../web/src/api/crawls.ts", "../web/src/types/crawls.ts", "../internal/webserver/job.go", "../internal/jsonopts"]
 ---
@@ -28,6 +28,8 @@ gocrawl serve
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--addr` | `127.0.0.1:8080` | Address to listen on. Loopback by default; see [Exposure](#exposure) before binding anything else. |
+| `--auth-token` | `$GOCRAWL_AUTH_TOKEN`, else generated on a non-loopback `--addr` | Token every request must carry; see [Exposure](#exposure). |
+| `--no-auth` | `false` | Serve a non-loopback `--addr` without a token, for a reverse proxy that authenticates in front of it. |
 | `--store-dir` | `~/.gocrawl/crawls` | Crawl history root, same store used by `--save`, `gocrawl history`, and `gocrawl compare`. |
 
 Open `http://localhost:8080` in a browser. Ctrl-C shuts the server down gracefully (in-flight
@@ -38,8 +40,8 @@ behind a crawl.
 
 ## Exposure
 
-The server has **no authentication**. It is built to be driven from a browser on the same
-machine, and a few guards keep it that way:
+On loopback (the default) the server needs no login. It is built to be driven from a browser
+on the same machine, and a few guards keep it that way:
 
 - It listens on loopback by default, and rejects (`403`) any request whose `Host` header is
   not `localhost` / `127.0.0.1` / `[::1]`. That stops DNS-rebinding pages, which reach
@@ -53,12 +55,34 @@ machine, and a few guards keep it that way:
 - At most 2 redirect checks run at once; a third `POST /api/redirect-checks` returns `429`.
 
 Binding a non-loopback `--addr` (for example `:8080` or `0.0.0.0:8080`) switches the `Host`
-check off, prints a warning, and makes the API reachable by anyone on that network. A crawl
-runs from this machine with whatever proxy, Basic Auth, cookie, or custom headers the request
-supplies, and can name any header profile stored on it, so only do this behind something that
-authenticates (a reverse proxy, VPN, or SSH tunnel). The same goes for the stored data: anyone
-on that network can also read and overwrite header-profile bodies (which hold secrets) and the
-GUI settings.
+check off and requires an **auth token** on every request instead. The token is
+`--auth-token`, else `$GOCRAWL_AUTH_TOKEN`, else a random one generated at startup, and the
+server prints a link that carries it:
+
+```text
+gocrawl web UI listening on http://localhost:8080
+open http://localhost:8080/?token=3f9c… (API clients: Authorization: Bearer <token>)
+```
+
+- **Browsers:** open that link once. The server trades `?token=` for an `HttpOnly`,
+  `SameSite=Strict` session cookie and redirects to the same page without the token, so it
+  stays out of the address bar and history.
+- **API clients and scripts:** send `Authorization: Bearer <token>`.
+- Anything else gets `401`.
+
+A generated token changes on every restart; set `--auth-token` or `GOCRAWL_AUTH_TOKEN` to keep
+one. You can also set a token on a loopback server; it is then required there too.
+
+The token matters because a crawl runs from this machine with whatever proxy, Basic Auth,
+cookie, or custom headers the request supplies, and can name any header profile stored on it.
+Anyone with the token can also read and overwrite header-profile bodies (which hold secrets)
+and the GUI settings, so treat it like a password. The server speaks plain HTTP: over a network
+you don't trust, put TLS in front of it (a reverse proxy, VPN, or SSH tunnel), or the token
+travels in the clear.
+
+If something in front of the server already authenticates (a reverse proxy, VPN, or SSH
+tunnel), `--no-auth` drops the token and the server prints a warning instead. Anyone who can
+reach it can then use it.
 
 ## Building the real UI into the binary
 
@@ -104,10 +128,11 @@ docker run --rm -p 127.0.0.1:8080:8080 -v gocrawl:/home/nonroot/.gocrawl \
 ```
 
 - The container runs `gocrawl serve --addr 0.0.0.0:8080`, because a published port cannot
-  reach a loopback-only listener. That is a non-loopback bind, so the `Host` check is off and
-  the server prints the warning described in [Exposure](#exposure). Publish the port on
-  loopback (`-p 127.0.0.1:8080:8080`, as above), or put something that authenticates in front
-  of it.
+  reach a loopback-only listener. That is a non-loopback bind, so the server requires an auth
+  token (see [Exposure](#exposure)) and prints a link carrying it; run `docker logs <container>`
+  to see it, or pass your own with `-e GOCRAWL_AUTH_TOKEN=…` so it survives restarts. Still
+  publish the port on loopback (`-p 127.0.0.1:8080:8080`, as above) unless other machines need
+  it.
 - `/home/nonroot/.gocrawl` holds the crawl store, `gui.json` and header profiles. Mount a
   volume there to keep them.
 - Any other subcommand works too. The report goes to stdout, so redirect it to a file on the

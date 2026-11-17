@@ -5,7 +5,7 @@ scope: "Per-platform install on Windows, macOS, and Linux — `go install`, buil
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-16
+updated: 2026-11-17
 depends_on: ["web.md", "configuration.md", "mcp.md"]
 sources: ["../.goreleaser.yaml", "../Makefile"]
 ---
@@ -150,9 +150,10 @@ docker run --rm -p 127.0.0.1:8080:8080 -v gocrawl:/home/nonroot/.gocrawl \
   ghcr.io/patience-dot-devl/gocrawl:latest
 ```
 
-It starts `gocrawl serve`; see [Running in Docker](web.md#running-in-docker) for what the
-volume holds, why the port is published on loopback, and what the image can't do (headless
-rendering). `make docker` builds the same image from a checkout.
+It starts `gocrawl serve` and prints a link with an access token (`docker logs <container>`
+shows it again); open that link rather than plain `http://localhost:8080`. See
+[Running in Docker](web.md#running-in-docker) for the token, what the volume holds, why the
+port is published on loopback, and what the image can't do (headless rendering). `make docker` builds the same image from a checkout.
 
 `latest` moves only on stable releases. While every release is a pre-release (such as
 `1.0.0-beta.2`), `latest` does not exist yet: use the version tag, for example

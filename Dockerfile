@@ -40,7 +40,8 @@ COPY --from=build --chown=65532:65532 /out/state/.gocrawl /home/nonroot/.gocrawl
 VOLUME ["/home/nonroot/.gocrawl"]
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gocrawl"]
-# A container must listen on all interfaces to be reachable through a published port. The web
-# API has no authentication, so publish it on loopback only (docker run -p 127.0.0.1:8080:8080)
-# or put something that authenticates in front of it; see docs/web.md#exposure.
+# A container must listen on all interfaces to be reachable through a published port. On a
+# non-loopback address serve requires an auth token: GOCRAWL_AUTH_TOKEN if set, else a random
+# one printed in the startup log. Still publish the port on loopback unless other machines need
+# it (docker run -p 127.0.0.1:8080:8080); see docs/web.md#exposure.
 CMD ["serve", "--addr", "0.0.0.0:8080"]
