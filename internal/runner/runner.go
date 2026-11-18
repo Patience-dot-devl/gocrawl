@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -190,6 +191,13 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	progress.setPhase(PhaseSitemap)
 	sm := discoverSitemap(ctx, engine, governed, seed)
 	progress.setSitemap(sm, engine.Normalize)
+
+	// List mode: crawl.urls and/or every in-scope URL the sitemap lists, and follow nothing.
+	list := listURLs(cfg.Crawl.URLs, cfg.Crawl.FromSitemap, sm)
+	if cfg.Crawl.FromSitemap && len(sm.inScope) == 0 {
+		return nil, fmt.Errorf("from_sitemap: no sitemap with in-scope URLs found for %s", seed)
+	}
+	engine.SetURLs(list)
 	// attach before announcing the crawling phase, so a pause queued during the pre-pass is
 	// already in the engine's state when the phase event goes out.
 	settings.control.attach(engine)
@@ -229,6 +237,9 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	// rather than holding a large crawl's raw bytes and parsed DOM trees in memory for the
 	// rest of the process's life.
 	result.ReleaseBodies()
+	if len(list) > 0 {
+		rep.Notes = append(rep.Notes, listNote(list, result, engine.Normalize))
+	}
 	if len(skipped) > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("strip_query is on, so query-dependent analyzers were skipped: %s", strings.Join(skipped, ", ")))
 	}
@@ -316,4 +327,42 @@ func names(as []analyze.Analyzer) map[string]bool {
 		out[a.Name()] = true
 	}
 	return out
+}
+
+// listURLs is the list-mode URL list: the configured URLs, then (with fromSitemap) every
+// in-scope URL in the sitemap, in sorted order so the crawl order is stable. It is nil when
+// neither is set, which leaves the crawl in its normal link-following mode.
+func listURLs(configured []string, fromSitemap bool, sm sitemapSet) []string {
+	list := append([]string(nil), configured...)
+	if fromSitemap {
+		fromSM := make([]string, 0, len(sm.inScope))
+		for u := range sm.inScope {
+			fromSM = append(fromSM, u)
+		}
+		sort.Strings(fromSM)
+		list = append(list, fromSM...)
+	}
+	return list
+}
+
+// listNote says how many listed URLs were crawled and, if some were not, why that happens.
+func listNote(list []string, result *crawler.Result, normalize func(string) string) string {
+	unique := map[string]bool{}
+	missing := 0
+	for _, u := range list {
+		k := normalize(u)
+		if unique[k] {
+			continue
+		}
+		unique[k] = true
+		if _, ok := result.Page(k); !ok {
+			missing++
+		}
+	}
+	note := fmt.Sprintf("list mode: crawled the %d listed URLs without following links", len(unique))
+	if missing > 0 {
+		note = fmt.Sprintf("list mode: %d of %d listed URLs were not crawled: outside the crawl scope (another host; see --external), "+
+			"disallowed by robots.txt, excluded by include/exclude, or over --max-pages", missing, len(unique))
+	}
+	return note
 }

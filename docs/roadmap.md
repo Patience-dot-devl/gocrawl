@@ -201,8 +201,9 @@ and scale.
   (for example SQLite) and stream them through the analyzers, lifting the memory ceiling and
   making it possible to checkpoint and continue large crawls. The per-URL table and the MCP
   queries can share the same store.
-- **List mode and a single-crawl CI gate** — audit a list of URLs or a sitemap's URLs without
-  following links (ad landing pages), and fail a `gocrawl crawl` on a chosen severity.
+- ✅ **List mode and a single-crawl CI gate** — `--list FILE` and `--from-sitemap` audit a set
+  of URLs without following links, and `--fail-on SEVERITY` fails a `gocrawl crawl` on a chosen
+  severity. See [List mode](configuration.md#list-mode).
 - **External links and page resources** — check the status of outbound links, images, CSS and
   JS, not just internal links.
 - **Fetch the URL as written** — the crawl requests the dedup form of a URL, which strips the

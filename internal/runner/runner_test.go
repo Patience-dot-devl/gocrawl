@@ -306,3 +306,86 @@ func TestRunRollsUpSiteWideInfo(t *testing.T) {
 		t.Errorf("per_page_info: %d seo-missing-viewport issues (rolled up: %v), want %d per-page issues", n, rolled, pages)
 	}
 }
+
+// listSite serves /a and /b (both in its sitemap) linking to /c and /d (not in it), and
+// records every page path fetched.
+func listSite(t *testing.T, withSitemap bool) (*httptest.Server, func() []string) {
+	t.Helper()
+	var (
+		mu    sync.Mutex
+		paths []string
+		base  string
+	)
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/robots.txt":
+			http.NotFound(w, r)
+		case "/sitemap.xml":
+			if !withSitemap {
+				http.NotFound(w, r)
+				return
+			}
+			fmt.Fprintf(w, `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>%s/a</loc></url><url><loc>%s/b</loc></url></urlset>`, base, base)
+		default:
+			if strings.HasSuffix(r.URL.Path, ".xml") { // sitemap discovery probes other paths
+				http.NotFound(w, r)
+				return
+			}
+			mu.Lock()
+			paths = append(paths, r.URL.Path)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, `<html><head><title>List mode test page</title></head><body><a href="/c">c</a><a href="/d">d</a></body></html>`)
+		}
+	}))
+	base = site.URL
+	t.Cleanup(site.Close)
+	return site, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		out := append([]string(nil), paths...)
+		sort.Strings(out)
+		return out
+	}
+}
+
+func TestRunListModeCrawlsOnlyListedURLs(t *testing.T) {
+	site, fetched := listSite(t, false)
+	cfg := config.Default()
+	cfg.Analyzers.Enabled = []string{"seo"}
+	cfg.Crawl.URLs = []string{site.URL + "/a", "https://other.example/x"}
+
+	rep, err := Run(context.Background(), cfg, site.URL+"/a")
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := fetched(); len(got) != 1 || got[0] != "/a" {
+		t.Errorf("fetched %v, want only /a (its links not followed, the other host skipped)", got)
+	}
+	if !strings.Contains(strings.Join(rep.Notes, "\n"), "1 of 2 listed URLs were not crawled") {
+		t.Errorf("notes %q do not report the skipped URL", rep.Notes)
+	}
+}
+
+func TestRunFromSitemapCrawlsSitemapURLs(t *testing.T) {
+	site, fetched := listSite(t, true)
+	cfg := config.Default()
+	cfg.Analyzers.Enabled = []string{"seo"}
+	cfg.Crawl.FromSitemap = true
+
+	rep, err := Run(context.Background(), cfg, site.URL)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := fetched(); strings.Join(got, ",") != "/a,/b" {
+		t.Errorf("fetched %v, want /a and /b from the sitemap, and not the seed or /c and /d", got)
+	}
+	if !strings.Contains(strings.Join(rep.Notes, "\n"), "crawled the 2 listed URLs") {
+		t.Errorf("notes = %q", rep.Notes)
+	}
+
+	nositemap, _ := listSite(t, false)
+	if _, err := Run(context.Background(), cfg, nositemap.URL); err == nil || !strings.Contains(err.Error(), "from_sitemap") {
+		t.Errorf("from_sitemap without a sitemap: err = %v, want a from_sitemap error", err)
+	}
+}

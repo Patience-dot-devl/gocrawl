@@ -90,6 +90,11 @@ type CrawlConfig struct {
 	AdaptiveDelay   bool          `mapstructure:"adaptive_delay"`
 	Include         []string      `mapstructure:"include"`
 	Exclude         []string      `mapstructure:"exclude"`
+	// URLs switches to list mode: crawl exactly these URLs and follow no links
+	// (crawler.Options.URLs). FromSitemap does the same with the URLs in the seed's sitemap,
+	// read by the runner's sitemap pre-pass; the two combine.
+	URLs        []string `mapstructure:"urls"`
+	FromSitemap bool     `mapstructure:"from_sitemap"`
 }
 
 // OutputConfig controls report output.
@@ -104,6 +109,9 @@ type OutputConfig struct {
 	// that repeats identically across most of a host's pages is reported once for the host
 	// (analyze.RollupSiteWide).
 	PerPageInfo bool `mapstructure:"per_page_info"`
+	// FailOn makes the crawl exit with an error, after writing the report, when it found an
+	// issue of this severity or worse: "error", "warning" or "info". Empty never fails.
+	FailOn string `mapstructure:"fail_on"`
 }
 
 // AnalyzersConfig selects which analyzers run.
@@ -187,6 +195,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("output.path", d.Output.Path)
 	v.SetDefault("output.sitemap_path", d.Output.SitemapPath)
 	v.SetDefault("output.per_page_info", d.Output.PerPageInfo)
+	v.SetDefault("output.fail_on", d.Output.FailOn)
+	v.SetDefault("crawl.urls", d.Crawl.URLs)
+	v.SetDefault("crawl.from_sitemap", d.Crawl.FromSitemap)
 	v.SetDefault("crawl.max_depth", d.Crawl.MaxDepth)
 	v.SetDefault("crawl.max_pages", d.Crawl.MaxPages)
 	v.SetDefault("crawl.concurrency", d.Crawl.Concurrency)
@@ -235,6 +246,11 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("invalid output format %q (want json, csv, or html)", c.Output.Format)
 	}
+	switch c.Output.FailOn {
+	case "", "error", "warning", "info":
+	default:
+		return fmt.Errorf("invalid fail_on %q (want error, warning, or info)", c.Output.FailOn)
+	}
 	return nil
 }
 
@@ -260,6 +276,7 @@ func (c Config) ToOptions() (crawler.Options, error) {
 	o.AllowSubdomains = c.Crawl.AllowSubdomains
 	o.FollowExternal = c.Crawl.FollowExternal
 	o.FollowNofollow = c.Crawl.FollowNofollow
+	o.URLs = c.Crawl.URLs
 	o.StripQuery = c.Crawl.StripQuery
 	o.Verbose = c.Crawl.Verbose
 	o.AdaptiveDelay = c.Crawl.AdaptiveDelay

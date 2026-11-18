@@ -8,6 +8,15 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Added
 
+- List mode for `gocrawl crawl`: `--list FILE` (`crawl.urls`) crawls exactly the URLs in a file
+  (or stdin with `-`) and `--from-sitemap` (`crawl.from_sitemap`) exactly the URLs in the
+  site's sitemap, following no links from them, for example to audit a set of ad landing pages.
+  Scope, robots.txt and `--max-pages` still apply, and a report note says how many listed URLs
+  were skipped.
+- `gocrawl crawl --fail-on error|warning|info` (`output.fail_on`) exits with a non-zero status,
+  after writing the report, when it found an issue at or above that severity: a CI gate on a
+  single crawl.
+
 - `gocrawl serve` requires an auth token when it listens on a non-loopback address, which
   includes the container image. Pass one with `--auth-token` or `GOCRAWL_AUTH_TOKEN`, or the
   server generates one and prints a link carrying it. Browsers open that link once and get an

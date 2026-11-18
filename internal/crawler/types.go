@@ -347,6 +347,12 @@ type Options struct {
 	AllowSubdomains bool
 	FollowExternal  bool
 	FollowNofollow  bool
+	// URLs, when non-empty, switches the crawl to list mode: it fetches exactly these URLs, all
+	// at depth 0, and follows no links from them. The seed passed to Crawl still fixes the host
+	// scope and the credential host, and every URL still passes the scope, robots.txt and
+	// MaxPages checks a discovered link would. Links are still extracted from each page, so
+	// link analyzers see them; they are just not queued.
+	URLs []string
 	// StripQuery drops the query string when normalizing URLs, so URLs that differ only by
 	// their query collapse to one and are crawled once.
 	StripQuery   bool
