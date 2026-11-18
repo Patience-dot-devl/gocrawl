@@ -83,6 +83,9 @@ output:
   format: "json"        # "json", "csv", or "html"
   path: ""              # file to write to; empty = stdout
   sitemap_path: ""      # also write a standard sitemap.xml of the crawled pages here
+  # An info finding that repeats identically across most of a host's pages is reported once
+  # for the host, with the page count and example URLs. true lists it on every page instead.
+  per_page_info: false
 
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those

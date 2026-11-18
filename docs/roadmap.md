@@ -5,7 +5,7 @@ scope: "What's shipped (incl. the SEA and AI-search analyzers), what's in progre
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-17
+updated: 2026-11-18
 depends_on: ["analyzers.md", "architecture.md", "output.md", "mcp.md", "configuration.md", "web.md", "redirect-check.md"]
 sources: ["../internal/crawler", "../internal/store", "../internal/diff", "../internal/sitemapgen"]
 ---
@@ -186,10 +186,11 @@ A review of the code and a 20,000-page load test (about 100 KB of memory per pag
 the report is written; 240,011 issues, of which 5 were warnings) pointed at report usability
 and scale.
 
-- **Site-wide findings reported once** — conditions true of the whole site (a missing CSP
-  header, no tracking tags, no Open Graph tags) are reported per page today, which buries the
-  real findings. Roll them up per host or per page template, as `--security-audit` already
-  does.
+- ✅ **Site-wide findings reported once** — an `info` finding repeated identically across
+  most of a host's pages is reported once for the host, with a page count and examples
+  ([Site-wide findings](output.md#site-wide-findings)). On the 20,000-page test site the report
+  went from 237,152 issues (129 MB) to 100,018 (64 MB). Most of the remainder is per-page
+  measurements (link counts, response time) that belong in the per-URL table below.
 - **Per-URL data table** — one row per URL (indexability, canonical, title and description
   length, word count, inlinks, depth, response time) in the JSON, CSV and web UI. The
   analyzers compute most of this already.

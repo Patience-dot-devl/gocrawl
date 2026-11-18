@@ -33,6 +33,7 @@ func newCrawlCmd() *cobra.Command {
 	f.StringP("out", "o", "", "output file (default: stdout)")
 	f.StringP("format", "f", "", "output format: json, csv, or html")
 	f.String("sitemap", "", "also write a standard sitemap.xml of crawled pages to this path")
+	f.Bool("per-page-info", false, "list every info finding per page, instead of once per host when it repeats across most of a host's pages")
 	f.StringSlice("include", nil, "only crawl URLs matching these regexes")
 	f.StringSlice("exclude", nil, "skip URLs matching these regexes")
 	f.String("user-agent", "", "User-Agent header")
@@ -139,6 +140,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("sitemap") {
 		cfg.Output.SitemapPath, _ = f.GetString("sitemap")
+	}
+	if f.Changed("per-page-info") {
+		cfg.Output.PerPageInfo, _ = f.GetBool("per-page-info")
 	}
 	if f.Changed("include") {
 		cfg.Crawl.Include, _ = f.GetStringSlice("include")

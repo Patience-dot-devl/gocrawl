@@ -100,6 +100,10 @@ type OutputConfig struct {
 	// a side output (independent of Format). The crawled site is also always rendered as a "Site
 	// map" tab in the HTML report.
 	SitemapPath string `mapstructure:"sitemap_path"`
+	// PerPageInfo keeps every info finding listed per page. Off by default: an info finding
+	// that repeats identically across most of a host's pages is reported once for the host
+	// (analyze.RollupSiteWide).
+	PerPageInfo bool `mapstructure:"per_page_info"`
 }
 
 // AnalyzersConfig selects which analyzers run.
@@ -182,6 +186,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("output.format", d.Output.Format)
 	v.SetDefault("output.path", d.Output.Path)
 	v.SetDefault("output.sitemap_path", d.Output.SitemapPath)
+	v.SetDefault("output.per_page_info", d.Output.PerPageInfo)
 	v.SetDefault("crawl.max_depth", d.Crawl.MaxDepth)
 	v.SetDefault("crawl.max_pages", d.Crawl.MaxPages)
 	v.SetDefault("crawl.concurrency", d.Crawl.Concurrency)

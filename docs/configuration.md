@@ -5,7 +5,7 @@ scope: "Every option, flag, env var, and default; config layering; analyzer sele
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-09
+updated: 2026-11-18
 depends_on: ["output.md", "web.md", "analyzers.md", "storage.md", "mcp.md"]
 sources: ["../internal/config/config.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../configs/example.yaml"]
 ---
@@ -66,6 +66,7 @@ default** (the value used when you set nothing).
 | `output.format` | `--format` / `-f` | string | `json` | `json`, `csv`, or `html`. |
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
 | `output.sitemap_path` | `--sitemap` | string | *(none)* | Also write a standard `sitemap.xml` of crawled pages here. The HTML report always includes a [Site map tab](output.md#site-map). |
+| `output.per_page_info` | `--per-page-info` | bool | `false` | List every `info` finding on its page. By default an `info` finding that repeats identically across most of a host's pages is reported once for the host; see [Site-wide findings](output.md#site-wide-findings). |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
 | `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized checks: AI-search heuristics and WordPress security probes (see below). |
@@ -551,6 +552,9 @@ output:
   format: "json"        # "json", "csv", or "html"
   path: ""              # file to write to; empty = stdout
   sitemap_path: ""      # also write a standard sitemap.xml of the crawled pages here
+  # An info finding that repeats identically across most of a host's pages is reported once
+  # for the host, with the page count and example URLs. true lists it on every page instead.
+  per_page_info: false
 
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those

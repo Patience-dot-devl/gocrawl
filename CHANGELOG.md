@@ -20,6 +20,18 @@ All notable changes to `gocrawl` are documented here. The format is based on
   CSV parser.
 - CI runs the Go tests on Windows and macOS as well as Linux.
 
+### Changed
+
+- An `info` finding that is the same on at least 10 pages and at least half of a host's HTML
+  pages is reported once for the host instead of on every page. The single finding names the
+  host's root URL, says how many pages had it, and lists up to 10 examples under
+  `data.site_wide`; it appears under **Site-wide issues** in the HTML site map. On a 20,000-page
+  test site this took the report from 237,152 issues (129 MB) to 100,018 (64 MB). Warnings,
+  errors and findings with per-page data (link counts, response times) are still listed per
+  page. `--per-page-info` (`output.per_page_info`) restores the old output. `gocrawl compare`
+  against a crawl saved before this change shows the per-page lines as resolved and the
+  grouped ones as new.
+
 ### Fixed
 
 - A link ending in several slashes (`/a//`) or carrying a space in its query string no longer
