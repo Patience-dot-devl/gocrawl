@@ -165,6 +165,9 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	// Fix the crawl's host scope now rather than inside Crawl: the sitemap pre-pass needs
 	// InScope, and its robots.txt fetch must already know the seed host so credentials reach
 	// that host (and only that host).
+	// Crawl fetches the seed as given, trailing slash kept; SetSeed returns the dedup form,
+	// which only fixes the scope and keys the seed.
+	givenSeed := seed
 	seed, err = engine.SetSeed(seed)
 	if err != nil {
 		return nil, err
@@ -203,7 +206,7 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	settings.control.attach(engine)
 	progress.setPhase(PhaseCrawling)
 
-	result, err := engine.Crawl(ctx, seed)
+	result, err := engine.Crawl(ctx, givenSeed)
 	settings.control.detach()
 	if err != nil {
 		return nil, err

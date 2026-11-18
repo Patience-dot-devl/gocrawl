@@ -43,6 +43,14 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ### Fixed
 
+- The crawl fetches a URL with its trailing slash as written, keeping the slash-stripped form
+  only to tell `/a` and `/a/` apart as one page. It used to request the stripped form, so a
+  slash-canonical site (WordPress) answered every page with a redirect: twice the requests and
+  an `http-redirect` finding per page. On a 2,000-page test site, requests went from 4,006 to
+  2,006 and `http-redirect` findings from 2,000 to 0. robots.txt is now checked against the
+  path actually requested, so `Disallow: /private/` keeps the crawl from requesting
+  `/private`, which it used to do.
+
 - A link ending in several slashes (`/a//`) or carrying a space in its query string no longer
   gets an unstable index key, which could fetch and report the same page more than once; the
   space is sent as `%20`, as browsers do. A link with a malformed authority such as `//:0:` is
