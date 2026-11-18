@@ -97,6 +97,13 @@ gocrawl history                                     # list saved crawls
 gocrawl compare example.com/<earlier> latest        # what's new / resolved
 gocrawl compare before.json after.json --fail-on-new  # CI gate on regressions
 
+# Audit a list of landing pages without following links, or exactly the sitemap's pages
+gocrawl crawl --list landing-pages.txt
+gocrawl crawl https://example.com --from-sitemap
+
+# Fail a CI build when the crawl finds an error
+gocrawl crawl https://staging.example.com --fail-on error
+
 # List every available analyzer
 gocrawl analyzers list
 

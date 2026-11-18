@@ -271,6 +271,9 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		}
 		mu.Unlock()
 
+		if len(e.opts.URLs) > 0 {
+			return // list mode: fetch only the listed URLs, follow nothing
+		}
 		// MaxDepth == 0 means unlimited: the crawl is bounded by the page budget instead.
 		atDepthLimit := e.opts.MaxDepth > 0 && t.depth >= e.opts.MaxDepth
 		for _, link := range page.Links {
@@ -299,7 +302,13 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	// Seed the frontier before starting any worker: next() treats "nothing queued and
 	// nothing pending" as exhaustion, so a worker started first could see an empty frontier
 	// and exit before the seed ever arrived.
-	enqueue(task{url: seed, depth: 0})
+	if len(e.opts.URLs) > 0 {
+		for _, u := range e.opts.URLs {
+			enqueue(task{url: u, depth: 0})
+		}
+	} else {
+		enqueue(task{url: seed, depth: 0})
+	}
 
 	// A fixed pool of workers pulls from the frontier, so the goroutine count is bounded by
 	// Concurrency regardless of how large the frontier grows — unlike spawning a goroutine
@@ -411,6 +420,13 @@ func (e *Engine) SetSeed(seed string) (string, error) {
 	}
 	e.seedHost = su.Host
 	return seed, nil
+}
+
+// SetURLs switches the next crawl to list mode with urls (see Options.URLs), replacing any list
+// from the options. runner.Run calls it after the sitemap pre-pass, which is what produces the
+// list for --from-sitemap. It must not be called while a crawl is running.
+func (e *Engine) SetURLs(urls []string) {
+	e.opts.URLs = urls
 }
 
 // InScope reports whether rawURL falls inside the crawl scope: the same scheme, host,

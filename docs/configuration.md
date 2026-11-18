@@ -6,7 +6,7 @@ topic: "reference"
 status: "current"
 superseded_by: []
 updated: 2026-11-18
-depends_on: ["output.md", "web.md", "analyzers.md", "storage.md", "mcp.md"]
+depends_on: ["output.md", "web.md", "storage.md", "analyzers.md", "mcp.md"]
 sources: ["../internal/config/config.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../configs/example.yaml"]
 ---
 # Configuration reference
@@ -60,12 +60,15 @@ default** (the value used when you set nothing).
 | `crawl.allow_subdomains` | `--subdomains` | bool | `false` | Follow links to subdomains of the seed host. |
 | `crawl.follow_external` | `--external` | bool | `false` | Crawl links that leave the seed host. |
 | `crawl.follow_nofollow` | — | bool | `false` | Follow links marked `rel="nofollow"`. |
+| `crawl.urls` | `--list FILE` | list | *(empty)* | List mode: crawl exactly these URLs and follow no links. `--list` reads them from a file. See [List mode](#list-mode). |
+| `crawl.from_sitemap` | `--from-sitemap` | bool | `false` | List mode with the URLs in the seed's sitemap. See [List mode](#list-mode). |
 | `crawl.strip_query` | `--strip-query` | bool | `false` | Ignore query strings (treat `?a=1` and `?a=2` as one URL). Skips the query-dependent analyzers — see below. |
 | `crawl.include` | `--include` | list of regex | *(none)* | Only crawl URLs matching at least one pattern. |
 | `crawl.exclude` | `--exclude` | list of regex | *(none)* | Skip URLs matching any pattern. |
 | `output.format` | `--format` / `-f` | string | `json` | `json`, `csv`, or `html`. |
 | `output.path` | `--out` / `-o` | string | *(empty = stdout)* | File to write the report to. |
 | `output.sitemap_path` | `--sitemap` | string | *(none)* | Also write a standard `sitemap.xml` of crawled pages here. The HTML report always includes a [Site map tab](output.md#site-map). |
+| `output.fail_on` | `--fail-on` | string | *(empty)* | Exit with a non-zero status, after writing the report, if any issue is at or above this severity: `error`, `warning`, or `info`. See [Failing a CI build](#failing-a-ci-build). |
 | `output.per_page_info` | `--per-page-info` | bool | `false` | List every `info` finding on its page. By default an `info` finding that repeats identically across most of a host's pages is reported once for the host; see [Site-wide findings](output.md#site-wide-findings). |
 | `analyzers.enabled` | `--analyzers` | list | *(empty)* | Allow-list of analyzers (see below). |
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
@@ -319,6 +322,42 @@ header file, or from a profile) is an error, because all of them set the same he
 never repeats the token. The MCP `crawl` tool and the web API take it as `bearer_token`; the web
 UI never saves it.
 
+### List mode
+
+List mode crawls a fixed set of URLs and follows no links from them. Use it to audit a set of ad
+landing pages, or exactly the pages a sitemap declares:
+
+```sh
+gocrawl crawl --list landing-pages.txt -f html -o landing.html
+gocrawl crawl https://example.com --from-sitemap
+cat urls.txt | gocrawl crawl --list -
+```
+
+- `--list FILE` (`crawl.urls` in YAML) takes one URL per line; blank lines and lines starting
+  with `#` are skipped, and a URL without a scheme gets `https://`. `-` reads stdin.
+- `--from-sitemap` (`crawl.from_sitemap`) crawls every in-scope URL the seed's sitemap lists
+  (found through robots.txt or the usual paths). It fails when there is no sitemap with
+  in-scope URLs. It combines with `--list`.
+- The seed fixes the crawl's scope and the host credentials go to, as in a normal crawl. With
+  `--list` it defaults to the first listed URL. Listed URLs on another host are skipped unless
+  `--external` is set; robots.txt, `include`/`exclude` and `--max-pages` apply as usual.
+  `--depth` has no effect.
+- Each page's links are still read, so the analyzers check them; they are just not crawled.
+- A report note says how many listed URLs were crawled, and how many were skipped and why.
+
+### Failing a CI build
+
+`--fail-on SEVERITY` (`output.fail_on`) makes `gocrawl crawl` exit with a non-zero status
+when the report holds an issue at or above that severity (`error` > `warning` > `info`). The
+report is written first, so the build still has it:
+
+```sh
+gocrawl crawl https://staging.example.com --fail-on error -f html -o report.html
+```
+
+To fail only on issues a change *introduced*, compare against a baseline crawl instead: see
+[`gocrawl compare --fail-on-new`](storage.md#ci-gate----fail-on-new).
+
 ## Selecting analyzers
 
 Which analyzers run is decided by `analyzers.enabled` / `analyzers.disabled` (see
@@ -536,6 +575,11 @@ crawl:
   allow_subdomains: false  # follow links to subdomains of the seed host
   follow_external: false   # crawl links that leave the seed host
   follow_nofollow: false   # follow links marked rel="nofollow"
+  # List mode: crawl exactly these URLs (and/or, with from_sitemap, every URL in the seed's
+  # sitemap) and follow no links from them. Useful for ad landing pages. Scope, robots.txt and
+  # max_pages still apply; the seed defaults to the first URL. --list FILE reads a list.
+  urls: []
+  from_sitemap: false
   strip_query: false       # ignore query strings (treat ?a=1 and ?a=2 as one URL).
                            # NOTE: this drops query params, so the query-dependent analyzers
                            # (utm, landing, wordpress) are automatically skipped while it is on.
@@ -555,6 +599,9 @@ output:
   # An info finding that repeats identically across most of a host's pages is reported once
   # for the host, with the page count and example URLs. true lists it on every page instead.
   per_page_info: false
+  # Exit with a non-zero status, after writing the report, if any issue is at or above this
+  # severity: "error", "warning" or "info". Empty never fails. Useful as a CI gate.
+  fail_on: ""
 
 analyzers:
   # If "enabled" is non-empty, only those analyzers run. Otherwise all run except those

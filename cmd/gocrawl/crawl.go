@@ -33,6 +33,9 @@ func newCrawlCmd() *cobra.Command {
 	f.StringP("out", "o", "", "output file (default: stdout)")
 	f.StringP("format", "f", "", "output format: json, csv, or html")
 	f.String("sitemap", "", "also write a standard sitemap.xml of crawled pages to this path")
+	f.String("list", "", "list mode: crawl only the URLs in this file (one per line, # for comments; - reads stdin) and follow no links")
+	f.Bool("from-sitemap", false, "list mode: crawl only the URLs in the site's sitemap and follow no links")
+	f.String("fail-on", "", "exit with a non-zero status, after writing the report, if any issue is at or above this severity: error, warning, or info")
 	f.Bool("per-page-info", false, "list every info finding per page, instead of once per host when it repeats across most of a host's pages")
 	f.StringSlice("include", nil, "only crawl URLs matching these regexes")
 	f.StringSlice("exclude", nil, "skip URLs matching these regexes")
@@ -75,13 +78,25 @@ func runCrawl(cmd *cobra.Command, args []string) error {
 		seed = args[0]
 	}
 	applyFlagOverrides(cmd, &cfg)
+	if path, _ := cmd.Flags().GetString("list"); path != "" {
+		urls, err := readURLList(path, cmd.InOrStdin())
+		if err != nil {
+			return err
+		}
+		cfg.Crawl.URLs = append(cfg.Crawl.URLs, urls...)
+	}
+	for i, u := range cfg.Crawl.URLs {
+		cfg.Crawl.URLs[i] = withScheme(u)
+	}
+	if seed == "" && len(cfg.Crawl.URLs) > 0 {
+		// In list mode the seed only fixes the crawl's host scope: default it to the first URL.
+		seed = cfg.Crawl.URLs[0]
+	}
 
 	if seed == "" {
-		return fmt.Errorf("no seed URL given (pass a URL argument or set seed in config)")
+		return fmt.Errorf("no seed URL given (pass a URL argument, set seed in config, or pass --list)")
 	}
-	if !strings.Contains(seed, "://") {
-		seed = "https://" + seed
-	}
+	seed = withScheme(seed)
 	var user, pass string
 	seed, user, pass = crawler.SanitizeSeed(seed)
 	if user != "" && cfg.Crawl.BasicAuth == "" {
@@ -109,7 +124,61 @@ func runCrawl(cmd *cobra.Command, args []string) error {
 	for _, line := range rep.SummaryLines() {
 		fmt.Fprintln(os.Stderr, line)
 	}
+	return failOn(cfg.Output.FailOn, rep)
+}
+
+// failOn returns an error when the report holds an issue at or above severity (error >
+// warning > info), so `gocrawl crawl --fail-on error` can gate a CI pipeline. It runs after
+// the report is written, so a failing build still has it. An empty severity never fails.
+func failOn(severity string, rep *report.Report) error {
+	levels := map[string][]string{
+		"error":   {"error"},
+		"warning": {"error", "warning"},
+		"info":    {"error", "warning", "info"},
+	}
+	n := 0
+	for _, sev := range levels[severity] {
+		n += rep.Summary.BySeverity[sev]
+	}
+	if n > 0 {
+		return fmt.Errorf("%d issue(s) at or above %s severity (--fail-on %s)", n, severity, severity)
+	}
 	return nil
+}
+
+// withScheme adds https:// to a URL given without a scheme, as a seed argument may be.
+func withScheme(u string) string {
+	if !strings.Contains(u, "://") {
+		return "https://" + u
+	}
+	return u
+}
+
+// readURLList reads a list-mode URL file: one URL per line, blank lines and lines starting
+// with # skipped, surrounding space trimmed. "-" reads stdin.
+func readURLList(path string, stdin io.Reader) ([]string, error) {
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(stdin)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading --list: %w", err)
+	}
+	var urls []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		urls = append(urls, line)
+	}
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("--list %s holds no URLs", path)
+	}
+	return urls, nil
 }
 
 func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
@@ -140,6 +209,12 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("sitemap") {
 		cfg.Output.SitemapPath, _ = f.GetString("sitemap")
+	}
+	if f.Changed("from-sitemap") {
+		cfg.Crawl.FromSitemap, _ = f.GetBool("from-sitemap")
+	}
+	if f.Changed("fail-on") {
+		cfg.Output.FailOn, _ = f.GetString("fail-on")
 	}
 	if f.Changed("per-page-info") {
 		cfg.Output.PerPageInfo, _ = f.GetBool("per-page-info")
