@@ -106,6 +106,8 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	defer cancelRun(nil)
 	clock := newActiveClock(e.opts.MaxDuration, func() { cancelRun(errMaxDuration) })
 
+	// The seed is fetched as given (trailing slash kept); SetSeed's dedup form only keys it.
+	fetchSeed := normalizeURLKeepSlash(seed, e.opts.StripQuery)
 	seed, err := e.SetSeed(seed)
 	if err != nil {
 		return nil, err
@@ -155,8 +157,15 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 	// enqueue applies dedup, scope/robots, and the page-budget check, then pushes an eligible
 	// task onto the frontier for a worker to pick up. Called for the seed and for every link
 	// a worker discovers while processing a task.
+	//
+	// A URL has two forms here. The dedup key (normalizeURL) strips a trailing slash, so /a
+	// and /a/ are crawled once; scope and include/exclude match it, as documented. The URL
+	// fetched keeps the slash as written (normalizeURLKeepSlash): fetching the stripped form
+	// cost a slash-canonical site (WordPress) a redirect on every page, and robots.txt rules
+	// such as "Disallow: /blog/" must be matched against the path actually requested.
 	enqueue := func(t task) {
 		norm := normalizeURL(t.url, e.opts.StripQuery)
+		fetch := normalizeURLKeepSlash(t.url, e.opts.StripQuery)
 		mu.Lock()
 		if visited[norm] {
 			mu.Unlock()
@@ -166,7 +175,11 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 		mu.Unlock()
 
 		u, perr := url.Parse(norm)
-		if perr != nil || !e.crawlable(ctx, u) {
+		fu, ferr := url.Parse(fetch)
+		if perr != nil || ferr != nil || !e.inScope(u) {
+			return
+		}
+		if e.opts.RespectRobots && !e.robots.allowed(ctx, fu) {
 			return
 		}
 		if e.opts.MaxPages > 0 && atomic.AddInt64(&pageCount, 1) > int64(e.opts.MaxPages) {
@@ -178,7 +191,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			mu.Unlock()
 			return
 		}
-		t.url = norm
+		t.url = fetch
 		t.host = u.Host
 		fr.push(t)
 	}
@@ -295,7 +308,11 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 				}
 				continue
 			}
-			enqueue(task{url: link.URL, depth: t.depth + 1, referrer: page.FinalURL})
+			target := link.Resolved // as written, trailing slash kept; enqueue dedups on link.URL's form
+			if target == "" {
+				target = link.URL
+			}
+			enqueue(task{url: target, depth: t.depth + 1, referrer: page.FinalURL})
 		}
 	}
 
@@ -307,7 +324,7 @@ func (e *Engine) Crawl(ctx context.Context, seed string) (*Result, error) {
 			enqueue(task{url: u, depth: 0})
 		}
 	} else {
-		enqueue(task{url: seed, depth: 0})
+		enqueue(task{url: fetchSeed, depth: 0})
 	}
 
 	// A fixed pool of workers pulls from the frontier, so the goroutine count is bounded by

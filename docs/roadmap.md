@@ -206,8 +206,9 @@ and scale.
   severity. See [List mode](configuration.md#list-mode).
 - **External links and page resources** — check the status of outbound links, images, CSS and
   JS, not just internal links.
-- **Fetch the URL as written** — the crawl requests the dedup form of a URL, which strips the
-  trailing slash; on slash-canonical sites (WordPress) that costs a redirect per page.
+- ✅ **Fetch the URL as written** — the crawl requests a URL with its trailing slash as written
+  and keeps the slash-stripped form only as the dedup key. On a 2,000-page slash-canonical test
+  site this halved the requests (4,006 to 2,006) and removed 2,000 `http-redirect` findings.
 
 [sf]: https://www.screamingfrog.co.uk/seo-spider/
 

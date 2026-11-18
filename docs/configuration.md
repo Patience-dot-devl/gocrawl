@@ -97,7 +97,9 @@ a URL must match at least one include pattern to be crawled.
 >    `--include '/blog'` on a seed of `https://example.com/` rejects the seed itself.
 > 2. Matching happens against the **normalized** URL, which has any trailing slash stripped
 >    from a non-root path. So `--include '/blog/'` never matches a seed of
->    `https://example.com/blog/` — that URL is normalized to `.../blog` first.
+>    `https://example.com/blog/` — that URL is normalized to `.../blog` first. (Only the
+>    matching uses that form: the page is fetched as written, trailing slash kept, and
+>    robots.txt is checked against the path actually requested.)
 >
 > Write include patterns without a trailing slash, and either seed inside the included
 > section or alternate the seed in explicitly:

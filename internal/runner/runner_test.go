@@ -389,3 +389,33 @@ func TestRunFromSitemapCrawlsSitemapURLs(t *testing.T) {
 		t.Errorf("from_sitemap without a sitemap: err = %v, want a from_sitemap error", err)
 	}
 }
+
+// TestRunFetchesSeedAsGiven: on a slash-canonical site (/x redirects to /x/), a seed given with
+// its trailing slash is fetched with it, so the crawl's first page does not redirect.
+func TestRunFetchesSeedAsGiven(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" || strings.HasSuffix(r.URL.Path, ".xml") {
+			http.NotFound(w, r)
+			return
+		}
+		if !strings.HasSuffix(r.URL.Path, "/") {
+			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><head><title>Slash-canonical test page</title></head><body>hi</body></html>`)
+	}))
+	defer site.Close()
+
+	cfg := config.Default()
+	cfg.Analyzers.Enabled = []string{"redirects"}
+	rep, err := Run(context.Background(), cfg, site.URL+"/blog/")
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, is := range rep.Issues {
+		if strings.HasPrefix(is.Code, "http-redirect") {
+			t.Errorf("seed given with its trailing slash redirected: %s %s %v", is.Code, is.URL, is.Data)
+		}
+	}
+}
