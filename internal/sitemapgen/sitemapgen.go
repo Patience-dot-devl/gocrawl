@@ -150,11 +150,17 @@ func Generate(result *crawler.Result, issues []analyze.Issue, generated time.Tim
 }
 
 // attachIssues routes each issue to the node whose page it names, or to SiteWide when it
-// names no crawled page, and tallies per-node and grand totals.
+// names no crawled page or was rolled up across a host (analyze.IsSiteWide: it names the
+// host's root URL, but it is about every page, not the home page), and tallies per-node and
+// grand totals.
 func attachIssues(m *Map, byURL map[string]*Node, issues []analyze.Issue) {
 	for _, is := range issues {
 		pi := PageIssue{Severity: string(is.Severity), Code: is.Code, Analyzer: is.Analyzer, Message: is.Message}
 		m.Totals.add(pi.Severity)
+		if analyze.IsSiteWide(is) {
+			m.SiteWide = append(m.SiteWide, pi)
+			continue
+		}
 		if node, ok := byURL[normalizeKey(is.URL)]; ok {
 			node.Issues = append(node.Issues, pi)
 			node.Counts.add(pi.Severity)

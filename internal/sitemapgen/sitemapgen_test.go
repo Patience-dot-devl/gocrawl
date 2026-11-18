@@ -193,3 +193,26 @@ func TestSubtotalsAndSiteWide(t *testing.T) {
 		t.Errorf("Totals = %+v, want 5", m.Totals)
 	}
 }
+
+// TestGenerateRoutesRolledUpIssuesToSiteWide: a rolled-up issue names the host's root URL, but
+// it is about every page, so it belongs in SiteWide, not on the home page's node.
+func TestGenerateRoutesRolledUpIssuesToSiteWide(t *testing.T) {
+	result := sampleResult(t)
+	rolled := analyze.Issue{
+		Analyzer: "security", URL: "https://example.com/", Severity: analyze.Info,
+		Code: "security-missing-csp", Message: "No CSP (on 12 of 12 pages)",
+		Data: map[string]any{analyze.SiteWideKey: map[string]any{"pages": 12, "of": 12}},
+	}
+	own := analyze.Issue{Analyzer: "seo", URL: "https://example.com/", Severity: analyze.Warning, Code: "seo-long-title", Message: "long"}
+
+	m := sitemapgen.Generate(result, []analyze.Issue{rolled, own}, time.Unix(0, 0))
+	if len(m.SiteWide) != 1 || m.SiteWide[0].Code != "security-missing-csp" {
+		t.Errorf("SiteWide = %+v, want the rolled-up issue", m.SiteWide)
+	}
+	if len(m.Root.Issues) != 1 || m.Root.Issues[0].Code != "seo-long-title" {
+		t.Errorf("home page issues = %+v, want only its own warning", m.Root.Issues)
+	}
+	if m.Totals.Info != 1 || m.Totals.Warning != 1 {
+		t.Errorf("totals = %v, want both issues counted", m.Totals)
+	}
+}

@@ -5,7 +5,7 @@ scope: "The JSON, CSV, and HTML report formats — `Report`, `Summary`, `Issue` 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-10-13
+updated: 2026-11-18
 depends_on: ["mcp.md", "analyzers.md", "storage.md", "configuration.md"]
 sources: ["../internal/report/report.go", "../internal/sitemapgen", "../internal/analyze/analyze.go", "../internal/crawler/types.go"]
 ---
@@ -49,7 +49,8 @@ an audit navigator:
   collapsed to keep the chart compact); **Expand all** / **Collapse all** controls sit above
   it. A collapsed card shows a muted roll-up (`∑ N`) of how many issues hide beneath it.
 - Findings that don't belong to a single crawled page (e.g. the `robots` analyzer's per-host
-  checks) are listed in a **Site-wide issues** section at the bottom.
+  checks, and [findings reported once for a host](#site-wide-findings)) are listed in a
+  **Site-wide issues** section at the bottom.
 
 ### As a standalone `sitemap.xml`
 
@@ -112,6 +113,29 @@ When an analyzer emits several findings with the same `analyzer`, `code` and `ur
 `structured` rollups (one per schema.org type) and `shopify-template-schema-gap` (one per
 template and missing type) — each carries `data.instance`, a string that tells them apart.
 [`gocrawl compare`](storage.md#what-it-reports) uses it as part of a finding's identity.
+
+### Site-wide findings
+
+A crawl would otherwise repeat a template- or server-wide condition (no CSP header, no Open
+Graph tags, no tracking tags) on every page, burying the findings that need work: on a
+20,000-page test site, 237,152 of 237,157 issues were such `info` lines. So an `info` finding
+that is the **same statement** (same `analyzer`, `code`, `message` and `data`) on at least
+**10 pages** and at least **half** of a host's HTML pages is reported **once for the host**:
+
+- `url` is the host's root URL, for example `https://example.com/`;
+- `message` ends with how many pages it was found on, for example `(on 17141 of 20000 pages)`;
+- `data` keeps the original data and adds `site_wide`: `pages` (how many pages had it), `of`
+  (the host's HTML pages) and `examples` (up to 10 of those pages' URLs, sorted).
+
+Warnings and errors are never grouped: each one is something to fix on that page. Findings
+whose `data` differs per page (link counts, response times, word counts) are different
+statements and stay per page too. On that test site, grouping took the report from 237,152 issues
+and 129 MB to 100,018 issues and 64 MB, all of the remainder per-page measurements.
+
+`output.per_page_info: true` (`--per-page-info`) turns grouping off and lists every finding on
+its page, as before. A crawl stored before grouping existed, compared with one after it, shows
+the per-page lines as resolved and the grouped one as new; so does a finding crossing the
+half-the-pages threshold between two crawls. See [Configuration](configuration.md).
 
 ### Coverage
 

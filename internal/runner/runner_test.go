@@ -259,3 +259,50 @@ func TestRunAnalyzerProbesRespectRobots(t *testing.T) {
 		t.Fatalf("analyzers fetched robots-disallowed paths %v", probed)
 	}
 }
+
+// TestRunRollsUpSiteWideInfo crawls a 12-page site whose template lacks a viewport meta tag.
+// By default the finding is reported once for the host; with output.per_page_info it is
+// listed on every page.
+func TestRunRollsUpSiteWideInfo(t *testing.T) {
+	const pages = 12
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<html><head><title>Page %s of the test site</title></head><body><h1>Hi</h1>`, r.URL.Path)
+		for i := range pages - 1 {
+			fmt.Fprintf(w, `<a href="/p%d">p</a>`, i)
+		}
+		fmt.Fprint(w, `</body></html>`)
+	}))
+	defer site.Close()
+
+	count := func(perPage bool) (viewport int, rolled bool) {
+		t.Helper()
+		cfg := config.Default()
+		cfg.Crawl.MaxDepth = 0
+		cfg.Crawl.MaxPages = pages
+		cfg.Analyzers.Enabled = []string{"seo"}
+		cfg.Output.PerPageInfo = perPage
+		rep, err := Run(context.Background(), cfg, site.URL)
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		for _, is := range rep.Issues {
+			if is.Code == "seo-missing-viewport" {
+				viewport++
+				rolled = rolled || analyze.IsSiteWide(is)
+			}
+		}
+		return viewport, rolled
+	}
+
+	if n, rolled := count(false); n != 1 || !rolled {
+		t.Errorf("default: %d seo-missing-viewport issues (rolled up: %v), want 1 rolled-up issue", n, rolled)
+	}
+	if n, rolled := count(true); n != pages || rolled {
+		t.Errorf("per_page_info: %d seo-missing-viewport issues (rolled up: %v), want %d per-page issues", n, rolled, pages)
+	}
+}

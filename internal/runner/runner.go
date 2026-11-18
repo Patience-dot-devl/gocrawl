@@ -218,6 +218,9 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	})
 	analyzers, skipped := planAnalyzers(reg, cfg.Analyzers, cfg.Crawl.StripQuery)
 	issues := analyze.Run(ctx, analyzers, result)
+	if !cfg.Output.PerPageInfo {
+		issues = analyze.RollupSiteWide(result, issues)
+	}
 
 	rep := report.Build(result, issues)
 	// Every analyzer has read what it needs from each page's body/DOM (analyze.Run, above),
