@@ -50,8 +50,15 @@ func canonicalURL(raw string, stripQuery, trimSlash bool) string {
 		u.Host = u.Host[:strings.LastIndex(u.Host, ":")]
 	}
 
+	// url.URL.String leaves RawQuery as written, so a literal space would survive into the
+	// key (and the request line) and be trimmed away on the next pass. Browsers send it as
+	// %20; do the same.
+	u.RawQuery = strings.ReplaceAll(u.RawQuery, " ", "%20")
+
 	if trimSlash && len(u.Path) > 1 {
-		u.Path = strings.TrimSuffix(u.Path, "/")
+		// Trim every trailing slash, not just one: "/a//" must reach the same key as "/a/"
+		// and "/a", and normalizing a key again must not change it.
+		u.Path = strings.TrimRight(u.Path, "/")
 	}
 	if u.Path == "" {
 		u.Path = "/"
@@ -96,6 +103,11 @@ func resolveURL(base *url.URL, href string, stripQuery bool) (key, resolved stri
 		return "", "", false
 	}
 	s := abs.String()
+	// A malformed authority such as "//:0:" parses as a reference but resolves to a URL with
+	// no usable host that does not parse back; it could only ever fail to fetch.
+	if back, err := url.Parse(s); err != nil || back.Hostname() == "" {
+		return "", "", false
+	}
 	return normalizeURL(s, stripQuery), normalizeURLKeepSlash(s, stripQuery), true
 }
 

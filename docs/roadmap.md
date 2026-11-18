@@ -5,9 +5,9 @@ scope: "What's shipped (incl. the SEA and AI-search analyzers), what's in progre
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-09
-depends_on: ["analyzers.md", "architecture.md", "output.md", "mcp.md", "configuration.md"]
-sources: ["../internal/crawler", "../internal/store", "../internal/diff"]
+updated: 2026-11-17
+depends_on: ["analyzers.md", "architecture.md", "output.md", "mcp.md", "configuration.md", "web.md", "redirect-check.md"]
+sources: ["../internal/crawler", "../internal/store", "../internal/diff", "../internal/sitemapgen"]
 ---
 # Feature roadmap
 
@@ -81,6 +81,22 @@ The current baseline. Everything here works today.
   `latest`, a bare host, or a report file path) into new / resolved / persisting issues plus
   page and summary deltas, as text or JSON. `--fail-on-new` makes it a CI gate.
   ([`internal/diff`](../internal/diff))
+- **Web UI & REST API** — `gocrawl serve` runs crawls from a browser: live progress, pause
+  and resume, saved crawls, compare, redirect checks, settings and header profiles. On a
+  non-loopback address it requires an auth token. See the [Web UI guide](web.md).
+- **Container image** — each release publishes `ghcr.io/patience-dot-devl/gocrawl` for
+  linux/amd64 and linux/arm64, running the web UI. See [Running in Docker](web.md#running-in-docker).
+- **Authenticated crawling** — HTTP Basic Auth, session cookies, bearer tokens, custom request
+  headers and saved header profiles, scoped to the seed host; in the web UI, **Log in with
+  browser…** captures a real login (SSO, two-factor, CAPTCHAs) and crawls with its cookies. See
+  the [Configuration reference](configuration.md).
+- **XML sitemap generation** — `gocrawl crawl --sitemap <path>` writes a `sitemap.xml` of the
+  crawled, indexable pages, and the HTML report draws the site-map tree.
+  ([`internal/sitemapgen`](../internal/sitemapgen))
+- **Redirect-rule checks** — `gocrawl check-redirects` verifies a redirect-rule CSV export
+  against the live site and its `sitemap.xml`. See [Redirect check](redirect-check.md).
+- **Re-rendering saved crawls** — `gocrawl render` turns a saved JSON report or stored crawl
+  into HTML or CSV without recrawling.
 
 ## 🚧 In progress / stubbed
 
@@ -147,8 +163,6 @@ analyzer can consume them.
 - **Custom extraction** — user-defined XPath / CSS-selector / regex extraction rules surfaced
   in the report.
 - **Custom source search** — match arbitrary patterns against raw and rendered HTML.
-- **XML Sitemap generation** — emit a sitemap from the crawled URL set (gocrawl currently only
-  audits sitemaps).
 - **Accessibility & mobile usability** — axe/WCAG checks and Lighthouse mobile-usability
   signals under headless rendering.
 
@@ -163,8 +177,35 @@ Broader capabilities beyond individual checks.
   item.
   Search Console impressions are the planned replacement for the internal-link importance
   proxy in the `structured-opportunity` ranking.
-- **Authenticated crawling** — forms- and cookie-based auth to reach gated areas.
-- **Resumable crawls** — checkpoint and continue large crawls.
+- **Browser login outside the web UI** — the CLI and MCP server take cookies, tokens and
+  headers but have no equivalent of the web UI's **Log in with browser…**.
+
+## 📋 Planned — from the November 2026 review
+
+A review of the code and a 20,000-page load test (about 100 KB of memory per page, held until
+the report is written; 240,011 issues, of which 5 were warnings) pointed at report usability
+and scale.
+
+- **Site-wide findings reported once** — conditions true of the whole site (a missing CSP
+  header, no tracking tags, no Open Graph tags) are reported per page today, which buries the
+  real findings. Roll them up per host or per page template, as `--security-audit` already
+  does.
+- **Per-URL data table** — one row per URL (indexability, canonical, title and description
+  length, word count, inlinks, depth, response time) in the JSON, CSV and web UI. The
+  analyzers compute most of this already.
+- **Agent-sized MCP tools** — the `crawl` tool returns every issue in one blocking call, more
+  than an agent's context holds on a real site. Add start/status tools and paged queries over
+  stored crawls (issues by code or URL, page detail, compare).
+- **Disk-backed crawl data and resumable crawls** — keep pages and the frontier on disk
+  (for example SQLite) and stream them through the analyzers, lifting the memory ceiling and
+  making it possible to checkpoint and continue large crawls. The per-URL table and the MCP
+  queries can share the same store.
+- **List mode and a single-crawl CI gate** — audit a list of URLs or a sitemap's URLs without
+  following links (ad landing pages), and fail a `gocrawl crawl` on a chosen severity.
+- **External links and page resources** — check the status of outbound links, images, CSS and
+  JS, not just internal links.
+- **Fetch the URL as written** — the crawl requests the dedup form of a URL, which strips the
+  trailing slash; on slash-canonical sites (WordPress) that costs a redirect per page.
 
 [sf]: https://www.screamingfrog.co.uk/seo-spider/
 

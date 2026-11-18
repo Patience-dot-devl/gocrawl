@@ -1011,6 +1011,15 @@ analyzer's detection and passive checks always run.
 
 ---
 
+## Analyzer failures
+
+If an analyzer crashes, gocrawl catches it, keeps every other analyzer's findings, and reports
+the crash as one issue in place of that analyzer's findings:
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `analyzer-panic` | error | The named analyzer crashed; its findings are missing from the report. `data.panic` holds the panic value and `data.stack` the Go stack trace for a bug report. The crash is a gocrawl bug, not a problem with the site. |
+
 ## Adding your own analyzer
 
 Every check implements the `analyze.Analyzer` interface, and new analyzers slot in without

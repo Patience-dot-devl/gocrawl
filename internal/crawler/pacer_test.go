@@ -133,12 +133,7 @@ func TestEngineObeysCrawlDelay(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("fetched %d pages, want 4", len(got))
 	}
-	for i := 1; i < len(got); i++ {
-		// Allow a little timer slack below the requested spacing.
-		if gap := got[i].Sub(got[i-1]); gap < delay-10*time.Millisecond {
-			t.Errorf("requests %d and %d were %v apart, want at least %v", i-1, i, gap, delay)
-		}
-	}
+	assertPaced(t, got, delay)
 }
 
 func TestEngineIgnoresCrawlDelayWithoutRespectRobots(t *testing.T) {
@@ -175,10 +170,25 @@ func TestGovernedFetcherObeysCrawlDelay(t *testing.T) {
 		}
 	}
 	got := times()
-	for i := 1; i < len(got); i++ {
-		if gap := got[i].Sub(got[i-1]); gap < delay-10*time.Millisecond {
-			t.Errorf("governed requests %d and %d were %v apart, want at least %v", i-1, i, gap, delay)
-		}
+	if len(got) != 3 {
+		t.Fatalf("fetched %d pages, want 3", len(got))
+	}
+	assertPaced(t, got, delay)
+}
+
+// assertPaced checks that requests reaching the test server, in arrival order, were spread
+// over at least one delay per gap. It checks the whole span, not each gap: the pacer books
+// send slots exactly delay apart (TestHostPacerReservesSlotsPerHost checks that against a fake
+// clock), but the server sees arrivals, and a request slowed by connection setup (tens of
+// milliseconds on CI's macOS runners) arrives late and shrinks the gap after it without any
+// pacing fault. Unpaced, the span would be near zero, so the check still fails without the
+// pacer. The slack covers a late first arrival.
+func assertPaced(t *testing.T, arrivals []time.Time, delay time.Duration) {
+	t.Helper()
+	const slack = 50 * time.Millisecond
+	want := time.Duration(len(arrivals)-1) * delay
+	if span := arrivals[len(arrivals)-1].Sub(arrivals[0]); span < want-slack {
+		t.Errorf("%d requests spanned %v, want at least %v (%v apart each)", len(arrivals), span, want, delay)
 	}
 }
 

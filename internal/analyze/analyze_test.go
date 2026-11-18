@@ -181,3 +181,40 @@ func TestIndexableMatchesMetaNameInAnyCase(t *testing.T) {
 		}
 	}
 }
+
+type panicAnalyzer struct{}
+
+func (panicAnalyzer) Name() string        { return "boom" }
+func (panicAnalyzer) Description() string { return "always panics" }
+func (panicAnalyzer) Analyze(context.Context, *crawler.Result) []Issue {
+	panic("nil map write")
+}
+
+type okAnalyzer struct{}
+
+func (okAnalyzer) Name() string        { return "ok" }
+func (okAnalyzer) Description() string { return "one finding" }
+func (okAnalyzer) Analyze(context.Context, *crawler.Result) []Issue {
+	return []Issue{{Analyzer: "ok", Code: "ok-finding", Severity: Info}}
+}
+
+func TestRunRecoversFromAnalyzerPanic(t *testing.T) {
+	result := &crawler.Result{Seed: "https://example.com/start"}
+	issues := Run(context.Background(), []Analyzer{panicAnalyzer{}, okAnalyzer{}}, result)
+	if len(issues) != 2 {
+		t.Fatalf("got %d issues, want the panic issue plus the next analyzer's finding: %+v", len(issues), issues)
+	}
+	p := issues[0]
+	if p.Code != CodeAnalyzerPanic || p.Analyzer != "boom" || p.Severity != Error {
+		t.Errorf("panic issue = %+v, want analyzer-panic error from boom", p)
+	}
+	if p.URL != "https://example.com" {
+		t.Errorf("panic issue URL = %q, want the site base", p.URL)
+	}
+	if !strings.Contains(p.Message, "nil map write") {
+		t.Errorf("panic message %q does not carry the panic value", p.Message)
+	}
+	if issues[1].Code != "ok-finding" {
+		t.Errorf("analyzer after the panic did not run: %+v", issues[1])
+	}
+}

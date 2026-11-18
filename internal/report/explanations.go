@@ -499,6 +499,11 @@ var explanations = map[string]Explanation{
 		Impact: "Browsers may block the resources or warn users, breaking functionality and eroding trust.",
 		Fix:    "Update all subresource URLs (scripts, images, styles, iframes) to https://.",
 	},
+	"analyzer-panic": {
+		What:   "An analyzer crashed while checking this crawl. gocrawl caught the crash, kept the other analyzers' findings, and dropped only this analyzer's.",
+		Impact: "Every issue this analyzer would have reported is missing, so the report under-states problems in its area. The crash is a gocrawl bug, not a problem with the site.",
+		Fix:    "Re-run the crawl with the crashing analyzer listed under analyzers.disabled in your config file for a complete report of everything else, and report the bug with the panic message and stack from this issue's data.",
+	},
 	"http-body-truncated": {
 		What:   "The page body was cut short — either it exceeded the crawler's fetch size limit, or the connection failed partway through the read.",
 		Impact: "Other findings on this page (missing title/H1, invalid structured data, broken markup) may be false positives caused by content past the cutoff never being seen, not an actual issue with the page.",

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -31,7 +33,9 @@ func newServeCmd() *cobra.Command {
 		RunE: runServe,
 	}
 	f := cmd.Flags()
-	f.String("addr", "127.0.0.1:8080", "address to listen on; the server has no authentication, so binding to a non-loopback address exposes it to the network")
+	f.String("addr", "127.0.0.1:8080", "address to listen on; on a non-loopback address the server requires an auth token")
+	f.String("auth-token", "", "token every request must carry (default: $GOCRAWL_AUTH_TOKEN; generated at startup when --addr is not loopback and none is set)")
+	f.Bool("no-auth", false, "serve a non-loopback --addr without a token, e.g. behind a reverse proxy that authenticates; anyone who can reach the server can use it")
 	f.String("store-dir", "", "store directory for crawl history (default: ~/.gocrawl/crawls)")
 	return cmd
 }
@@ -47,11 +51,20 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	go webserver.SweepStaleLoginProfiles(os.TempDir(), webserver.StaleLoginProfileAge)
 
 	opts := []webserver.Option{webserver.WithGUISettingsPath(webserver.DefaultGUISettingsPath())}
+	token, err := serveAuthToken(cmd, addr)
+	if err != nil {
+		return err
+	}
+	if token != "" {
+		opts = append(opts, webserver.WithAuthToken(token))
+	}
 	if !isLoopbackBind(addr) {
 		// The operator asked for a reachable server; the loopback Host check would only
-		// lock out the clients they just opened the door to.
+		// lock out the clients they just opened the door to. The token protects it instead.
 		opts = append(opts, webserver.AllowAnyHost())
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: --addr %s is not loopback; the web API has no authentication and anyone who can reach it can start crawls from this machine and read the contents of your header profiles\n", addr)
+		if token == "" {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: --addr %s is not loopback and --no-auth is set; anyone who can reach it can start crawls from this machine and read the contents of your header profiles\n", addr)
+		}
 	}
 	web := webserver.New(st, opts...)
 	// Closes login browser windows (and deletes their temporary profiles). Deferred, so it runs
@@ -68,6 +81,11 @@ func runServe(cmd *cobra.Command, _ []string) error {
 
 	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "gocrawl web UI listening on http://%s\n", displayAddr(addr)); err != nil {
 		return err
+	}
+	if token != "" {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "open http://%s/?token=%s (API clients: Authorization: Bearer <token>)\n", displayAddr(addr), token); err != nil {
+			return err
+		}
 	}
 
 	select {
@@ -116,10 +134,40 @@ func isLoopbackBind(addr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// displayAddr turns a bind address like ":8080" into a browsable "localhost:8080".
+// serveAuthToken decides the token the server requires: --auth-token, else
+// $GOCRAWL_AUTH_TOKEN, else a random one when addr is reachable from other machines. A
+// loopback server needs none (the Host and Origin checks protect it), and --no-auth turns
+// the requirement off. It returns "" when no token applies.
+func serveAuthToken(cmd *cobra.Command, addr string) (string, error) {
+	token, _ := cmd.Flags().GetString("auth-token")
+	if token == "" {
+		token = os.Getenv("GOCRAWL_AUTH_TOKEN")
+	}
+	if noAuth, _ := cmd.Flags().GetBool("no-auth"); noAuth {
+		if token != "" {
+			return "", errors.New("--no-auth can't be combined with --auth-token or GOCRAWL_AUTH_TOKEN")
+		}
+		return "", nil
+	}
+	if token != "" || isLoopbackBind(addr) {
+		return token, nil
+	}
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating auth token: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// displayAddr turns a bind address into one a browser on this machine can open: an
+// unspecified host (":8080", "0.0.0.0:8080", "[::]:8080") becomes "localhost:8080".
 func displayAddr(addr string) string {
-	if len(addr) > 0 && addr[0] == ':' {
-		return "localhost" + addr
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		return net.JoinHostPort("localhost", port)
 	}
 	return addr
 }

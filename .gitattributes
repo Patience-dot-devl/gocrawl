@@ -1,0 +1,5 @@
+# Check text files out with LF line endings on every OS. Golden files, docs frontmatter and
+# the docs-drift tests compare bytes, and a Windows checkout with core.autocrlf would
+# otherwise turn them into CRLF and fail those tests. Git still detects binaries (fonts,
+# images) and leaves them alone.
+* text=auto eol=lf

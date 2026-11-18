@@ -12,7 +12,9 @@ import (
 )
 
 func TestHeaderProfilesSaveListReadDelete(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 
 	names, err := ListHeaderProfiles()
 	if err != nil {
@@ -79,7 +81,9 @@ func TestHeaderProfilesSaveListReadDelete(t *testing.T) {
 }
 
 func TestSaveHeaderProfileValidates(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	cases := []struct{ label, name, body string }{
 		{"traversal", "../evil", "X-Token: 1"},
 		{"hidden name", ".hidden", "X-Token: 1"},
@@ -100,7 +104,9 @@ func TestSaveHeaderProfileValidates(t *testing.T) {
 
 // A rejected body names the offending line, never its content: profile values are secrets.
 func TestSaveHeaderProfileErrorsOmitBodyContent(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	const secret = "s3cr3t-token-value"
 	cases := []struct{ label, body string }{
 		{"no colon", "X-Ok: 1\n" + secret},
@@ -121,7 +127,9 @@ func TestSaveHeaderProfileErrorsOmitBodyContent(t *testing.T) {
 }
 
 func TestHeaderProfileFuncsRejectBadNames(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	if _, err := ReadHeaderProfile("../x"); !errors.Is(err, ErrInvalidHeaderProfile) {
 		t.Errorf("ReadHeaderProfile(../x) err = %v, want ErrInvalidHeaderProfile", err)
 	}
@@ -133,6 +141,7 @@ func TestHeaderProfileFuncsRejectBadNames(t *testing.T) {
 func TestListHeaderProfilesSkipsOtherEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	dir := filepath.Join(home, ".gocrawl", "headers")
 	writeFile(t, filepath.Join(dir, "uk.headers"), "X-A: 1\n")
 	writeFile(t, filepath.Join(dir, "notes.txt"), "x")
@@ -151,7 +160,9 @@ func TestListHeaderProfilesSkipsOtherEntries(t *testing.T) {
 
 // A profile saved through the API is one a crawl can use by name.
 func TestSavedHeaderProfileFeedsToOptions(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	if err := SaveHeaderProfile("uk", "Signature: abc\n"); err != nil {
 		t.Fatal(err)
 	}

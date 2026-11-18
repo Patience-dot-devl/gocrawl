@@ -32,6 +32,7 @@ func TestToOptionsLeavesHeadersNilByDefault(t *testing.T) {
 func TestToOptionsMergesHeaderSources(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	writeFile(t, filepath.Join(home, ".gocrawl", "headers", "uk.headers"),
 		"# UK store\r\nSignature: from-profile\r\nSignature-Agent: https://shopify.com\r\nX-Source: profile\r\n")
 	file := filepath.Join(t.TempDir(), "extra.headers")
@@ -79,7 +80,9 @@ func TestHeaderProfilePathRejectsTraversal(t *testing.T) {
 }
 
 func TestToOptionsReportsMissingHeaderProfile(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	c := Default()
 	c.Crawl.HeaderProfile = "nope"
 	if _, err := c.ToOptions(); err == nil || err.Error() != `header profile "nope" not found` {
@@ -179,6 +182,7 @@ func TestToOptionsBearerTokenKeepsOtherHeaders(t *testing.T) {
 func TestToOptionsBearerTokenConflicts(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	writeFile(t, filepath.Join(home, ".gocrawl", "headers", "auth.headers"), "Authorization: Basic eDp5\n")
 	const token = "very-secret-token"
 	cases := []struct {

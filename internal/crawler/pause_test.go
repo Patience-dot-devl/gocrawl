@@ -15,6 +15,14 @@ import (
 // hubSite serves a home page linking to n leaf pages and counts leaf fetches.
 func hubSite(t *testing.T, n int, hits *atomic.Int32) *httptest.Server {
 	t.Helper()
+	return gatedHubSite(t, n, hits, nil)
+}
+
+// gatedHubSite is hubSite whose leaf pages wait for gate to close before answering (a nil
+// gate never waits). A test that must act between two fetches holds the gate, so the crawl
+// cannot run ahead of it however late the test goroutine is scheduled.
+func gatedHubSite(t *testing.T, n int, hits *atomic.Int32, gate <-chan struct{}) *httptest.Server {
+	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":
@@ -28,6 +36,9 @@ func hubSite(t *testing.T, n int, hits *atomic.Int32) *httptest.Server {
 		case "/robots.txt":
 			http.NotFound(w, r)
 		default:
+			if gate != nil {
+				<-gate
+			}
 			hits.Add(1)
 			fmt.Fprint(w, "<html><head><title>Leaf</title></head><body>leaf</body></html>")
 		}
@@ -69,7 +80,14 @@ func startPausable(t *testing.T, ts *httptest.Server, ctx context.Context, onPro
 
 func TestEnginePauseStopsNewFetchesAndResumeFinishes(t *testing.T) {
 	var hits atomic.Int32
-	ts := hubSite(t, 20, &hits)
+	// Leaf pages wait at the gate until Pause has been called. Without it, the crawl fetches
+	// local leaf pages faster than a busy CI runner schedules this goroutine, and several land
+	// between the hub page being recorded and Pause, which says nothing about Pause itself.
+	gate := make(chan struct{})
+	var openGate sync.Once
+	release := func() { openGate.Do(func() { close(gate) }) }
+	ts := gatedHubSite(t, 20, &hits, gate)
+	t.Cleanup(release) // registered after the server, so it runs before ts.Close (cleanups are LIFO)
 	var (
 		mu     sync.Mutex
 		events []Progress
@@ -84,6 +102,7 @@ func TestEnginePauseStopsNewFetchesAndResumeFinishes(t *testing.T) {
 	if !e.Paused() {
 		t.Fatal("Paused() = false right after Pause()")
 	}
+	release()
 	time.Sleep(100 * time.Millisecond) // a fetch already past the frontier may still land
 	before := hits.Load()
 	time.Sleep(300 * time.Millisecond)

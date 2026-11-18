@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -164,5 +165,30 @@ func TestSameSiteIPv6(t *testing.T) {
 	}
 	if !sameSite("[::1]:8080", "[::1]", false) {
 		t.Error("bracketed IPv6 hosts differing only by port should be same site")
+	}
+}
+
+func TestNormalizeURLIsStable(t *testing.T) {
+	for raw, want := range map[string]string{
+		"https://example.com/a//":     "https://example.com/a",
+		"https://example.com/a/":      "https://example.com/a",
+		"https://example.com///":      "https://example.com/",
+		"https://example.com/p? #f":   "https://example.com/p?%20",
+		"https://example.com/p?q=a b": "https://example.com/p?q=a%20b",
+	} {
+		got := normalizeURL(raw, false)
+		if got != want {
+			t.Errorf("normalizeURL(%q) = %q, want %q", raw, got, want)
+		}
+		if again := normalizeURL(got, false); again != got {
+			t.Errorf("normalizeURL not idempotent for %q: %q then %q", raw, got, again)
+		}
+	}
+}
+
+func TestResolveURLRejectsHostlessAuthority(t *testing.T) {
+	base, _ := url.Parse("https://example.com/dir/page")
+	if key, _, ok := resolveURL(base, "//:0:", false); ok {
+		t.Errorf("resolveURL accepted a host-less authority, key %q", key)
 	}
 }

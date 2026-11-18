@@ -6,7 +6,9 @@ package analyze
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"runtime/debug"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -128,13 +130,36 @@ func (r *Registry) Select(enabled, disabled []string) []Analyzer {
 	return out
 }
 
-// Run executes the given analyzers over result and concatenates their issues.
+// CodeAnalyzerPanic is the issue Run emits in place of an analyzer's findings when that
+// analyzer panics.
+const CodeAnalyzerPanic = "analyzer-panic"
+
+// Run executes the given analyzers over result and concatenates their issues. A panicking
+// analyzer does not take the crawl down with it: Run recovers, drops that analyzer's
+// findings, emits one analyzer-panic error naming it, and carries on with the rest, so an
+// hours-long crawl still produces a report.
 func Run(ctx context.Context, analyzers []Analyzer, result *crawler.Result) []Issue {
 	var issues []Issue
 	for _, a := range analyzers {
-		issues = append(issues, a.Analyze(ctx, result)...)
+		issues = append(issues, runOne(ctx, a, result)...)
 	}
 	return issues
+}
+
+func runOne(ctx context.Context, a Analyzer, result *crawler.Result) (issues []Issue) {
+	defer func() {
+		if r := recover(); r != nil {
+			issues = []Issue{{
+				Analyzer: a.Name(),
+				URL:      SiteBase(result),
+				Severity: Error,
+				Code:     CodeAnalyzerPanic,
+				Message:  fmt.Sprintf("Analyzer %s crashed and its findings are missing from this report: %v", a.Name(), r),
+				Data:     map[string]any{"panic": fmt.Sprint(r), "stack": string(debug.Stack())},
+			}}
+		}
+	}()
+	return a.Analyze(ctx, result)
 }
 
 // SiteBase returns the scheme://host of the crawl, derived from the seed or, failing that,
