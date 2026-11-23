@@ -595,6 +595,21 @@ var explanations = map[string]Explanation{
 		Impact: "Adds an unnecessary hop, slowing navigation and diluting link signals.",
 		Fix:    "Update the link to point directly to the redirect's final destination.",
 	},
+	"link-external-broken": {
+		What:   "A link to another site returns an error status (404, 410, 5xx and the like) or cannot be reached at all.",
+		Impact: "Visitors who follow it hit a dead end, and a page full of dead outbound links reads as neglected to users and search engines.",
+		Fix:    "Update the link to the page's new address, link to an alternative source, or remove it. data.examples lists pages that carry it.",
+	},
+	"resource-broken": {
+		What:   "A page loads an image, script or stylesheet that returns an error status or cannot be reached.",
+		Impact: "A missing image leaves a gap, a missing script can break page features or tracking, and a missing stylesheet can leave the page unstyled. Search engines render pages with these resources too.",
+		Fix:    "Restore the file, or update the src/href to where it now lives. data.examples lists pages that load it.",
+	},
+	"link-external-summary": {
+		What:   "Totals of the outbound link and resource check: how many URLs were checked, broken, refused to the crawler, skipped by robots.txt, or left out over the limit.",
+		Impact: "Informational. blocked counts servers that answered 401, 403, 429 or 999, which refuse bots rather than say a link is broken, so those were not reported.",
+		Fix:    "Nothing to fix here. Check a blocked URL by hand if it matters; over_limit above 0 means only the first 1,000 URLs were checked.",
+	},
 	"link-empty-anchor": {
 		What:   "One or more links have empty anchor text.",
 		Impact: "Empty anchors give no context to users or search engines and hurt accessibility.",

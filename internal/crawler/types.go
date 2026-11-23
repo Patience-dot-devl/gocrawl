@@ -21,6 +21,13 @@ type Fetcher interface {
 	Fetch(ctx context.Context, rawURL string) (*Page, error)
 }
 
+// HeadFetcher is a Fetcher that can also send HEAD requests: the final status and headers,
+// without the body. HTTPFetcher and governed fetchers implement it.
+type HeadFetcher interface {
+	Fetcher
+	Head(ctx context.Context, rawURL string) (*Page, error)
+}
+
 // Redirect is one hop in a redirect chain.
 type Redirect struct {
 	From   string `json:"from"`

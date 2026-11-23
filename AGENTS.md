@@ -152,6 +152,11 @@ default.
   the handshake and nil in headless render mode. Its findings are host-wide server
   configuration, so the audit aggregates them per host instead of emitting per page.
   Surfaced as `--security-audit` / `security_audit` in MCP.
+- **`CheckExternal`** — the `links` analyzer's check of outbound links and the images, scripts
+  and stylesheets pages load (`links.WithExternalCheck`). Unlike the other modes it sends
+  requests to other sites: one `HEAD` per distinct URL through the governed fetcher, so the rate
+  limiter, robots.txt and credential scoping apply. Surfaced as `--check-external` /
+  `analyzers.check_external`; not yet in MCP or the web API.
 
 ## Adding an analyzer
 

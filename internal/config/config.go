@@ -133,6 +133,11 @@ type AnalyzersConfig struct {
 	// owner doesn't control tagging on links it doesn't own. On by default; the utm-summary
 	// rollup and utm-internal-tagged are unaffected.
 	IgnoreExternalTagging bool `mapstructure:"ignore_external_tagging"`
+	// CheckExternal turns on the links analyzer's check of outbound links and of the images,
+	// scripts and stylesheets pages load. Unlike the rest of the crawl it sends requests to
+	// other sites (HEAD where possible, rate-limited, obeying their robots.txt), so it is off
+	// unless asked for.
+	CheckExternal bool `mapstructure:"check_external"`
 }
 
 // Default returns the built-in default configuration.
@@ -229,6 +234,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("analyzers.enabled", d.Analyzers.Enabled)
 	v.SetDefault("analyzers.disabled", d.Analyzers.Disabled)
 	v.SetDefault("analyzers.specialized", d.Analyzers.Specialized)
+	v.SetDefault("analyzers.check_external", d.Analyzers.CheckExternal)
 	v.SetDefault("analyzers.security_audit", d.Analyzers.SecurityAudit)
 	v.SetDefault("analyzers.ignore_external_tagging", d.Analyzers.IgnoreExternalTagging)
 	v.SetDefault("store.dir", d.Store.Dir)

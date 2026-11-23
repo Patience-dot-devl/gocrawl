@@ -114,6 +114,17 @@ func isHTMLContentType(ct string) bool {
 
 // Fetch retrieves rawURL, following redirects manually up to maxRedirects.
 func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
+	return f.do(ctx, rawURL, http.MethodGet)
+}
+
+// Head is Fetch with HEAD requests: the same redirect handling and credential scoping, the
+// status and headers of the final response, and no body. It implements HeadFetcher, for
+// checking that a link or resource resolves without downloading it.
+func (f *HTTPFetcher) Head(ctx context.Context, rawURL string) (*Page, error) {
+	return f.do(ctx, rawURL, http.MethodHead)
+}
+
+func (f *HTTPFetcher) do(ctx context.Context, rawURL, method string) (*Page, error) {
 	page := &Page{RequestedURL: rawURL, FetchedAt: time.Now()}
 	start := time.Now()
 	current := rawURL
@@ -124,7 +135,7 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 	}
 
 	for hop := 0; hop <= f.maxRedirects; hop++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, current, nil)
+		req, err := http.NewRequestWithContext(ctx, method, current, nil)
 		if err != nil {
 			page.Err = err.Error()
 			page.Duration = time.Since(start)
@@ -199,6 +210,16 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 			}
 			current = next
 			continue
+		}
+
+		if method == http.MethodHead {
+			_ = resp.Body.Close()
+			page.StatusCode = resp.StatusCode
+			page.FinalURL = current
+			page.Header = resp.Header
+			page.ContentType = resp.Header.Get("Content-Type")
+			page.Duration = time.Since(start)
+			return page, nil
 		}
 
 		// Final (non-redirect) response. Read one byte past the cap so a response that's

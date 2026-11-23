@@ -114,6 +114,10 @@ analyzers:
   # Suppress the utm analyzer's tagging-quality warnings for links leaving the domain
   # (on by default — the site doesn't control third-party tagging).
   ignore_external_tagging: true
+  # Check outbound links and the images, scripts and stylesheets pages load (off by default):
+  # one HEAD request per distinct URL, rate-limited and obeying each host's robots.txt, but it
+  # does send requests to other sites.
+  check_external: false
 
 store:
   # Where 'gocrawl crawl --save' writes crawls and where 'gocrawl history' / 'gocrawl

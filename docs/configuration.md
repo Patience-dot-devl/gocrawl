@@ -5,8 +5,8 @@ scope: "Every option, flag, env var, and default; config layering; analyzer sele
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-18
-depends_on: ["output.md", "web.md", "storage.md", "analyzers.md", "mcp.md"]
+updated: 2026-11-23
+depends_on: ["output.md", "analyzers.md", "web.md", "storage.md", "mcp.md"]
 sources: ["../internal/config/config.go", "../internal/crawler/types.go", "../internal/analyze/analyze.go", "../configs/example.yaml"]
 ---
 # Configuration reference
@@ -74,6 +74,7 @@ default** (the value used when you set nothing).
 | `analyzers.disabled` | — | list | *(empty)* | Deny-list of analyzers (see below). |
 | `analyzers.specialized` | `--specialized` | bool | `false` | Enable the opt-in specialized checks: AI-search heuristics and WordPress security probes (see below). |
 | `analyzers.security_audit` | `--security-audit` | bool | `false` | Enable the opt-in security audit: TLS/certificate, cookie, and response-header checks (see below). |
+| `analyzers.check_external` | `--check-external` | bool | `false` | Check outbound links and the images, scripts and stylesheets pages load. Sends requests to other sites. See [Outbound links and page resources](analyzers.md#outbound-links-and-page-resources-opt-in). |
 | `analyzers.ignore_external_tagging` | `--ignore-external-tagging` | bool | `true` | Suppress the `utm` analyzer's tagging-quality warnings for links leaving the domain (see below). |
 
 ### A note on flag defaults
@@ -624,6 +625,10 @@ analyzers:
   # Suppress the utm analyzer's tagging-quality warnings for links leaving the domain
   # (on by default — the site doesn't control third-party tagging).
   ignore_external_tagging: true
+  # Check outbound links and the images, scripts and stylesheets pages load (off by default):
+  # one HEAD request per distinct URL, rate-limited and obeying each host's robots.txt, but it
+  # does send requests to other sites.
+  check_external: false
 
 store:
   # Where 'gocrawl crawl --save' writes crawls and where 'gocrawl history' / 'gocrawl

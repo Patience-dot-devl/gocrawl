@@ -10,11 +10,20 @@ import (
 	"github.com/Patience-dot-devl/gocrawl/internal/crawler"
 )
 
-// Analyzer inspects outbound links against the crawled page set.
-type Analyzer struct{}
+// Analyzer inspects outbound links against the crawled page set and, with WithExternalCheck,
+// checks the outbound links and page resources the crawl did not fetch.
+type Analyzer struct {
+	check crawler.Fetcher
+}
 
 // New returns a links analyzer.
-func New() *Analyzer { return &Analyzer{} }
+func New(opts ...Option) *Analyzer {
+	a := &Analyzer{}
+	for _, o := range opts {
+		o(a)
+	}
+	return a
+}
 
 func (Analyzer) Name() string { return "links" }
 func (Analyzer) Description() string {
@@ -24,7 +33,7 @@ func (Analyzer) Description() string {
 // maxAnchorSample caps how many distinct inbound anchor texts are reported per page.
 const maxAnchorSample = 10
 
-func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.Issue {
+func (a Analyzer) Analyze(ctx context.Context, result *crawler.Result) []analyze.Issue {
 	inbound := analyze.Inbound(result)
 	var issues []analyze.Issue
 	for _, p := range result.Pages {
@@ -98,6 +107,9 @@ func (a Analyzer) Analyze(_ context.Context, result *crawler.Result) []analyze.I
 			Code: "link-inbound", Message: "Internal inbound link count",
 			Data: map[string]any{"count": count, "anchors": anchors},
 		})
+	}
+	if a.check != nil {
+		issues = append(issues, a.checkExternal(ctx, result)...)
 	}
 	return issues
 }
