@@ -62,6 +62,25 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
+### Homebrew and Scoop
+
+`.goreleaser.yaml` also builds a Homebrew cask and a Scoop manifest on every release, but only
+pushes them once these exist; until then a release skips them and still succeeds:
+
+1. Two public repositories under the same owner: `homebrew-tap` (Homebrew finds a tap by that
+   name) and `scoop-bucket`. Each needs at least one commit, for example a README.
+2. A fine-grained personal access token with **Contents: read and write** on those two
+   repositories only.
+3. That token as the `TAP_GITHUB_TOKEN` repository secret of this repository (Settings →
+   Secrets and variables → Actions).
+
+From the next release on, users can then install with
+`brew install patience-dot-devl/tap/gocrawl` or
+`scoop bucket add gocrawl https://github.com/Patience-dot-devl/scoop-bucket` followed by
+`scoop install gocrawl`. Add those to `docs/install.md` once the first release has published
+them. The binaries are not notarized, so the cask clears macOS's quarantine flag after
+installing; signing and notarizing would make that unnecessary.
+
 ## Guidelines
 
 - Run `make check` before opening a PR.

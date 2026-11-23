@@ -6,8 +6,13 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0-beta.3] - 2026-11-23
+
 ### Added
 
+- Release configuration for a Homebrew cask and a Scoop manifest. Releases publish them once
+  the tap and bucket repositories and the `TAP_GITHUB_TOKEN` secret exist (see
+  CONTRIBUTING.md); until then they are skipped.
 - List mode for `gocrawl crawl`: `--list FILE` (`crawl.urls`) crawls exactly the URLs in a file
   (or stdin with `-`) and `--from-sitemap` (`crawl.from_sitemap`) exactly the URLs in the
   site's sitemap, following no links from them, for example to audit a set of ad landing pages.
@@ -535,7 +540,8 @@ analyzer pipeline (technical SEO, redirects, broken links, `robots.txt`, `sitema
 coverage, structured data, Core Web Vitals, and AI-search readiness), JSON / CSV / HTML
 reports, standalone `sitemap.xml` output, and an MCP server for agentic tooling.
 
-[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.2...HEAD
+[Unreleased]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.3...HEAD
+[1.0.0-beta.3]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/Patience-dot-devl/gocrawl/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.10.0...v1.0.0-beta.1
 [0.10.0]: https://github.com/Patience-dot-devl/gocrawl/compare/v0.9.0...v0.10.0
