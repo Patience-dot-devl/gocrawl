@@ -101,6 +101,9 @@ gocrawl compare before.json after.json --fail-on-new  # CI gate on regressions
 gocrawl crawl --list landing-pages.txt
 gocrawl crawl https://example.com --from-sitemap
 
+# Also check outbound links and the images, scripts and stylesheets pages load
+gocrawl crawl https://example.com --check-external
+
 # Fail a CI build when the crawl finds an error
 gocrawl crawl https://staging.example.com --fail-on error
 
@@ -236,7 +239,7 @@ Twenty-five analyzers, run in registration order:
 | --- | --- |
 | `seo` | Title, meta description, meta/`X-Robots-Tag` robots directives, meta-refresh, canonical, headings, `lang`, viewport, charset, OpenGraph |
 | `redirects` | Status codes, redirect chains/loops, slow responses, mixed content |
-| `links` | Internal/external links, broken links, links to redirects, empty anchors, inbound-link counts |
+| `links` | Internal/external links, broken links, links to redirects, empty anchors, inbound-link counts; with `--check-external`, broken outbound links and broken images, scripts and stylesheets |
 | `robots` | `robots.txt` discovery/parsing, declared sitemaps, disallow violations |
 | `sitemap` | `sitemap.xml` discovery/parsing and crawl-coverage cross-check |
 | `structured` | JSON-LD extraction via a shared schema.org graph, rich-result field tiering (required/recommended/merchant) per `@type`, duplicate/conflicting-type detection, and markup-integrity checks (`@id` resolution, relative URLs, price/date formatting, price-vs-page mismatches) |

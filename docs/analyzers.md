@@ -5,9 +5,9 @@ scope: "What each of the twenty-five analyzers checks (technical SEO + SEA + AI 
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-10
+updated: 2026-11-23
 depends_on: ["output.md", "configuration.md", "architecture.md", "roadmap.md"]
-sources: ["../internal/runner/runner.go", "../internal/analyze/seo/seo.go", "../internal/analyze/httpx/httpx.go", "../internal/analyze/links/links.go", "../internal/analyze/robotscheck/robotscheck.go", "../internal/analyze/sitemap/sitemap.go", "../internal/analyze/structured/", "../internal/analyze/schemaorg/", "../internal/analyze/perf/perf.go", "../internal/analyze/images/images.go", "../internal/analyze/urls/urls.go", "../internal/analyze/security/", "../internal/analyze/pagination/pagination.go", "../internal/analyze/hreflang/hreflang.go", "../internal/analyze/amp/amp.go", "../internal/analyze/duplicates/duplicates.go", "../internal/analyze/content/content.go", "../internal/analyze/botwall/botwall.go", "../internal/analyze/wordpress/wordpress.go", "../internal/analyze/shopify/", "../internal/analyze/utm/utm.go", "../internal/analyze/tracking/tracking.go", "../internal/analyze/datalayer/datalayer.go", "../internal/analyze/landing/landing.go", "../internal/analyze/consent/", "../internal/analyze/aeo/aeo.go", "../internal/analyze/geo/geo.go"]
+sources: ["../internal/runner/runner.go", "../internal/analyze/seo/seo.go", "../internal/analyze/httpx/httpx.go", "../internal/analyze/links/links.go", "../internal/analyze/links/external.go", "../internal/analyze/robotscheck/robotscheck.go", "../internal/analyze/sitemap/sitemap.go", "../internal/analyze/structured/", "../internal/analyze/schemaorg/", "../internal/analyze/perf/perf.go", "../internal/analyze/images/images.go", "../internal/analyze/urls/urls.go", "../internal/analyze/security/", "../internal/analyze/pagination/pagination.go", "../internal/analyze/hreflang/hreflang.go", "../internal/analyze/amp/amp.go", "../internal/analyze/duplicates/duplicates.go", "../internal/analyze/content/content.go", "../internal/analyze/botwall/botwall.go", "../internal/analyze/wordpress/wordpress.go", "../internal/analyze/shopify/", "../internal/analyze/utm/utm.go", "../internal/analyze/tracking/tracking.go", "../internal/analyze/datalayer/datalayer.go", "../internal/analyze/landing/landing.go", "../internal/analyze/consent/", "../internal/analyze/aeo/aeo.go", "../internal/analyze/geo/geo.go"]
 ---
 # Analyzer reference
 
@@ -108,6 +108,9 @@ references each page's outbound links against the crawled page set.
 | `link-empty-anchor` | info | The page has links with empty anchor text | `count` |
 | `link-summary` | info | Per-page link counts (always emitted when a page has links) | `total`, `external`, `nofollow` |
 | `link-inbound` | info | Per-page count of internal inbound links (emitted for every HTML `200` page) | `count`, `anchors` |
+| `link-external-broken` | warning | With `--check-external`: a link to another site returns an error status or cannot be reached | `target`, `status` or `error`, `pages`, `examples` |
+| `resource-broken` | error | With `--check-external`: an image, script or stylesheet a page loads returns an error status or cannot be reached | `target`, `kind`, `status` or `error`, `pages`, `examples` |
+| `link-external-summary` | info | With `--check-external`: totals of the check | `checked`, `broken`, `blocked`, `robots_skipped`, `over_limit` |
 
 > `link-inbound` counts internal links pointing **at** each page from other crawled pages
 > and samples up to ten distinct inbound anchor texts. A count of `0` flags a page nothing
@@ -115,7 +118,28 @@ references each page's outbound links against the crawled page set.
 
 > Broken-link / link-to-redirect detection only covers internal links to URLs that were
 > **actually crawled**. Links outside the crawl scope (excluded, external, beyond max-depth,
-> or past the page cap) are not status-checked.
+> or past the page cap) are not status-checked, unless `--check-external` is on.
+
+### Outbound links and page resources (opt-in)
+
+`--check-external` (`analyzers.check_external`) also checks the links that leave the site and
+the images, scripts and stylesheets pages load, on any host, that the crawl itself did not
+fetch. It sends requests to other sites, so it is off by default. Source:
+[`internal/analyze/links/external.go`](../internal/analyze/links/external.go).
+
+- Each distinct URL is requested **once**, with `HEAD`. A server that rejects `HEAD` (403, 405
+  or 501) gets one `GET`.
+- The requests go through the crawl's rate limiter and each host's robots.txt, including its
+  `Crawl-delay`. A URL robots.txt disallows is skipped and counted as `robots_skipped`.
+  Credentials stay scoped to the seed host.
+- A broken URL is reported **once**, on the first page (sorted) that uses it, with how many
+  pages do (`pages`) and up to 10 of them (`examples`). A URL used both as a link and as a
+  resource is reported as a resource.
+- Broken means a status of 400 or more, or no response at all. 401, 403, 429 and 999
+  (LinkedIn's bot refusal) mean the server refused a crawler, not that the link is dead, so
+  they are counted as `blocked` in the summary and not reported.
+- At most 1,000 URLs are checked per crawl, the first ones in sorted order. `over_limit` says
+  how many were left out.
 
 ---
 

@@ -5,7 +5,7 @@ scope: "What's shipped (incl. the SEA and AI-search analyzers), what's in progre
 topic: "reference"
 status: "current"
 superseded_by: []
-updated: 2026-11-18
+updated: 2026-11-23
 depends_on: ["analyzers.md", "architecture.md", "output.md", "mcp.md", "configuration.md", "web.md", "redirect-check.md"]
 sources: ["../internal/crawler", "../internal/store", "../internal/diff", "../internal/sitemapgen"]
 ---
@@ -204,8 +204,9 @@ and scale.
 - ✅ **List mode and a single-crawl CI gate** — `--list FILE` and `--from-sitemap` audit a set
   of URLs without following links, and `--fail-on SEVERITY` fails a `gocrawl crawl` on a chosen
   severity. See [List mode](configuration.md#list-mode).
-- **External links and page resources** — check the status of outbound links, images, CSS and
-  JS, not just internal links.
+- ✅ **External links and page resources** — `--check-external` checks outbound links and the
+  images, scripts and stylesheets pages load: one `HEAD` per distinct URL, governed by the
+  crawl's rate limit and robots.txt. See [the analyzer reference](analyzers.md#outbound-links-and-page-resources-opt-in).
 - ✅ **Fetch the URL as written** — the crawl requests a URL with its trailing slash as written
   and keeps the slash-stripped form only as the dedup key. On a 2,000-page slash-canonical test
   site this halved the requests (4,006 to 2,006) and removed 2,000 `http-redirect` findings.

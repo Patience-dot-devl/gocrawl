@@ -29,6 +29,18 @@ type governedFetcher struct {
 }
 
 func (g *governedFetcher) Fetch(ctx context.Context, rawURL string) (*Page, error) {
+	return g.governed(ctx, rawURL, g.inner.Fetch)
+}
+
+// Head sends a governed HEAD request when the inner fetcher supports it, else a governed GET.
+func (g *governedFetcher) Head(ctx context.Context, rawURL string) (*Page, error) {
+	if h, ok := g.inner.(HeadFetcher); ok {
+		return g.governed(ctx, rawURL, h.Head)
+	}
+	return g.Fetch(ctx, rawURL)
+}
+
+func (g *governedFetcher) governed(ctx context.Context, rawURL string, fetch func(context.Context, string) (*Page, error)) (*Page, error) {
 	if g.engine.opts.RespectRobots {
 		u, err := url.Parse(rawURL)
 		if err != nil {
@@ -44,7 +56,7 @@ func (g *governedFetcher) Fetch(ctx context.Context, rawURL string) (*Page, erro
 	if err := g.engine.limiter.Wait(ctx); err != nil {
 		return nil, err
 	}
-	page, err := g.inner.Fetch(ctx, rawURL)
+	page, err := fetch(ctx, rawURL)
 	if page != nil {
 		g.engine.limiter.OnResponse(page.StatusCode, page.Header)
 	}

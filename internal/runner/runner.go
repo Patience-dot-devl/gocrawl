@@ -61,6 +61,9 @@ type RegistryOptions struct {
 	// links leaving the crawled domain. Unlike the other fields it is on by default in
 	// config (analyzers.ignore_external_tagging); the struct's zero value turns it off.
 	IgnoreExternalTagging bool
+	// CheckExternal turns on the links analyzer's check of outbound links and page resources
+	// (images, scripts, stylesheets), requested through the governed fetcher.
+	CheckExternal bool
 	// SitemapOptions configure the sitemap analyzer. runner.Run passes sitemap.WithURLs here
 	// so the analyzer reuses the pre-pass's sitemap instead of fetching it again.
 	SitemapOptions []sitemap.Option
@@ -74,7 +77,11 @@ func BuildRegistry(fetcher crawler.Fetcher, opts RegistryOptions) *analyze.Regis
 	r := analyze.NewRegistry()
 	r.Register(seo.New())
 	r.Register(httpx.New())
-	r.Register(links.New())
+	var linkOpts []links.Option
+	if opts.CheckExternal {
+		linkOpts = append(linkOpts, links.WithExternalCheck(fetcher))
+	}
+	r.Register(links.New(linkOpts...))
 	r.Register(robotscheck.New())
 	r.Register(sitemap.New(fetcher, opts.SitemapOptions...))
 	r.Register(structured.New())
@@ -221,6 +228,7 @@ func Run(ctx context.Context, cfg config.Config, seed string, runOpts ...RunOpti
 	reg := BuildRegistry(governed, RegistryOptions{
 		Specialized:           cfg.Analyzers.Specialized,
 		SecurityAudit:         cfg.Analyzers.SecurityAudit,
+		CheckExternal:         cfg.Analyzers.CheckExternal,
 		IgnoreExternalTagging: cfg.Analyzers.IgnoreExternalTagging,
 		SitemapOptions: []sitemap.Option{
 			sitemap.WithURLs(sm.all.URLs, sm.all.Parsed, sm.all.InvalidDeclared, sm.all.TruncatedDeclared),

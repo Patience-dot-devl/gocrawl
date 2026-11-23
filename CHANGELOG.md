@@ -6,6 +6,16 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `--check-external` (`analyzers.check_external`) checks outbound links and the images, scripts
+  and stylesheets pages load, which the crawl never fetched: one `HEAD` per distinct URL (a
+  `GET` if the server rejects `HEAD`), through the crawl's rate limiter and each host's
+  robots.txt. Broken ones are reported once per URL with how many pages use them, as the new
+  `link-external-broken` (warning) and `resource-broken` (error), plus a
+  `link-external-summary`. 401, 403, 429 and 999 count as bot refusals, not broken links. Off by
+  default, since it sends requests to other sites.
+
 ## [1.0.0-beta.3] - 2026-11-23
 
 ### Added

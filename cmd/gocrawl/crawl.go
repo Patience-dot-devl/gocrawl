@@ -59,6 +59,7 @@ func newCrawlCmd() *cobra.Command {
 	f.Bool("adaptive-delay", true, "automatically slow the crawl when the server returns HTTP 429/503")
 	f.StringSlice("analyzers", nil, "only run these analyzers (comma-separated)")
 	f.Bool("specialized", false, "enable opt-in specialized checks (AEO answer-lead, GEO quotable-density, WordPress security probes, Shopify /products.json probe)")
+	f.Bool("check-external", false, "check outbound links and the images, scripts and stylesheets pages load (sends requests to other sites)")
 	f.Bool("security-audit", false, "enable the opt-in security audit (TLS/certificate, cookie attributes, response-header hygiene)")
 	f.Bool("ignore-external-tagging", true, "ignore the utm analyzer's tagging-quality warnings for links leaving the domain")
 	f.Bool("save", false, "also save the crawl to the store for later `gocrawl history` / `gocrawl compare`")
@@ -286,6 +287,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	}
 	if f.Changed("specialized") {
 		cfg.Analyzers.Specialized, _ = f.GetBool("specialized")
+	}
+	if f.Changed("check-external") {
+		cfg.Analyzers.CheckExternal, _ = f.GetBool("check-external")
 	}
 	if f.Changed("security-audit") {
 		cfg.Analyzers.SecurityAudit, _ = f.GetBool("security-audit")

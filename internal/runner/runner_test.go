@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Patience-dot-devl/gocrawl/internal/analyze"
@@ -418,4 +419,138 @@ func TestRunFetchesSeedAsGiven(t *testing.T) {
 			t.Errorf("seed given with its trailing slash redirected: %s %s %v", is.Code, is.URL, is.Data)
 		}
 	}
+}
+
+// TestRunCheckExternal crawls a one-page site that links to, and loads resources from, a
+// second ("external") server, with the external check on. Broken outbound links and resources
+// are reported once per URL; bot refusals, HEAD-unfriendly servers and robots.txt are handled.
+func TestRunCheckExternal(t *testing.T) {
+	var (
+		mu      sync.Mutex
+		methods = map[string][]string{}
+	)
+	ext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		methods[r.URL.Path] = append(methods[r.URL.Path], r.Method)
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/robots.txt":
+			fmt.Fprint(w, "User-agent: *\nDisallow: /private\n")
+		case "/ok", "/style.css":
+			w.WriteHeader(http.StatusOK)
+		case "/blocked":
+			w.WriteHeader(http.StatusForbidden)
+		case "/nohead":
+			if r.Method == http.MethodHead {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ext.Close()
+	extURL := otherHost(ext.URL)
+
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/robots.txt", "/sitemap.xml", "/sitemap_index.xml":
+			http.NotFound(w, r)
+		case "/", "/about":
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprintf(w, `<html><head><title>External check test page</title>
+<link rel="stylesheet" href="%[1]s/style.css"><script src="/app.js"></script></head><body>
+<a href="%[1]s/ok">ok</a> <a href="%[1]s/gone">gone</a> <a href="%[1]s/blocked">blocked</a>
+<a href="%[1]s/nohead">nohead</a> <a href="%[1]s/private/x">private</a> <a href="/about">about</a>
+<img src="%[1]s/missing.png" alt="x"></body></html>`, extURL)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer site.Close()
+
+	cfg := config.Default()
+	cfg.Analyzers.Enabled = []string{"links"}
+	cfg.Analyzers.CheckExternal = true
+	rep, err := Run(context.Background(), cfg, site.URL)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	got := map[string]map[string]any{}
+	var summary map[string]any
+	for _, is := range rep.Issues {
+		switch is.Code {
+		case "link-external-broken", "resource-broken":
+			got[is.Code+" "+fmt.Sprint(is.Data["target"])] = is.Data
+		case "link-external-summary":
+			summary = is.Data
+		}
+	}
+	want := []string{
+		"link-external-broken " + extURL + "/gone",
+		"resource-broken " + extURL + "/missing.png",
+		"resource-broken " + site.URL + "/app.js",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("broken findings = %v, want %v", got, want)
+	}
+	for _, k := range want {
+		d, ok := got[k]
+		if !ok {
+			t.Errorf("missing %s; got %v", k, got)
+			continue
+		}
+		if d["pages"] != 2 {
+			t.Errorf("%s: pages = %v, want 2 (both pages use it, reported once)", k, d["pages"])
+		}
+	}
+	if summary == nil {
+		t.Fatal("no link-external-summary")
+	}
+	// checked: ok, gone, blocked, nohead, style.css, missing.png, app.js; private is robots-skipped.
+	for k, v := range map[string]int{"checked": 7, "broken": 3, "blocked": 1, "robots_skipped": 1, "over_limit": 0} {
+		if summary[k] != v {
+			t.Errorf("summary %s = %v, want %d (summary %v)", k, summary[k], v, summary)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if m := methods["/ok"]; len(m) != 1 || m[0] != http.MethodHead {
+		t.Errorf("/ok was requested with %v, want one HEAD", m)
+	}
+	if m := methods["/nohead"]; len(m) != 2 || m[1] != http.MethodGet {
+		t.Errorf("/nohead was requested with %v, want HEAD then GET", m)
+	}
+	if len(methods["/private/x"]) != 0 {
+		t.Error("/private/x was requested despite the external host's robots.txt")
+	}
+}
+
+// TestRunCheckExternalOffByDefault: without the option no outbound request is made.
+func TestRunCheckExternalOffByDefault(t *testing.T) {
+	var hits atomic.Int32
+	ext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1) }))
+	defer ext.Close()
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><a href="%s/x">x</a></body></html>`, otherHost(ext.URL))
+	}))
+	defer site.Close()
+	cfg := config.Default()
+	cfg.Analyzers.Enabled = []string{"links"}
+	if _, err := Run(context.Background(), cfg, site.URL); err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("the external server got %d requests with check_external off", hits.Load())
+	}
+}
+
+// otherHost rewrites an httptest URL (http://127.0.0.1:port) to reach the same server as
+// http://localhost:port. The crawl's same-site rule ignores the port, so two test servers on
+// 127.0.0.1 would count as one site; under another host name one becomes external.
+func otherHost(u string) string {
+	return strings.Replace(u, "127.0.0.1", "localhost", 1)
 }
