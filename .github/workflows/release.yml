@@ -51,6 +51,9 @@ jobs:
           args: release --clean --release-notes=/tmp/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pushes the Homebrew cask and Scoop manifest (.goreleaser.yaml). While the secret is
+          # unset this is empty and both are skipped; see CONTRIBUTING.md, "Homebrew and Scoop".
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
 
   # Publishes the container image (Dockerfile) to GitHub Container Registry as
   # ghcr.io/<owner>/gocrawl:<version>. `latest` and `<major>.<minor>` move only on stable tags;

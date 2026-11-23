@@ -45,3 +45,48 @@ checksum:
 # which this pipe loads verbatim as the release body, short-circuiting before any commit-based
 # changelog generation runs. Do NOT set `changelog.disable: true` — that skips this pipe
 # entirely, so the --release-notes file never gets loaded and the release body ends up empty.
+
+# Homebrew (macOS, Linux) and Scoop (Windows). Both stay off until the tap and bucket
+# repositories exist and the TAP_GITHUB_TOKEN repository secret holds a token that can push to
+# them (see CONTRIBUTING.md, "Homebrew and Scoop"). While that secret is unset the token below is
+# empty and skip_upload is true: the cask and manifest are generated into dist/ and nothing is
+# pushed, so a release still succeeds. Pre-releases are published too, since every release is a
+# pre-release until 1.0.
+homebrew_casks:
+  - name: gocrawl
+    binaries: [gocrawl]
+    repository:
+      owner: Patience-dot-devl
+      name: homebrew-tap
+      token: '{{ envOrDefault "TAP_GITHUB_TOKEN" "" }}'
+    commit_author:
+      name: gocrawl-release
+      email: noreply@github.com
+    homepage: https://github.com/Patience-dot-devl/gocrawl
+    description: Website crawler for SEO and SEA audits
+    license: MIT
+    skip_upload: '{{ if envOrDefault "TAP_GITHUB_TOKEN" "" }}false{{ else }}true{{ end }}'
+    hooks:
+      post:
+        # The binaries are not signed or notarized; without this, macOS quarantines the download
+        # and refuses to run it. install_steps takes Homebrew's declarative steps, not Ruby (this
+        # is GoReleaser's documented form). Apple recommends notarization instead, and may stop
+        # honouring this in a future macOS.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/gocrawl"]
+          end
+
+scoops:
+  - name: gocrawl
+    repository:
+      owner: Patience-dot-devl
+      name: scoop-bucket
+      token: '{{ envOrDefault "TAP_GITHUB_TOKEN" "" }}'
+    commit_author:
+      name: gocrawl-release
+      email: noreply@github.com
+    homepage: https://github.com/Patience-dot-devl/gocrawl
+    description: Website crawler for SEO and SEA audits
+    license: MIT
+    skip_upload: '{{ if envOrDefault "TAP_GITHUB_TOKEN" "" }}false{{ else }}true{{ end }}'
