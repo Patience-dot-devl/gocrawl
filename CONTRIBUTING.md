@@ -62,6 +62,9 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
+A tag with a pre-release suffix (`v1.0.0-beta.3`, `v2.0.0-rc.1`) is published as a GitHub
+pre-release; only a plain `vX.Y.Z` becomes the "Latest" release.
+
 ### Homebrew and Scoop
 
 `.goreleaser.yaml` also builds a Homebrew cask and a Scoop manifest on every release, but only

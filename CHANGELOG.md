@@ -6,6 +6,8 @@ All notable changes to `gocrawl` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0-beta.3] - 2026-11-26
+
 ### Added
 
 - `--check-external` (`analyzers.check_external`) checks outbound links and the images, scripts
@@ -15,11 +17,6 @@ All notable changes to `gocrawl` are documented here. The format is based on
   `link-external-broken` (warning) and `resource-broken` (error), plus a
   `link-external-summary`. 401, 403, 429 and 999 count as bot refusals, not broken links. Off by
   default, since it sends requests to other sites.
-
-## [1.0.0-beta.3] - 2026-11-23
-
-### Added
-
 - Release configuration for a Homebrew cask and a Scoop manifest. Releases publish them once
   the tap and bucket repositories and the `TAP_GITHUB_TOKEN` secret exist (see
   CONTRIBUTING.md); until then they are skipped.
@@ -57,6 +54,10 @@ All notable changes to `gocrawl` are documented here. The format is based on
   grouped ones as new.
 
 ### Fixed
+
+- Releases from a pre-release tag (`v1.0.0-beta.3`) are marked as pre-releases on GitHub.
+  1.0.0-beta.1 and 1.0.0-beta.2 were published as normal releases, so the Releases page showed a
+  beta as "Latest".
 
 - The crawl fetches a URL with its trailing slash as written, keeping the slash-stripped form
   only to tell `/a` and `/a/` apart as one page. It used to request the stripped form, so a

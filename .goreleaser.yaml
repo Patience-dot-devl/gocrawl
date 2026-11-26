@@ -40,6 +40,12 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Mark a release whose tag has a pre-release suffix (v1.0.0-beta.3, v2.0.0-rc.1) as a pre-release
+# on GitHub, so the Releases page does not show a beta as "Latest". A plain vX.Y.Z is a normal
+# release. Without this, every beta so far was published as a normal release.
+release:
+  prerelease: auto
+
 # CHANGELOG.md is hand-maintained (Keep a Changelog style); the release workflow extracts the
 # matching version's section and passes it to `goreleaser release --release-notes=<file>`,
 # which this pipe loads verbatim as the release body, short-circuiting before any commit-based
