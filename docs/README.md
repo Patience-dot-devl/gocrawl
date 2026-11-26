@@ -33,6 +33,7 @@ record: `archived` ones describe the code as it was planned, not as it is now.
 | [Fixes from the dermalogica.nl functional test](superpowers/specs/2026-09-17-dermalogica-functional-fixes-design.md) | archived | 2026-09-17 |
 | [Ranking structured-data opportunities](superpowers/specs/2026-10-09-structured-opportunity-ranking-design.md) | archived | 2026-11-09 |
 | [Feature-complete web UI](superpowers/specs/2026-10-13-web-ui-feature-complete-design.md) | archived | 2026-10-14 |
+| [Streaming analysis and a crawl database](superpowers/specs/2026-11-26-disk-backed-crawl-data-design.md) | current | 2026-11-26 |
 
 **Plans**
 
